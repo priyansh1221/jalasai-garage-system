@@ -1,0 +1,225 @@
+%PDF-1.7
+%‚„œ”
+1 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+2 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>
+endobj
+3 0 obj
+<< /BBox [0 0 13 13] /Resources << >> /Length 19 >>
+stream
+1 w 0 0 13 13 re S
+
+endstream
+endobj
+4 0 obj
+<< /BBox [0 0 13 13] /Resources << >> /Length 45 >>
+stream
+1 w 0 0 13 13 re S
+2 w 3 7 m 5 4 l 10 10 l S
+
+endstream
+endobj
+5 0 obj
+<< /FT /Btn /T (daily_check_1) /Ff 0 /V /Off /AS /Off /Rect [40 562 53 575] /Subtype /Widget /F 4 /Type /Annot /AP << /N << /Off 3 0 R /Yes 4 0 R >> >> >>
+endobj
+6 0 obj
+<< /FT /Btn /T (daily_check_2) /Ff 0 /V /Off /AS /Off /Rect [40 534 53 547] /Subtype /Widget /F 4 /Type /Annot /AP << /N << /Off 3 0 R /Yes 4 0 R >> >> >>
+endobj
+7 0 obj
+<< /FT /Btn /T (daily_check_3) /Ff 0 /V /Off /AS /Off /Rect [40 506 53 519] /Subtype /Widget /F 4 /Type /Annot /AP << /N << /Off 3 0 R /Yes 4 0 R >> >> >>
+endobj
+8 0 obj
+<< /FT /Btn /T (daily_check_4) /Ff 0 /V /Off /AS /Off /Rect [40 478 53 491] /Subtype /Widget /F 4 /Type /Annot /AP << /N << /Off 3 0 R /Yes 4 0 R >> >> >>
+endobj
+9 0 obj
+<< /FT /Btn /T (daily_check_5) /Ff 0 /V /Off /AS /Off /Rect [40 450 53 463] /Subtype /Widget /F 4 /Type /Annot /AP << /N << /Off 3 0 R /Yes 4 0 R >> >> >>
+endobj
+10 0 obj
+<< /FT /Btn /T (daily_check_6) /Ff 0 /V /Off /AS /Off /Rect [40 422 53 435] /Subtype /Widget /F 4 /Type /Annot /AP << /N << /Off 3 0 R /Yes 4 0 R >> >> >>
+endobj
+11 0 obj
+<< /FT /Tx /T (today_revenue_action) /Ff 0 /V () /DV () /Rect [150 699 535 719] /Subtype /Widget /F 4 /Type /Annot /DA (/F1 10 Tf 0 g) /MK << /BC [0.45 0.45 0.45] /BG [1 1 1] >> /BS << /W 0.8 /S /S >> >>
+endobj
+12 0 obj
+<< /FT /Tx /T (today_trust_action) /Ff 0 /V () /DV () /Rect [150 665 535 685] /Subtype /Widget /F 4 /Type /Annot /DA (/F1 10 Tf 0 g) /MK << /BC [0.45 0.45 0.45] /BG [1 1 1] >> /BS << /W 0.8 /S /S >> >>
+endobj
+13 0 obj
+<< /FT /Tx /T (today_ops_action) /Ff 0 /V () /DV () /Rect [150 631 535 651] /Subtype /Widget /F 4 /Type /Annot /DA (/F1 10 Tf 0 g) /MK << /BC [0.45 0.45 0.45] /BG [1 1 1] >> /BS << /W 0.8 /S /S >> >>
+endobj
+14 0 obj
+<< /FT /Tx /T (daily_total_revenue) /Ff 0 /V () /DV () /Rect [170 309 530 329] /Subtype /Widget /F 4 /Type /Annot /DA (/F1 10 Tf 0 g) /MK << /BC [0.45 0.45 0.45] /BG [1 1 1] >> /BS << /W 0.8 /S /S >> >>
+endobj
+15 0 obj
+<< /FT /Tx /T (daily_new_ev_jobs) /Ff 0 /V () /DV () /Rect [170 275 530 295] /Subtype /Widget /F 4 /Type /Annot /DA (/F1 10 Tf 0 g) /MK << /BC [0.45 0.45 0.45] /BG [1 1 1] >> /BS << /W 0.8 /S /S >> >>
+endobj
+16 0 obj
+<< /FT /Tx /T (daily_new_leads_source) /Ff 0 /V () /DV () /Rect [170 241 530 261] /Subtype /Widget /F 4 /Type /Annot /DA (/F1 10 Tf 0 g) /MK << /BC [0.45 0.45 0.45] /BG [1 1 1] >> /BS << /W 0.8 /S /S >> >>
+endobj
+17 0 obj
+<< /FT /Tx /T (daily_plans_sold) /Ff 0 /V () /DV () /Rect [170 207 530 227] /Subtype /Widget /F 4 /Type /Annot /DA (/F1 10 Tf 0 g) /MK << /BC [0.45 0.45 0.45] /BG [1 1 1] >> /BS << /W 0.8 /S /S >> >>
+endobj
+18 0 obj
+<< /FT /Tx /T (daily_energy_ab) /Ff 0 /V () /DV () /Rect [170 173 530 193] /Subtype /Widget /F 4 /Type /Annot /DA (/F1 10 Tf 0 g) /MK << /BC [0.45 0.45 0.45] /BG [1 1 1] >> /BS << /W 0.8 /S /S >> >>
+endobj
+19 0 obj
+<< /FT /Tx /T (buffer_reason) /Ff 0 /V () /DV () /Rect [150 77 535 97] /Subtype /Widget /F 4 /Type /Annot /DA (/F1 10 Tf 0 g) /MK << /BC [0.45 0.45 0.45] /BG [1 1 1] >> /BS << /W 0.8 /S /S >> >>
+endobj
+20 0 obj
+<< /FT /Tx /T (weekly_total_revenue) /Ff 0 /V () /DV () /Rect [210 691 535 711] /Subtype /Widget /F 4 /Type /Annot /DA (/F1 10 Tf 0 g) /MK << /BC [0.45 0.45 0.45] /BG [1 1 1] >> /BS << /W 0.8 /S /S >> >>
+endobj
+21 0 obj
+<< /FT /Tx /T (weekly_new_ev_jobs) /Ff 0 /V () /DV () /Rect [210 657 535 677] /Subtype /Widget /F 4 /Type /Annot /DA (/F1 10 Tf 0 g) /MK << /BC [0.45 0.45 0.45] /BG [1 1 1] >> /BS << /W 0.8 /S /S >> >>
+endobj
+22 0 obj
+<< /FT /Tx /T (weekly_new_leads) /Ff 0 /V () /DV () /Rect [210 623 535 643] /Subtype /Widget /F 4 /Type /Annot /DA (/F1 10 Tf 0 g) /MK << /BC [0.45 0.45 0.45] /BG [1 1 1] >> /BS << /W 0.8 /S /S >> >>
+endobj
+23 0 obj
+<< /FT /Tx /T (weekly_plans_sold) /Ff 0 /V () /DV () /Rect [210 589 535 609] /Subtype /Widget /F 4 /Type /Annot /DA (/F1 10 Tf 0 g) /MK << /BC [0.45 0.45 0.45] /BG [1 1 1] >> /BS << /W 0.8 /S /S >> >>
+endobj
+24 0 obj
+<< /FT /Tx /T (weekly_energy) /Ff 0 /V () /DV () /Rect [210 555 535 575] /Subtype /Widget /F 4 /Type /Annot /DA (/F1 10 Tf 0 g) /MK << /BC [0.45 0.45 0.45] /BG [1 1 1] >> /BS << /W 0.8 /S /S >> >>
+endobj
+25 0 obj
+<< /FT /Tx /T (next_week_focus) /Ff 0 /V () /DV () /Rect [150 81 535 101] /Subtype /Widget /F 4 /Type /Annot /DA (/F1 10 Tf 0 g) /MK << /BC [0.45 0.45 0.45] /BG [1 1 1] >> /BS << /W 0.8 /S /S >> >>
+endobj
+26 0 obj
+<< /FT /Btn /T (not_yet_1) /Ff 0 /V /Off /AS /Off /Rect [40 232 53 245] /Subtype /Widget /F 4 /Type /Annot /AP << /N << /Off 3 0 R /Yes 4 0 R >> >> >>
+endobj
+27 0 obj
+<< /FT /Btn /T (not_yet_2) /Ff 0 /V /Off /AS /Off /Rect [40 208 53 221] /Subtype /Widget /F 4 /Type /Annot /AP << /N << /Off 3 0 R /Yes 4 0 R >> >> >>
+endobj
+28 0 obj
+<< /FT /Btn /T (not_yet_3) /Ff 0 /V /Off /AS /Off /Rect [40 184 53 197] /Subtype /Widget /F 4 /Type /Annot /AP << /N << /Off 3 0 R /Yes 4 0 R >> >> >>
+endobj
+29 0 obj
+<< /FT /Btn /T (not_yet_4) /Ff 0 /V /Off /AS /Off /Rect [40 160 53 173] /Subtype /Widget /F 4 /Type /Annot /AP << /N << /Off 3 0 R /Yes 4 0 R >> >> >>
+endobj
+30 0 obj
+<< /FT /Btn /T (not_yet_5) /Ff 0 /V /Off /AS /Off /Rect [40 136 53 149] /Subtype /Widget /F 4 /Type /Annot /AP << /N << /Off 3 0 R /Yes 4 0 R >> >> >>
+endobj
+31 0 obj
+<< /FT /Btn /T (not_yet_6) /Ff 0 /V /Off /AS /Off /Rect [40 112 53 125] /Subtype /Widget /F 4 /Type /Annot /AP << /N << /Off 3 0 R /Yes 4 0 R >> >> >>
+endobj
+32 0 obj
+<<  /Length 1460 >>
+stream
+BT /F2 20 Tf 40 800 Td (JalaSai 90-Day Simple Task Plan) Tj ET
+BT /F1 10 Tf 40 778 Td (Use this daily. Keep only two growth experiments active. Protect service quality first.) Tj ET
+0.92 g 40 744 515 24 re f 0 g
+BT /F2 13 Tf 52 752 Td (TODAY'S TOP 3) Tj ET
+BT /F1 11 Tf 40 716 Td (1. Revenue action) Tj ET
+BT /F1 11 Tf 40 682 Td (2. Trust/review action) Tj ET
+BT /F1 11 Tf 40 648 Td (3. Operations clarity action) Tj ET
+0.92 g 40 598 515 24 re f 0 g
+BT /F2 13 Tf 52 606 Td (DAILY CHECKLIST) Tj ET
+BT /F1 11 Tf 62 566 Td (EV job photos + voice note done) Tj ET
+BT /F1 11 Tf 62 538 Td (Quote explained before work) Tj ET
+BT /F1 11 Tf 62 510 Td (Lead/customer follow-up done) Tj ET
+BT /F1 11 Tf 62 482 Td (Review requested after successful job) Tj ET
+BT /F1 11 Tf 62 454 Td (Revenue, expense, and collection noted) Tj ET
+BT /F1 11 Tf 62 426 Td (Buffer used? If yes, write why) Tj ET
+0.92 g 40 356 515 24 re f 0 g
+BT /F2 13 Tf 52 364 Td (DAILY NUMBERS) Tj ET
+BT /F1 10 Tf 40 322 Td (Total revenue) Tj ET
+BT /F1 10 Tf 40 288 Td (New EV jobs) Tj ET
+BT /F1 10 Tf 40 254 Td (New leads/source) Tj ET
+BT /F1 10 Tf 40 220 Td (Plans sold) Tj ET
+BT /F1 10 Tf 40 186 Td (Energy A/B) Tj ET
+0.92 g 40 126 515 24 re f 0 g
+BT /F2 13 Tf 52 134 Td (OVERWHELM RULE) Tj ET
+BT /F1 10 Tf 40 102 Td (If buffer is used 3 days in a row: pause new outreach for 2 working days.) Tj ET
+BT /F1 10 Tf 40 84 Td (If both people feel overloaded: cut marketing first, not service quality.) Tj ET
+
+endstream
+endobj
+33 0 obj
+<<  /Length 1525 >>
+stream
+BT /F2 18 Tf 40 800 Td (Weekly Review + Decision Gates) Tj ET
+BT /F1 10 Tf 40 778 Td (Review every Sunday. Keep it honest and short.) Tj ET
+0.92 g 40 738 515 24 re f 0 g
+BT /F2 13 Tf 52 746 Td (FIVE WEEKLY NUMBERS) Tj ET
+BT /F1 10 Tf 40 704 Td (Total weekly revenue) Tj ET
+BT /F1 10 Tf 40 670 Td (New EV jobs) Tj ET
+BT /F1 10 Tf 40 636 Td (New leads by source) Tj ET
+BT /F1 10 Tf 40 602 Td (Plans sold) Tj ET
+BT /F1 10 Tf 40 568 Td (Energy score for both managers) Tj ET
+0.92 g 40 492 515 24 re f 0 g
+BT /F2 13 Tf 52 500 Td (30 / 60 / 90 DAY GATES) Tj ET
+BT /F2 11 Tf 62 456 Td (Day 30 - 25 May) Tj ET
+BT /F1 9 Tf 62 440 Td (10 reviews, 5 WhatsApp visits, 5 plans, spend <= Rs 5,000, energy >= 7/10) Tj ET
+BT /F2 11 Tf 62 400 Td (Day 60 - 24 June) Tj ET
+BT /F1 9 Tf 62 384 Td (Rs 75k-1L new revenue, 8-10 plan holders, conversion > 20%, energy >= 7/10) Tj ET
+BT /F2 11 Tf 62 344 Td (Day 90 - 24 July) Tj ET
+BT /F1 9 Tf 62 328 Td (Rs 5-6L run rate, 15+ plan holders, 20 reviews, 15 new customers/month) Tj ET
+0.92 g 40 266 515 24 re f 0 g
+BT /F2 13 Tf 52 274 Td (DO NOT DO YET) Tj ET
+BT /F1 10 Tf 62 236 Td (No software changes) Tj ET
+BT /F1 10 Tf 62 212 Td (No customer app) Tj ET
+BT /F1 10 Tf 62 188 Td (No second branch) Tj ET
+BT /F1 10 Tf 62 164 Td (No hiring) Tj ET
+BT /F1 10 Tf 62 140 Td (No daily fleet chasing) Tj ET
+BT /F1 10 Tf 62 116 Td (No discount before 20 real objections) Tj ET
+BT /F1 9 Tf 40 54 Td (Simple rule: revenue, trust, reviews, repeat customers, or operational clarity. Everything else waits.) Tj ET
+
+endstream
+endobj
+34 0 obj
+<< /Type /Page /Parent 36 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /Contents 32 0 R /Annots [5 0 R 6 0 R 7 0 R 8 0 R 9 0 R 10 0 R 11 0 R 12 0 R 13 0 R 14 0 R 15 0 R 16 0 R 17 0 R 18 0 R 19 0 R] >>
+endobj
+35 0 obj
+<< /Type /Page /Parent 36 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /Contents 33 0 R /Annots [20 0 R 21 0 R 22 0 R 23 0 R 24 0 R 25 0 R 26 0 R 27 0 R 28 0 R 29 0 R 30 0 R 31 0 R] >>
+endobj
+36 0 obj
+<< /Type /Pages /Kids [34 0 R 35 0 R] /Count 2 >>
+endobj
+37 0 obj
+<< /Type /Catalog /Pages 36 0 R /AcroForm << /Fields [5 0 R 6 0 R 7 0 R 8 0 R 9 0 R 10 0 R 11 0 R 12 0 R 13 0 R 14 0 R 15 0 R 16 0 R 17 0 R 18 0 R 19 0 R 20 0 R 21 0 R 22 0 R 23 0 R 24 0 R 25 0 R 26 0 R 27 0 R 28 0 R 29 0 R 30 0 R 31 0 R] /NeedAppearances true /DA (/F1 10 Tf 0 g) >> >>
+endobj
+xref
+0 38
+0000000000 65535 f 
+0000000015 00000 n 
+0000000085 00000 n 
+0000000160 00000 n 
+0000000264 00000 n 
+0000000394 00000 n 
+0000000564 00000 n 
+0000000734 00000 n 
+0000000904 00000 n 
+0000001074 00000 n 
+0000001244 00000 n 
+0000001415 00000 n 
+0000001635 00000 n 
+0000001853 00000 n 
+0000002069 00000 n 
+0000002288 00000 n 
+0000002505 00000 n 
+0000002727 00000 n 
+0000002943 00000 n 
+0000003158 00000 n 
+0000003369 00000 n 
+0000003589 00000 n 
+0000003807 00000 n 
+0000004023 00000 n 
+0000004240 00000 n 
+0000004453 00000 n 
+0000004667 00000 n 
+0000004834 00000 n 
+0000005001 00000 n 
+0000005168 00000 n 
+0000005335 00000 n 
+0000005502 00000 n 
+0000005669 00000 n 
+0000007183 00000 n 
+0000008762 00000 n 
+0000009011 00000 n 
+0000009244 00000 n 
+0000009310 00000 n 
+trailer
+<< /Size 38 /Root 37 0 R >>
+startxref
+9613
+%%EOF

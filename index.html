@@ -1,0 +1,2721 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0b0d10">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>JalaSai Garage System</title>
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/favicon.png?v=jalasai-logo-1" type="image/png" sizes="64x64">
+<link rel="apple-touch-icon" href="icons/jalasai-icon-192.png?v=jalasai-logo-1">
+</head>
+<body>
+
+<!-- ═══════ NAV ═══════════════════════════════════════════ -->
+<nav>
+  <div class="brand">
+    <img src="assets/jalasai-logo-premium.jpg" alt="Jalasai logo" class="brand-logo">
+  </div>
+  <div class="tabs">
+    <button class="tab active" data-page="jobs"      onclick="showPage('jobs')">Jobs</button>
+    <button class="tab"        data-page="invoices"  onclick="showPage('invoices')">Invoices</button>
+    <button class="tab"        data-page="stock"     onclick="showPage('stock')">Stock</button>
+    <button class="tab"        data-page="customers" onclick="showPage('customers')">Customers</button>
+    <button class="tab"        data-page="reminders" onclick="showPage('reminders')">Reminders</button>
+    <button class="tab"        data-page="scan"      onclick="showPage('scan')">Scan</button>
+    <button class="tab"        data-page="admin"     data-admin-only="true" onclick="showPage('admin')">Admin</button>
+    <button class="tab" type="button" onmouseenter="warmUiMode('newui/')" ontouchstart="warmUiMode('newui/')" onclick="switchUiMode('newui/')">New UI</button>
+  </div>
+</nav>
+
+<!-- ═══════ STATUS BAR ═══════════════════════════════════ -->
+<div class="gs-bar no-print">
+  <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+    <button class="gs-badge off" id="gs-badge" onclick="openGS()">☁ Cloud: OFF</button>
+    <button class="gs-badge off" id="nav-back-btn" onclick="goBack()" style="display:none;">← Back</button>
+    <span class="gs-bar-info" id="pending-dues" style="display:none;"></span>
+  </div>
+  <div class="gs-bar-right" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+    <span class="gs-bar-info" id="gs-status"></span>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════
+     PAGE: JOBS
+═══════════════════════════════════════════════════════ -->
+<div class="page active" id="page-jobs">
+  <div class="stats">
+    <div class="sc"><div class="sc-lbl">Active Jobs</div><div class="sc-val g" id="st-tot">0</div></div>
+    <div class="sc"><div class="sc-lbl">In Progress</div><div class="sc-val y" id="st-prg">0</div></div>
+    <div class="sc"><div class="sc-lbl">Ready</div><div class="sc-val o" id="st-rdy">0</div></div>
+    <div class="sc" data-admin-only="true" onclick="openTodayRevenueBreakdown()" style="cursor:pointer;"><div class="sc-lbl">Today's Revenue</div><div class="sc-val g" id="st-rev">₹0</div></div>
+  </div>
+  <div class="board-hdr">
+    <div>
+      <div class="board-ttl">Job Board</div>
+      <div style="font-size:12px;color:var(--mut);margin-top:4px;">Today's Invoices: <span id="jobs-today-invoice-count" style="color:var(--acc);font-family:var(--fh);font-weight:700;">0</span></div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+      <input class="sbox" style="width:240px;" id="job-search" placeholder="Search name / phone / vehicle / reg no / work…" oninput="filterJobs(undefined, undefined, this.value)">
+      <select class="fsel" style="width:160px;" onchange="filterJobs(this.value, undefined)" id="job-mech-filter">
+        <option value="">All mechanics</option>
+      </select>
+      <div style="position:relative;">
+        <button class="btn btn-g" type="button" id="job-status-filter-btn" onclick="toggleJobStatusFilterMenu()">Status: All</button>
+        <div id="job-status-filter-menu" class="rcard" style="display:none;position:absolute;top:calc(100% + 6px);left:0;min-width:220px;z-index:40;padding:10px;">
+          <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:8px;">
+            <input type="checkbox" id="job-status-all" checked onchange="toggleAllJobStatuses(this.checked)">
+            All status
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:8px;">
+            <input type="checkbox" class="job-status-option" value="waiting" checked onchange="toggleJobStatusOption('waiting', this.checked)">
+            Waiting
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:8px;">
+            <input type="checkbox" class="job-status-option" value="in-progress" checked onchange="toggleJobStatusOption('in-progress', this.checked)">
+            In Progress
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:8px;">
+            <input type="checkbox" class="job-status-option" value="parts-needed" checked onchange="toggleJobStatusOption('parts-needed', this.checked)">
+            Parts Needed
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;font-size:13px;">
+            <input type="checkbox" class="job-status-option" value="ready" checked onchange="toggleJobStatusOption('ready', this.checked)">
+            Ready
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-top:8px;">
+            <input type="checkbox" class="job-status-option" value="returned" checked onchange="toggleJobStatusOption('returned', this.checked)">
+            Returned
+          </label>
+        </div>
+      </div>
+      <button class="btn btn-g" onclick="showPage('invoices')">Invoices</button>
+      <button class="btn btn-g" data-admin-only="true" onclick="showPage('print')">Print QR</button>
+      <button class="btn btn-g" onclick="openAddIncome()">+ Income</button>
+      <button class="btn btn-g" onclick="openAddExp()">+ Expense</button>
+      <button class="btn btn-g" onclick="openQuickInvoice()">Quick Invoice</button>
+      <button class="btn btn-p" onclick="openNewJob()">+ New Job</button>
+    </div>
+  </div>
+  <div class="jgrid" id="jgrid"></div>
+
+  <!-- Done jobs (collapsed) -->
+  <div style="margin-top:20px;">
+    <div class="board-hdr" style="cursor:pointer;" onclick="toggleDoneJobs()">
+      <div class="board-ttl" style="color:var(--mut);font-size:14px;">
+        Completed Jobs Today <span id="done-count" style="font-size:12px;"></span>
+      </div>
+      <span id="done-toggle" style="color:var(--mut);font-size:12px;">▼ Show</span>
+    </div>
+    <div id="done-grid" class="jgrid" style="display:none;"></div>
+  </div>
+</div>
+
+<div class="page" id="page-admin">
+  <div class="board-hdr">
+    <div class="board-ttl">Admin</div>
+  </div>
+  <div class="rgrid">
+    <div class="rcard" style="cursor:pointer;" onclick="showPage('reports')">
+      <div class="rcard-ttl">Reports</div>
+      <div style="font-size:12px;color:var(--mut);">All revenue, expenses, charts, and insights in one place.</div>
+    </div>
+    <div class="rcard" style="cursor:pointer;" onclick="showPage('expenses')">
+      <div class="rcard-ttl">Expenses</div>
+      <div style="font-size:12px;color:var(--mut);">Manage outgoing expenses and category totals.</div>
+    </div>
+    <div class="rcard" style="cursor:pointer;" onclick="showPage('income')">
+      <div class="rcard-ttl">Income</div>
+      <div style="font-size:12px;color:var(--mut);">Review and edit manual income entries separately.</div>
+    </div>
+    <div class="rcard" style="cursor:pointer;" onclick="showPage('logs')">
+      <div class="rcard-ttl">Logs</div>
+      <div style="font-size:12px;color:var(--mut);">See changes, edits, deletes, payments, and imports.</div>
+    </div>
+    <div class="rcard" style="cursor:pointer;" onclick="showPage('mechanics')">
+      <div class="rcard-ttl">Mechanics</div>
+      <div style="font-size:12px;color:var(--mut);">Manage mechanics and workshop workload.</div>
+    </div>
+    <div class="rcard" style="cursor:pointer;" onclick="showPage('print')">
+      <div class="rcard-ttl">Print QR</div>
+      <div style="font-size:12px;color:var(--mut);">Print stock labels and QR sticker sheets.</div>
+    </div>
+  </div>
+  <div class="rcard" style="margin-top:14px;">
+    <div class="rcard-ttl">Sync Diagnostics</div>
+    <div style="font-size:12px;color:var(--mut);margin-bottom:10px;">Use this to confirm which device synced last and whether cloud/local data was merged.</div>
+    <div id="sync-diagnostics"></div>
+  </div>
+  <div class="rcard" style="margin-top:14px;">
+    <div class="rcard-ttl">Cloud Backup</div>
+    <div style="font-size:12px;color:var(--mut);margin-bottom:10px;">Manual backup only: copies the new table-wise cloud dataset into the old garage_state backup row. This does not pull old data back into the app.</div>
+    <div id="cloud-backup-last" style="font-size:12px;color:var(--mut);margin-bottom:10px;">Last backup: —</div>
+    <button class="btn btn-p" onclick="copyTableSyncToGarageStateBackup()">Copy Data to garage_state</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════
+     PAGE: STOCK
+═══════════════════════════════════════════════════════ -->
+<div class="page" id="page-stock">
+  <div class="board-hdr">
+    <div class="board-ttl">Parts Stock</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <button class="btn btn-p"  onclick="openAddPart()">+ Add Part</button>
+      <button class="btn btn-g"  onclick="openOrderStockModal()" id="st-order-btn">Order Stock</button>
+      <button class="btn btn-g"  onclick="openCatalogCsvPicker()">Import Catalog CSV</button>
+      <button class="btn btn-g" id="catalog-review-resume-btn" onclick="resumeCatalogReview()" style="display:none;">Continue Catalog Review</button>
+      <button class="btn btn-g"  onclick="openAgentJsonPicker()">Import Agent JSON</button>
+      <button class="btn btn-g"  onclick="openStockReceiveScan()">Receive Stock</button>
+      <button class="btn btn-g"  onclick="showPage('scan')">Scan</button>
+      <button class="btn btn-g" data-admin-only="true" onclick="showPage('print')">Print QR</button>
+      <input id="catalog-csv-file" type="file" accept=".csv,text/csv" style="display:none;" onchange="importCatalogCsvFile(this)">
+      <input id="agent-json-file" type="file" accept="application/json,.json" style="display:none;" onchange="importAgentJsonFile(this)">
+    </div>
+  </div>
+  <div class="sctrl">
+    <input  class="sbox" placeholder="Search part / SKU / fitment / supplier part no / typo…" oninput="filterStock(this.value)" id="st-search">
+    <select class="fsel" style="width:150px;" onchange="filterStockBike(this.value)" id="st-bike">
+      <option value="">All bikes</option>
+    </select>
+    <select class="fsel" style="width:150px;" onchange="filterStockCat(this.value)" id="st-cat">
+      <option value="">All categories</option>
+      <option>Electrical</option><option>Brakes</option><option>Filters/Fluids</option>
+      <option>Cables/Controls</option><option>Body/Frame</option><option>Engine/Drive</option>
+      <option>Lights</option><option>Tyres/Belts</option><option>Locks</option>
+    </select>
+    <select class="fsel" style="width:130px;" onchange="filterStockSt(this.value)">
+      <option value="">All status</option>
+      <option value="out">Out of stock</option>
+      <option value="low">Low stock</option>
+      <option value="ok">OK</option>
+    </select>
+  </div>
+  <div style="font-size:12px;color:var(--mut);margin:-2px 0 10px;">Try: `brake pad activa 5g`, `ASKBS0212`, `lamp`, or fitment names.</div>
+  <div class="stbl">
+    <table>
+      <thead><tr>
+        <th>SKU</th><th>Photo</th><th>Part Name</th><th>Bike</th><th>Fitment</th><th>Category</th>
+        <th>Qty</th><th>Min</th><th>Buy / Sell ₹</th><th>Location</th><th>Status</th><th>Actions</th>
+      </tr></thead>
+      <tbody id="st-tbody"></tbody>
+    </table>
+    <div class="stock-footer"><span id="stock-value"></span><div id="stock-pager"></div></div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════
+     PAGE: CUSTOMERS
+═══════════════════════════════════════════════════════ -->
+<div class="page" id="page-customers">
+  <div class="board-hdr">
+    <div class="board-ttl">Customers <span id="cust-count" style="font-size:13px;font-weight:400;color:var(--mut);margin-left:6px;"></span></div>
+    <div style="display:flex;gap:8px;align-items:center;">
+      <input class="sbox" style="width:220px;" placeholder="Search name or phone…" oninput="filterCustomers(this.value)">
+      <select class="fsel" style="width:190px;" onchange="setCustomerSort(this.value)" id="cust-sort">
+        <option value="name">Sort: Name</option>
+        <option value="due-asc">Due: Low to High</option>
+        <option value="due-desc" selected>Due: High to Low</option>
+        <option value="advance-desc">Advance: High to Low</option>
+        <option value="advance-asc">Advance: Low to High</option>
+      </select>
+      <button class="btn btn-p" onclick="openAddCust()">+ Add Customer</button>
+    </div>
+  </div>
+  <div class="cust-grid" id="cust-grid"></div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════
+     PAGE: REMINDERS
+═══════════════════════════════════════════════════════ -->
+<div class="page" id="page-reminders">
+  <div class="board-hdr">
+    <div class="board-ttl">Reminders <span id="rem-total-count" style="font-size:13px;font-weight:400;color:var(--mut);margin-left:6px;"></span></div>
+    <div id="rem-tabs" style="display:flex;gap:8px;flex-wrap:wrap;"></div>
+  </div>
+  <div id="rem-list"></div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════
+     PAGE: MECHANICS
+═══════════════════════════════════════════════════════ -->
+<div class="page" id="page-mechanics">
+  <div class="board-hdr">
+    <div class="board-ttl">Mechanics</div>
+    <button class="btn btn-p" onclick="openAddMech()">+ Add Mechanic</button>
+  </div>
+  <div class="mech-toolbar">
+    <select class="fsel" id="mech-period-mode" style="width:120px;" onchange="setMechanicPeriodMode(this.value)">
+      <option value="month">Month</option>
+      <option value="date">Date</option>
+      <option value="year">Year</option>
+    </select>
+    <input class="finp" id="mech-period-date" type="date" style="width:145px;display:none;" onchange="renderMechanics()">
+    <input class="finp" id="mech-period-month" type="month" style="width:145px;" onchange="renderMechanics()">
+    <input class="finp" id="mech-period-year" type="number" min="2000" max="2100" step="1" style="width:100px;display:none;" onchange="renderMechanics()" oninput="renderMechanics()">
+  </div>
+  <div class="mech-grid" id="mech-grid"></div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════
+     PAGE: EXPENSES
+═══════════════════════════════════════════════════════ -->
+<div class="page" id="page-expenses">
+  <div class="board-hdr">
+    <div class="board-ttl">Expenses</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+      <select class="fsel" style="width:170px;" id="exp-range" onchange="setExpenseRange(this.value)">
+        <option value="today">Daily</option>
+        <option value="yesterday">Yesterday</option>
+        <option value="week">Weekly</option>
+        <option value="month">Monthly</option>
+        <option value="year">Yearly</option>
+        <option value="date">By Date</option>
+        <option value="custom">Selected Range</option>
+      </select>
+      <select class="fsel" style="width:120px;" id="exp-year-filter" onchange="setExpenseYear(this.value)"></select>
+      <input class="finp" type="date" id="exp-start" style="width:160px;padding:6px 10px;font-size:13px;" onchange="setExpenseCustomDates()">
+      <input class="finp" type="date" id="exp-end" style="width:160px;padding:6px 10px;font-size:13px;" onchange="setExpenseCustomDates()">
+      <select class="fsel" style="width:140px;" onchange="filterExpCat(this.value)" id="exp-cat-filter">
+        <option value="">All categories</option>
+        <option>Parts</option><option>Tools</option><option>Rent</option><option>Salary</option>
+        <option>Utilities</option><option>Marketing</option><option>Miscellaneous</option>
+      </select>
+      <button class="btn btn-p" onclick="openAddExp()">+ Add Expense</button>
+    </div>
+  </div>
+  <div class="exp-summary">
+    <div class="sc"><div class="sc-lbl">Expenses</div><div class="sc-val r" id="exp-total">₹0</div></div>
+  </div>
+  <div style="font-size:12px;color:var(--mut);margin:-4px 0 14px;">Revenue totals, manual income, profit, and invoice comparisons now live in Reports and Income.</div>
+  <div style="display:grid;grid-template-columns:1fr 220px;gap:14px;margin-bottom:14px;" class="exp-split">
+    <div class="stbl">
+      <table>
+        <thead><tr><th>Date</th><th>Category</th><th>Description</th><th>Paid To</th><th>Photo</th><th>Amount</th><th>Actions</th></tr></thead>
+        <tbody id="exp-tbody"></tbody>
+      </table>
+    </div>
+    <div class="rcard">
+      <div class="rcard-ttl">By Category</div>
+      <div id="exp-bycat"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════
+     PAGE: INCOME
+═══════════════════════════════════════════════════════ -->
+<div class="page" id="page-income">
+  <div class="board-hdr">
+    <div class="board-ttl">Income</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+      <select class="fsel" style="width:170px;" id="income-range" onchange="setExpenseRange(this.value)">
+        <option value="today">Daily</option>
+        <option value="yesterday">Yesterday</option>
+        <option value="week">Weekly</option>
+        <option value="month">Monthly</option>
+        <option value="year">Yearly</option>
+        <option value="date">By Date</option>
+        <option value="custom">Selected Range</option>
+      </select>
+      <select class="fsel" style="width:120px;" id="income-year-filter" onchange="setExpenseYear(this.value)"></select>
+      <input class="finp" type="date" id="income-start" style="width:160px;padding:6px 10px;font-size:13px;" onchange="setExpenseCustomDates()">
+      <input class="finp" type="date" id="income-end" style="width:160px;padding:6px 10px;font-size:13px;" onchange="setExpenseCustomDates()">
+      <button class="btn btn-p" onclick="openAddIncome()">+ Add Income</button>
+    </div>
+  </div>
+  <div class="exp-summary">
+    <div class="sc"><div class="sc-lbl">Manual Income</div><div class="sc-val o" id="income-total">₹0</div></div>
+  </div>
+  <div style="font-size:12px;color:var(--mut);margin:-4px 0 14px;">This page keeps manual income separate from Admin expenses for faster daily checking.</div>
+  <div style="display:grid;grid-template-columns:1fr 220px;gap:14px;" class="exp-split">
+    <div class="stbl">
+      <table>
+        <thead><tr><th>Date</th><th>Type</th><th>Note</th><th>Amount</th><th>Actions</th></tr></thead>
+        <tbody id="income-tbody"></tbody>
+      </table>
+    </div>
+    <div class="rcard">
+      <div class="rcard-ttl">Income Types</div>
+      <div id="income-bytype"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════
+     PAGE: REPORTS
+═══════════════════════════════════════════════════════ -->
+<div class="page" id="page-reports">
+  <div class="board-hdr">
+    <div class="board-ttl">Reports</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <button class="btn btn-g" onclick="sendClosingSummary()">📱 Closing Summary</button>
+      <button class="btn btn-g" onclick="aiDraftClosingSummary()">AI Draft Summary</button>
+    </div>
+  </div>
+
+  <div class="report-filter-row" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;align-items:center;">
+    <select class="fsel" style="width:180px;" id="rpt-range" onchange="setReportRange(this.value)">
+      <option value="today">Daily</option>
+      <option value="yesterday">Yesterday</option>
+      <option value="week">Weekly</option>
+      <option value="month">Monthly</option>
+      <option value="year">Yearly</option>
+      <option value="date">By Date</option>
+      <option value="custom">Selected Range</option>
+    </select>
+    <select class="fsel" style="width:120px;" id="rpt-year" onchange="setReportYear(this.value)"></select>
+    <input class="finp" type="date" id="rpt-start" style="width:160px;" onchange="setReportCustomDates()">
+    <input class="finp" type="date" id="rpt-end" style="width:160px;" onchange="setReportCustomDates()">
+    <input class="sbox" style="width:240px;" id="rpt-search" placeholder="Search by customer name / number…" oninput="setReportSearch(this.value)">
+  </div>
+
+  <div class="report-hero">
+    <div class="report-hero-copy">
+      <div class="report-kicker">Growth Dashboard</div>
+      <div class="report-title">Executive Performance & System Insight</div>
+      <div class="report-sub" id="rpt-period-sub">Comparing the selected range with the previous matching period.</div>
+    </div>
+    <div class="report-period-wrap">
+      <div class="period-chip">
+        <span class="period-chip-label">Current</span>
+        <span class="period-chip-value" id="rpt-period-current">Today</span>
+      </div>
+      <div class="period-chip">
+        <span class="period-chip-label">Previous</span>
+        <span class="period-chip-value" id="rpt-period-previous">Yesterday</span>
+      </div>
+    </div>
+  </div>
+  <div style="font-size:12px;color:var(--mut);margin:-4px 0 14px;">Today's Invoices: <span id="rpt-today-invoices" style="color:var(--acc);font-family:var(--fh);font-weight:700;">0</span> · Yesterday's Invoices: <span id="rpt-yesterday-invoices" style="color:var(--acc2);font-family:var(--fh);font-weight:700;">0</span></div>
+
+  <div class="report-exec-grid">
+    <div class="report-metric-card">
+      <div class="report-metric-label">Total Revenue</div>
+      <div class="report-metric-value" id="rpt-rev">₹0</div>
+      <div class="report-metric-delta" id="rpt-rev-delta">vs previous</div>
+    </div>
+    <div class="report-metric-card">
+      <div class="report-metric-label">Total Expenses</div>
+      <div class="report-metric-value" id="rpt-exp">₹0</div>
+      <div class="report-metric-delta" id="rpt-exp-delta">vs previous</div>
+    </div>
+    <div class="report-metric-card">
+      <div class="report-metric-label">Net Profit</div>
+      <div class="report-metric-value" id="rpt-profit">₹0</div>
+      <div class="report-metric-delta" id="rpt-profit-delta">vs previous</div>
+    </div>
+    <div class="report-metric-card">
+      <div class="report-metric-label">Invoices Issued</div>
+      <div class="report-metric-value" id="rpt-jobs">0</div>
+      <div class="report-metric-delta" id="rpt-jobs-delta">vs previous</div>
+    </div>
+    <div class="report-metric-card">
+      <div class="report-metric-label">Avg. Invoice Value</div>
+      <div class="report-metric-value" id="rpt-avg-invoice">₹0</div>
+      <div class="report-metric-delta" id="rpt-avg-invoice-delta">vs previous</div>
+    </div>
+  </div>
+
+  <div class="report-bento">
+    <div class="rcard report-span-7">
+      <div class="report-section-head">
+        <div>
+          <div class="rcard-ttl">Executive Performance Summary</div>
+          <div class="report-section-copy">Current period vs previous period, built from real billing, expense, and invoice flow.</div>
+        </div>
+      </div>
+      <div class="report-table-wrap">
+        <table class="report-compare-table">
+          <thead>
+            <tr>
+              <th>Metric</th>
+              <th>Current</th>
+              <th>Previous</th>
+              <th>% Change</th>
+            </tr>
+          </thead>
+          <tbody id="rpt-exec-table"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="rcard report-span-5">
+      <div class="report-section-head">
+        <div>
+          <div class="rcard-ttl">Finance Mix</div>
+          <div class="report-section-copy">Cash vs UPI ratio and discount impact on margin.</div>
+        </div>
+      </div>
+      <div id="rpt-payment-mix" class="report-stack-gap"></div>
+      <div id="rpt-discount-impact" class="report-stack-gap"></div>
+      <div id="rpt-finance-breakdown" class="report-stack-gap"></div>
+    </div>
+
+    <div class="rcard report-span-4">
+      <div class="report-section-head">
+        <div>
+          <div class="rcard-ttl">System Health & Sync</div>
+          <div class="report-section-copy">Data integrity view for multi-device usage.</div>
+        </div>
+      </div>
+      <div id="rpt-system-health"></div>
+    </div>
+
+    <div class="rcard report-span-6">
+      <div class="report-section-head">
+        <div>
+          <div class="rcard-ttl" id="rpt-mech-title">Mechanic Productivity</div>
+          <div class="report-section-copy">Revenue, completion speed proxy, and strongest service category.</div>
+        </div>
+      </div>
+      <div id="rpt-mechs"></div>
+    </div>
+
+    <div class="rcard report-span-6">
+      <div class="report-section-head">
+        <div>
+          <div class="rcard-ttl">Job Status Bottlenecks</div>
+          <div class="report-section-copy">Shows where work is getting stuck right now.</div>
+        </div>
+      </div>
+      <div id="rpt-bottlenecks"></div>
+    </div>
+
+    <div class="rcard report-span-4">
+      <div class="report-section-head">
+        <div>
+          <div class="rcard-ttl">Inventory Turn Rate</div>
+          <div class="report-section-copy">Fast movers, dead stock, and mapping efficiency.</div>
+        </div>
+      </div>
+      <div id="rpt-turnover"></div>
+    </div>
+
+    <div class="rcard report-span-4">
+      <div class="report-section-head">
+        <div>
+          <div class="rcard-ttl">Stock-Out Forecaster</div>
+          <div class="report-section-copy">Predicts parts that may block jobs soon.</div>
+        </div>
+      </div>
+      <div id="rpt-forecast"></div>
+    </div>
+
+    <div class="rcard report-span-4">
+      <div class="report-section-head">
+        <div>
+          <div class="rcard-ttl">Stock Value</div>
+          <div class="report-section-copy">Current inventory value at buy and sell side.</div>
+        </div>
+      </div>
+      <div class="mrow"><span>At Purchase Cost</span><span class="sc-val g" id="rpt-stock-cost" style="font-size:18px;">₹0</span></div>
+      <div class="mrow"><span>At Sell Price</span><span class="sc-val o" id="rpt-stock-sell" style="font-size:18px;">₹0</span></div>
+    </div>
+
+    <div class="rcard report-span-4">
+      <div class="report-section-head">
+        <div>
+          <div class="rcard-ttl" id="rpt-parts-title">Top Parts Used</div>
+          <div class="report-section-copy">Most-used parts inside the selected report window.</div>
+        </div>
+      </div>
+      <div id="rpt-parts"></div>
+    </div>
+
+    <div class="rcard report-span-4">
+      <div class="report-section-head">
+        <div>
+          <div class="rcard-ttl">Customer Retention</div>
+          <div class="report-section-copy">Repeat business in the selected period.</div>
+        </div>
+      </div>
+      <div id="rpt-retention"></div>
+    </div>
+
+    <div class="rcard report-span-4">
+      <div class="report-section-head">
+        <div>
+          <div class="rcard-ttl">Reminder Return Proxy</div>
+          <div class="report-section-copy">Service-due comeback signal based on revisit timing.</div>
+        </div>
+      </div>
+      <div id="rpt-followup"></div>
+    </div>
+
+    <div class="rcard report-span-4">
+      <div class="report-section-head">
+        <div>
+          <div class="rcard-ttl">Vehicle History Insights</div>
+          <div class="report-section-copy">Repeat bike models and revisit rhythm.</div>
+        </div>
+      </div>
+      <div id="rpt-vehicle-insights"></div>
+    </div>
+
+    <div class="rcard report-span-4">
+      <div class="report-section-head">
+        <div>
+          <div class="rcard-ttl">LTV Leaderboard</div>
+          <div class="report-section-copy">Top customer relationships by value and visit depth.</div>
+        </div>
+      </div>
+      <div id="rpt-ltv"></div>
+    </div>
+
+    <div class="rcard report-span-12">
+      <div class="report-section-head">
+        <div>
+          <div class="rcard-ttl">Profit Analysis by Service Type</div>
+          <div class="report-section-copy">Gross profit proxy using labour plus billed parts minus known part buy cost.</div>
+        </div>
+      </div>
+      <div id="rpt-service-profit"></div>
+    </div>
+
+    <div class="rcard report-span-12">
+      <div class="report-section-head">
+        <div>
+          <div class="rcard-ttl">Reorder Needed</div>
+          <div class="report-section-copy">Immediate stock risk from current min-level rules.</div>
+        </div>
+      </div>
+      <div id="rpt-reorder"></div>
+    </div>
+  </div>
+
+  <div class="stbl" style="margin-top:14px;">
+    <table>
+      <thead>
+        <tr>
+          <th>Date / Time</th>
+          <th>Invoice</th>
+          <th>Customer</th>
+          <th>Vehicle</th>
+          <th>Amount</th>
+          <th>Paid</th>
+          <th>Due</th>
+          <th>Photo</th>
+        </tr>
+      </thead>
+      <tbody id="rpt-tbody"></tbody>
+    </table>
+  </div>
+</div>
+
+<div class="page" id="page-logs">
+  <div class="board-hdr">
+    <div class="board-ttl">Activity Logs</div>
+    <div style="font-size:12px;color:var(--mut);">Admin only</div>
+  </div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;">
+    <input class="sbox" style="width:240px;" placeholder="Search user / action / record…" oninput="filterLogsSearch(this.value)">
+    <select class="fsel" style="width:160px;" id="logs-action" onchange="filterLogsAction(this.value)">
+      <option value="">All actions</option>
+    </select>
+    <select class="fsel" style="width:160px;" id="logs-entity" onchange="filterLogsEntity(this.value)">
+      <option value="">All modules</option>
+    </select>
+    <button class="btn btn-g" onclick="refreshLogsFromCloud().then(() => renderLogs())">Refresh Logs</button>
+  </div>
+  <div class="stbl" id="logs-list"></div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════
+     PAGE: SCAN
+═══════════════════════════════════════════════════════ -->
+<div class="page" id="page-scan">
+  <div class="scan-wrap">
+    <div class="board-hdr">
+      <div class="board-ttl">Scan Part QR</div>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <button class="btn btn-p" id="scan-btn" onclick="toggleScanner()">Start Camera</button>
+        <select class="fsel" id="scan-job" style="width:200px;">
+          <option value="">Link to job (optional)</option>
+        </select>
+      </div>
+    </div>
+    <div id="reader"></div>
+    <div class="scan-status" id="scan-status">
+      <div style="color:var(--mut);font-size:13px;">Camera stopped. Press "Start Camera" to scan.</div>
+    </div>
+    <div style="background:var(--sur);border:1px solid var(--bor);border-radius:10px;padding:16px;margin-top:12px;">
+      <div style="font-family:var(--fh);font-size:14px;margin-bottom:10px;">Or type SKU / part name</div>
+      <input class="sbox" id="manual-search" placeholder="Type SKU or part name…" oninput="manualSearch(this.value)" style="width:100%;">
+      <div id="manual-results" style="margin-top:8px;"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════
+     PAGE: PRINT QR
+═══════════════════════════════════════════════════════ -->
+<div class="page" id="page-print">
+  <div class="board-hdr">
+    <div class="board-ttl">Print QR Labels <span id="sticker-count" style="font-size:12px;color:var(--mut);font-weight:400;margin-left:6px;"></span></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <input class="sbox no-print" style="width:220px;" placeholder="Search SKU / part / fitment / typo…" oninput="filterPrintSearch(this.value)" id="print-search">
+      <select class="fsel no-print" style="width:150px;" onchange="filterPrintCat(this.value)">
+        <option value="">All categories</option>
+        <option>Electrical</option><option>Brakes</option><option>Filters/Fluids</option>
+        <option>Cables/Controls</option><option>Body/Frame</option><option>Engine/Drive</option>
+        <option>Lights</option><option>Tyres/Belts</option><option>Locks</option>
+      </select>
+      <select class="fsel no-print" style="width:130px;" onchange="filterPrintBike(this.value)" id="print-bike-filter">
+        <option value="">All bikes</option>
+      </select>
+      <select class="fsel no-print" style="width:150px;" onchange="filterPrintStatus(this.value)" id="print-status-filter">
+        <option value="">All labels</option>
+        <option value="unprinted">Only unprinted</option>
+        <option value="printed">Printed already</option>
+      </select>
+      <button class="btn btn-g no-print" onclick="selectAllPrintFiltered()">Select Filtered</button>
+      <button class="btn btn-g no-print" onclick="clearPrintSelected()">Clear</button>
+      <button class="btn btn-g no-print" onclick="selectPrintLastAdded()">Print Last Added</button>
+      <button class="btn btn-p no-print" onclick="printStickerSheet()">🖨 Print Selected</button>
+    </div>
+  </div>
+  <div style="font-size:12px;color:var(--mut);margin-bottom:12px;">A4 landscape · 10 × 4 = 40 per page. Select only the labels you want, preview them, then print the selected set.</div>
+  <div class="print-manager">
+    <div class="print-selection-panel no-print">
+      <div class="stbl">
+        <table>
+          <thead><tr>
+            <th style="width:34px;"><input type="checkbox" id="print-select-all" onchange="togglePrintSelectAll(this.checked)"></th>
+            <th>SKU</th><th>Part Name</th><th>Labels</th><th>Bike</th>
+          </tr></thead>
+          <tbody id="print-stock-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="print-preview-panel">
+      <div class="print-preview-head no-print">
+        <div id="print-preview-summary" style="font-size:12px;color:var(--mut);"></div>
+      </div>
+      <div id="print-sheet-wrap"></div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════
+     PAGE: INVOICES
+═══════════════════════════════════════════════════════ -->
+<div class="page" id="page-invoices">
+  <div class="board-hdr">
+    <div class="board-ttl">Invoices</div>
+    <div id="inv-stats" data-admin-only="true" style="font-size:12px;color:var(--mut);"></div>
+  </div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;">
+      <select class="fsel" style="width:180px;" onchange="setInvoiceSort(this.value)" id="inv-sort-sel">
+        <option value="last-added">Sort: Recently Added</option>
+        <option value="date">Sort: Date (newest first)</option>
+        <option value="invoice" selected>Sort: Invoice No.</option>
+        <option value="amount">Sort: Amount (highest first)</option>
+      </select>
+        <input class="sbox" style="width:260px;" placeholder="Search customer / invoice / phone / vehicle no…" oninput="filterInvoices(this.value)" id="inv-search">
+  </div>
+  <div class="stbl" id="inv-list"></div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════
+     MODAL: NEW / EDIT JOB
+═══════════════════════════════════════════════════════ -->
+<div class="ovl" id="m-job">
+  <div class="modal wide">
+    <div class="modal-ttl" id="job-modal-title">New Job Card</div>
+
+    <!-- Customer section -->
+    <div style="background:var(--sur2);border-radius:8px;padding:14px;margin-bottom:14px;">
+      <div style="font-family:var(--fh);font-size:13px;color:var(--mut);margin-bottom:10px;text-transform:uppercase;letter-spacing:.8px;">Customer</div>
+      <div class="frow">
+        <label class="flbl">Search Name / Phone</label>
+        <input type="hidden" id="jm-cust-sel">
+        <div style="display:flex;gap:8px;align-items:center;">
+          <input class="sbox" id="jm-cust-search" placeholder="Search by name or number..." oninput="filterJobCustomerSearch(this.value)" style="flex:1;">
+          <button class="btn btn-g btn-sm" type="button" onclick="clearJobCustomerSelection(true)">+ New Customer</button>
+        </div>
+        <div id="jm-cust-results" style="margin-top:8px;"></div>
+        <div id="jm-recent-customers" class="hint-chips"></div>
+      </div>
+      <div id="jm-cust-new">
+        <div class="f2">
+          <div class="frow"><label class="flbl">Customer Name *</label><input class="finp" id="jm-cust-name" placeholder="Ramesh Patel" oninput="onCustomerNameInput(this.value)"><datalist id="jm-customer-suggestions"></datalist></div>
+          <div class="frow"><label class="flbl">Phone</label><input class="finp" id="jm-phone" placeholder="98765XXXXX" type="tel"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Vehicle section -->
+    <div style="background:var(--sur2);border-radius:8px;padding:14px;margin-bottom:14px;">
+      <div style="font-family:var(--fh);font-size:13px;color:var(--mut);margin-bottom:10px;text-transform:uppercase;letter-spacing:.8px;">Vehicle</div>
+      <div class="frow">
+        <label class="flbl">Bike Name</label>
+        <input class="finp" id="jm-veh" list="jm-vehicle-suggestions" placeholder="Start typing e.g. Shine, Activa, Jupiter" oninput="suggestVehicleName(this.value)">
+        <datalist id="jm-vehicle-suggestions"></datalist>
+        <div id="jm-veh-help" style="font-size:11px;color:var(--mut);margin-top:6px;">Type a bike name and pick from suggestions.</div>
+        <div id="jm-recent-bikes" class="hint-chips"></div>
+      </div>
+      <div class="f2">
+        <div class="frow"><label class="flbl">Reg. Number</label><input class="finp" id="jm-vno" placeholder="4448" style="text-transform:uppercase;" inputmode="numeric" autocomplete="off"></div>
+        <div class="frow"><label class="flbl">Odometer (km)</label><input class="finp" id="jm-odo" type="number" placeholder="25000"></div>
+      </div>
+      <!-- Vehicle photo on receive -->
+      <div class="frow">
+        <label class="flbl">Vehicle Photo (on receive)</label>
+        <div class="photo-upload-area" onclick="triggerPhotoPicker('jm-photo','job', event)">
+          <input type="file" id="jm-photo" accept="image/*" capture="environment" multiple style="display:none;" onchange="handlePhotoUpload(this,'jm-photo-preview')">
+          <div id="jm-photo-preview" class="photo-preview-box">
+            <span style="color:var(--mut);font-size:12px;">📷 Tap to take / upload photo</span>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
+          <button class="btn btn-g btn-sm" type="button" onclick="openPhotoCamera('jm-photo','job', event)">Open Camera</button>
+          <button class="btn btn-g btn-sm" type="button" onclick="openPhotoLibrary('jm-photo','job', event)">Upload Photos</button>
+          <button class="btn btn-g btn-sm" type="button" onclick="clearPhotoUpload('jm-photo-preview','jm-photo','job')">Remove All Photos</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Work section -->
+    <div style="background:var(--sur2);border-radius:8px;padding:14px;margin-bottom:14px;">
+      <div style="font-family:var(--fh);font-size:13px;color:var(--mut);margin-bottom:10px;text-transform:uppercase;letter-spacing:.8px;">Work</div>
+      <div class="frow"><label class="flbl">Problem / Work Description *</label>
+        <textarea class="finp" id="jm-prob" placeholder="Describe the issue or service requested…" rows="2" style="resize:vertical;"></textarea>
+        <div style="margin-top:8px;"><button class="btn btn-g btn-sm" type="button" onclick="aiCleanJobProblem()">AI Clean Work</button></div>
+      </div>
+      <div id="jm-service-chips" class="hint-chips"></div>
+      <div class="f2">
+        <div class="frow"><label class="flbl">Mechanic</label>
+          <input type="hidden" id="jm-mech">
+          <div id="jm-mech-chips" class="choice-chips"></div>
+        </div>
+        <div class="frow"><label class="flbl">Priority</label>
+          <select class="fsel" id="jm-pri">
+            <option value="normal">Normal</option>
+            <option value="urgent">Urgent</option>
+            <option value="waiting">Waiting</option>
+          </select>
+        </div>
+      </div>
+      <div class="f2">
+        <div class="frow"><label class="flbl">Status</label>
+          <select class="fsel" id="jm-status">
+            <option value="waiting">Waiting</option>
+            <option value="in-progress">In Progress</option>
+            <option value="parts-needed">Parts Needed</option>
+            <option value="ready">Ready</option>
+            <option value="returned">Returned</option>
+          </select>
+        </div>
+        <div class="frow"><label class="flbl">Expected Delivery</label>
+          <input class="finp" id="jm-delivery" type="date">
+        </div>
+      </div>
+    </div>
+
+    <!-- Billing section -->
+    <div style="background:var(--sur2);border-radius:8px;padding:14px;margin-bottom:14px;">
+      <div style="font-family:var(--fh);font-size:13px;color:var(--mut);margin-bottom:10px;text-transform:uppercase;letter-spacing:.8px;">Billing</div>
+      <div class="f3">
+        <div class="frow"><label class="flbl">Labour ₹</label><input class="finp" id="jm-lab" type="number" placeholder="0"></div>
+        <div class="frow"><label class="flbl">Parts ₹</label><input class="finp" id="jm-prt" type="number" placeholder="0"></div>
+        <div class="frow"><label class="flbl" id="jm-advance-label">Advance Paid ₹</label><input class="finp" id="jm-advance" type="number" placeholder="0"></div>
+      </div>
+      <div class="f2">
+        <div class="frow"><label class="flbl">Invoice No. <span style="color:var(--mut);font-weight:400;">(optional)</span></label><input class="finp" id="jm-invoice-no" placeholder="4448" inputmode="numeric" autocomplete="off"></div>
+        <div class="frow"><label class="flbl">Discount ₹</label><input class="finp" id="jm-discount" type="number" placeholder="0"></div>
+      </div>
+      <div class="frow"><label class="flbl">Notes</label>
+        <input class="finp" id="jm-notes" placeholder="Any extra notes…">
+        <div style="margin-top:8px;"><button class="btn btn-g btn-sm" type="button" onclick="aiCleanJobNotes()">AI Clean Note</button></div>
+      </div>
+    </div>
+
+    <div class="mftr">
+      <button class="btn btn-p" style="flex:1" onclick="saveJob()">Save Job Card</button>
+      <button class="btn btn-g" type="button" onclick="saveJobAndNext()">Save & Next</button>
+      <button class="btn btn-g" id="save-job-invoice-btn" type="button" onclick="saveJobAndCreateInvoice()">Save as Invoice</button>
+      <button class="btn btn-g" onclick="closeM('m-job')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════
+     MODAL: QUICK INVOICE
+═══════════════════════════════════════════════════════ -->
+<div class="ovl" id="m-quick-invoice">
+  <div class="modal">
+    <div class="modal-ttl">Quick Invoice</div>
+    <div style="font-size:12px;color:var(--mut);margin-bottom:12px;">Fast billing for walk-in work. Full Job Card stays available for detailed workshop jobs.</div>
+
+    <div style="background:var(--sur2);border-radius:8px;padding:14px;margin-bottom:14px;">
+      <div style="font-family:var(--fh);font-size:13px;color:var(--mut);margin-bottom:10px;text-transform:uppercase;letter-spacing:.8px;">Customer</div>
+      <div class="frow">
+        <label class="flbl">Search Name / Phone</label>
+        <input type="hidden" id="qi-cust-sel">
+        <div style="display:flex;gap:8px;align-items:center;">
+          <input class="sbox" id="qi-cust-search" placeholder="Search by name or number..." oninput="filterQuickInvoiceCustomer(this.value)" style="flex:1;">
+          <datalist id="qi-customer-suggestions"></datalist>
+          <button class="btn btn-g btn-sm" type="button" onclick="clearQuickInvoiceCustomer(true)">+ New</button>
+        </div>
+        <div id="qi-cust-results" style="margin-top:8px;"></div>
+        <div id="qi-recent-customers" class="hint-chips"></div>
+      </div>
+      <div class="f2">
+        <div class="frow"><label class="flbl">Customer Name *</label><input class="finp" id="qi-cust-name" placeholder="Ramesh Patel" oninput="onQuickInvoiceCustomerNameInput(this.value)"></div>
+      <div class="frow"><label class="flbl">Phone</label><input class="finp" id="qi-phone" placeholder="98765XXXXX" type="tel"></div>
+      </div>
+    </div>
+
+    <div style="background:var(--sur2);border-radius:8px;padding:14px;margin-bottom:14px;">
+      <div style="font-family:var(--fh);font-size:13px;color:var(--mut);margin-bottom:10px;text-transform:uppercase;letter-spacing:.8px;">Vehicle & Work</div>
+      <div class="frow">
+        <label class="flbl">Bike Name</label>
+        <input class="finp" id="qi-veh" list="jm-vehicle-suggestions" placeholder="Start typing e.g. Shine, Activa, Jupiter" oninput="suggestVehicleName(this.value)">
+        <div id="qi-recent-bikes" class="hint-chips"></div>
+      </div>
+      <div class="f2">
+        <div class="frow"><label class="flbl">Reg. Number</label><input class="finp" id="qi-vno" placeholder="4448" style="text-transform:uppercase;" inputmode="numeric" autocomplete="off"></div>
+      </div>
+      <div class="frow"><label class="flbl">Work / Service *</label>
+        <textarea class="finp" id="qi-prob" placeholder="Puncture, brake work, oil change..." rows="2" style="resize:vertical;"></textarea>
+        <div style="margin-top:8px;"><button class="btn btn-g btn-sm" type="button" onclick="aiCleanQuickInvoiceWork()">AI Clean Work</button></div>
+      </div>
+      <div id="qi-service-chips" class="hint-chips"></div>
+    </div>
+
+    <div style="background:var(--sur2);border-radius:8px;padding:14px;margin-bottom:14px;">
+      <div style="font-family:var(--fh);font-size:13px;color:var(--mut);margin-bottom:10px;text-transform:uppercase;letter-spacing:.8px;">Billing</div>
+      <div class="f2">
+        <div class="frow"><label class="flbl">Mechanic</label>
+          <input type="hidden" id="qi-mech">
+          <div id="qi-mech-chips" class="choice-chips"></div>
+        </div>
+        <div class="frow"><label class="flbl">Payment Method</label>
+          <input type="hidden" id="qi-pay-method" value="cash">
+          <div id="qi-pay-chips" class="choice-chips"></div>
+        </div>
+      </div>
+      <div class="f2">
+        <div class="frow"><label class="flbl">Total Amount ₹ *</label><input class="finp" id="qi-total" type="number" placeholder="0"></div>
+        <div class="frow"><label class="flbl">Paid ₹</label><input class="finp" id="qi-paid" type="number" placeholder="0"></div>
+      </div>
+      <div class="f2">
+        <div class="frow"><label class="flbl">Discount ₹</label><input class="finp" id="qi-discount" type="number" placeholder="0"></div>
+      </div>
+      <div class="f2">
+        <div class="frow"><label class="flbl">Invoice No. <span style="color:var(--mut);font-weight:400;">(leave blank = auto)</span></label>
+          <input class="finp" id="qi-invoice-no" placeholder="4448" inputmode="numeric" autocomplete="off">
+        </div>
+        <div class="frow"><label class="flbl">Invoice Date</label>
+          <input class="finp" id="qi-invoice-date" type="date">
+          <div class="choice-chips" style="margin-top:8px;">
+            <button class="btn btn-g btn-sm" type="button" onclick="setInvoiceDateShortcut('qi-invoice-date','today')">Today</button>
+            <button class="btn btn-g btn-sm" type="button" onclick="setInvoiceDateShortcut('qi-invoice-date','yesterday')">Yesterday</button>
+            <button class="btn btn-g btn-sm" type="button" onclick="setInvoiceDateShortcut('qi-invoice-date','pick')">Select Date</button>
+          </div>
+        </div>
+      </div>
+      <div class="frow"><label class="flbl">Notes</label>
+        <input class="finp" id="qi-notes" placeholder="Any short note...">
+        <div style="margin-top:8px;"><button class="btn btn-g btn-sm" type="button" onclick="aiCleanQuickInvoiceNotes()">AI Clean Note</button></div>
+      </div>
+    </div>
+
+    <div class="frow">
+      <label class="flbl">Invoice / Vehicle Photo</label>
+      <div class="photo-upload-area" onclick="triggerPhotoPicker('qi-photo','quick', event)">
+        <input type="file" id="qi-photo" accept="image/*" capture="environment" multiple style="display:none;" onchange="handlePhotoUpload(this,'qi-photo-preview')">
+        <div id="qi-photo-preview" class="photo-preview-box">
+          <span style="color:var(--mut);font-size:12px;">📷 Tap to take / upload photo</span>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
+        <button class="btn btn-g btn-sm" type="button" onclick="openPhotoCamera('qi-photo','quick', event)">Open Camera</button>
+        <button class="btn btn-g btn-sm" type="button" onclick="openPhotoLibrary('qi-photo','quick', event)">Upload Photos</button>
+        <button class="btn btn-g btn-sm" type="button" onclick="clearPhotoUpload('qi-photo-preview','qi-photo','quick')">Remove All Photos</button>
+      </div>
+    </div>
+
+    <div class="mftr">
+      <button class="btn btn-p" style="flex:1" onclick="saveQuickInvoice('close')">Save Invoice</button>
+      <button class="btn btn-g" type="button" onclick="saveQuickInvoice('job-card')">Save as Job Card</button>
+      <button class="btn btn-g" type="button" onclick="saveQuickInvoice('next')">Save & Next</button>
+      <button class="btn btn-g" onclick="closeM('m-quick-invoice')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════
+     MODAL: JOB DETAIL / VIEW
+═══════════════════════════════════════════════════════ -->
+<div class="ovl" id="m-detail">
+  <div class="modal wide">
+    <div id="detail-body"></div>
+    <div class="mftr">
+      <button class="btn btn-g" id="detail-back-btn" onclick="modalBack('m-detail')" style="display:none;">Back</button>
+      <button class="btn btn-g" onclick="closeM('m-detail')">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════
+     MODAL: COLLECT PAYMENT
+═══════════════════════════════════════════════════════ -->
+<div class="ovl" id="m-payment">
+  <div class="modal">
+    <div class="modal-ttl">Collect Payment</div>
+    <div style="background:var(--sur2);border-radius:8px;padding:12px;margin-bottom:14px;font-family:var(--fh);font-size:14px;" id="pay-job-info"></div>
+
+    <!-- Payment history for this job -->
+    <div id="pay-history" style="margin-bottom:12px;"></div>
+
+    <div class="frow"><label class="flbl">Amount Received ₹</label>
+      <input class="finp" id="pay-amount" type="number" placeholder="0" style="font-size:18px;font-family:var(--fh);font-weight:700;">
+    </div>
+    <div class="f2">
+      <div class="frow"><label class="flbl">Payment Method</label>
+        <input type="hidden" id="pay-method" value="cash">
+        <div id="pay-method-chips" class="choice-chips"></div>
+      </div>
+    <div class="frow"><label class="flbl">Notes</label>
+        <input class="finp" id="pay-notes" placeholder="e.g. advance, part payment">
+      </div>
+    </div>
+    <div class="frow"><label class="flbl">Discount ₹</label>
+      <input class="finp" id="pay-discount" type="number" placeholder="0">
+    </div>
+    <div class="mftr">
+      <button class="btn btn-p" style="flex:1" onclick="savePayment()">Record Payment</button>
+      <button class="btn btn-g" onclick="closeM('m-payment')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════
+     MODAL: MARK DONE / COLLECT VEHICLE
+═══════════════════════════════════════════════════════ -->
+<div class="ovl" id="m-done">
+  <div class="modal">
+    <div class="modal-ttl">Mark Job Complete</div>
+    <div style="background:var(--sur2);border-radius:8px;padding:12px;margin-bottom:14px;" id="done-job-info"></div>
+    <div class="f2">
+      <div class="frow"><label class="flbl">Invoice No. <span style="color:var(--mut);font-weight:400;">(leave blank = auto)</span></label>
+        <input class="finp" id="done-invoice-no" placeholder="4448" inputmode="numeric" autocomplete="off">
+      </div>
+      <div class="frow"><label class="flbl">Invoice Date</label>
+        <input class="finp" id="done-invoice-date" type="date">
+        <div class="choice-chips" style="margin-top:8px;">
+          <button class="btn btn-g btn-sm" type="button" onclick="setInvoiceDateShortcut('done-invoice-date','today')">Today</button>
+          <button class="btn btn-g btn-sm" type="button" onclick="setInvoiceDateShortcut('done-invoice-date','yesterday')">Yesterday</button>
+          <button class="btn btn-g btn-sm" type="button" onclick="setInvoiceDateShortcut('done-invoice-date','pick')">Select Date</button>
+        </div>
+      </div>
+    </div>
+    <div class="f2">
+      <div class="frow"><label class="flbl">Invoice Total ₹</label>
+        <input class="finp" id="done-total" type="number" placeholder="0" oninput="refreshDoneBalanceSummary()">
+      </div>
+    </div>
+    <div class="f2">
+      <div class="frow"><label class="flbl">Final Payment ₹</label>
+        <input class="finp" id="done-payment" type="number" placeholder="0">
+        <div id="done-payment-help" style="margin-top:6px;font-size:11px;color:var(--mut);display:none;"></div>
+      </div>
+    </div>
+    <div class="f2">
+      <div class="frow"><label class="flbl">Discount ₹</label>
+        <input class="finp" id="done-discount" type="number" placeholder="0" oninput="refreshDoneBalanceSummary()">
+      </div>
+    </div>
+    <div id="done-balance-summary" style="background:var(--sur2);border-radius:8px;padding:10px 12px;margin-bottom:12px;font-size:12px;color:var(--mut);"></div>
+    <input type="hidden" id="done-applied-advance" value="0">
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
+      <button class="btn btn-g btn-sm" id="done-apply-advance-btn" type="button" onclick="applyCustomerAdvanceToDone()" style="display:none;">Apply Advance</button>
+    </div>
+    <div class="f2">
+      <div class="frow"><label class="flbl">Payment Method</label>
+        <input type="hidden" id="done-pay-method" value="cash">
+        <div id="done-pay-chips" class="choice-chips"></div>
+      </div>
+    </div>
+    <div class="frow"><label class="flbl">Completion Notes</label>
+      <input class="finp" id="done-notes" placeholder="Work done summary…">
+      <div style="margin-top:8px;"><button class="btn btn-g btn-sm" type="button" onclick="aiCleanInvoiceCompletionNotes()">AI Clean Note</button></div>
+    </div>
+    <div class="frow">
+      <label class="flbl">Final Invoice Photo</label>
+      <div class="photo-upload-area" onclick="triggerPhotoPicker('done-photo','invoice', event)">
+        <input type="file" id="done-photo" accept="image/*" capture="environment" multiple style="display:none;" onchange="handlePhotoUpload(this,'done-photo-preview')">
+        <div id="done-photo-preview" class="photo-preview-box">
+          <span style="color:var(--mut);font-size:12px;">📷 Tap to take / upload final invoice photo</span>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
+        <button class="btn btn-g btn-sm" type="button" onclick="openPhotoCamera('done-photo','invoice', event)">Open Camera</button>
+        <button class="btn btn-g btn-sm" type="button" onclick="openPhotoLibrary('done-photo','invoice', event)">Upload Photos</button>
+        <button class="btn btn-g btn-sm" type="button" onclick="clearPhotoUpload('done-photo-preview','done-photo','invoice')">Remove All Photos</button>
+      </div>
+    </div>
+    <div class="mftr">
+      <button class="btn btn-p" style="flex:1" onclick="confirmDone('close')">Mark Done & Close Job</button>
+      <button class="btn btn-g" id="done-next-btn" type="button" onclick="confirmDone('next')">Save & Next Invoice</button>
+      <button class="btn btn-g" id="done-new-customer-btn" type="button" onclick="confirmDone('new-customer')">Save & New Customer</button>
+      <button class="btn btn-g" onclick="closeM('m-done')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════
+     MODAL: ADD / EDIT PART
+═══════════════════════════════════════════════════════ -->
+<div class="ovl" id="m-part">
+  <div class="modal wide">
+    <div class="modal-ttl" id="part-modal-title">Add New Part</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
+        <button class="btn btn-g btn-sm" type="button" onclick="openStockReceiveScan()">Scan / Receive Existing</button>
+        <button class="btn btn-g btn-sm" type="button" onclick="prefillPartFromScannedSku('')">Manual Entry</button>
+      </div>
+    <input type="hidden" id="edit-part-id">
+    <div class="frow"><label class="flbl">Part Name *</label>
+      <input class="finp" id="p-name" placeholder="e.g. Brake Pad Front">
+    </div>
+    <div class="frow"><label class="flbl">Fits Models</label>
+      <input class="finp" id="p-fit" placeholder="e.g. Activa 3G, Activa 4G, Activa 5G">
+    </div>
+    <div class="f2">
+      <div class="frow"><label class="flbl">Bike / Brand</label>
+        <select class="fsel" id="p-bike" onchange="autoSKU()">
+          <option value="OLA">Ola</option><option value="ATH">Ather</option>
+          <option value="TVS">TVS iQube</option><option value="JUP">TVS Jupiter</option>
+          <option value="APH">TVS Apache</option><option value="NTQ">TVS Ntorq</option>
+          <option value="ACT">Honda Activa</option><option value="SHN">Honda Shine</option>
+          <option value="UNI">Honda Unicorn</option><option value="DIO">Honda Dio</option>
+          <option value="HRN">Honda Hornet</option><option value="SP">Honda SP125</option>
+          <option value="SPL">Hero Splendor</option><option value="PAS">Hero Passion</option>
+          <option value="HFD">Hero HF Deluxe</option><option value="GLM">Hero Glamour</option>
+          <option value="XPL">Hero Xpulse</option><option value="HER">Hero Electric</option>
+          <option value="BLT">RE Bullet</option><option value="CLS">RE Classic</option>
+          <option value="MET">RE Meteor</option><option value="HIM">RE Himalayan</option>
+          <option value="PLS">Bajaj Pulsar</option><option value="AVN">Bajaj Avenger</option>
+          <option value="CHT">Bajaj Chetak</option><option value="CT1">Bajaj CT100</option>
+          <option value="FZ">Yamaha FZ</option><option value="R15">Yamaha R15</option>
+          <option value="FSN">Yamaha Fascino</option><option value="RAY">Yamaha Ray</option>
+          <option value="ACC">Suzuki Access</option><option value="GIX">Suzuki Gixxer</option>
+          <option value="KTM">KTM</option><option value="JAW">Jawa</option>
+          <option value="GEN">Generic / Universal</option>
+        </select>
+      </div>
+      <div class="frow"><label class="flbl">Category</label>
+        <select class="fsel" id="p-cat" onchange="autoSKU()">
+          <option value="ELE">Electrical</option><option value="BRA">Brakes</option>
+          <option value="FLT">Filters/Fluids</option><option value="CBL">Cables/Controls</option>
+          <option value="BDY">Body/Frame</option><option value="ENG">Engine/Drive</option>
+          <option value="LGT">Lights</option><option value="TIR">Tyres/Belts</option>
+          <option value="LCK">Locks</option>
+        </select>
+      </div>
+    </div>
+    <div class="f2">
+      <div class="frow"><label class="flbl">Variant / Sub-type</label>
+        <input class="finp" id="p-sub" placeholder="e.g. FRT, REAR, BS6" oninput="autoSKU()">
+      </div>
+      <div class="frow"><label class="flbl">SKU (auto-generated)</label>
+        <input class="finp" id="p-sku" placeholder="Auto-fills" style="font-family:monospace;">
+      </div>
+    </div>
+    <div class="f2">
+      <div class="frow"><label class="flbl">Current Qty</label><input class="finp" id="p-qty" type="number" placeholder="0"></div>
+      <div class="frow"><label class="flbl">Min Stock</label><input class="finp" id="p-min" type="number" placeholder="2"></div>
+    </div>
+    <div class="f2">
+      <div class="frow"><label class="flbl">Buy Price ₹</label><input class="finp" id="p-cost" type="number" placeholder="0"></div>
+      <div class="frow"><label class="flbl">Sell Price ₹</label><input class="finp" id="p-sell" type="number" placeholder="0"></div>
+    </div>
+    <div class="frow"><label class="flbl">Photo</label>
+      <div class="photo-upload-area" onclick="triggerPhotoPicker('p-photo','stock', event)">
+        <input type="file" id="p-photo" accept="image/*" capture="environment" multiple style="display:none;" onchange="handlePhotoUpload(this,'p-photo-preview')">
+        <div id="p-photo-preview" class="photo-preview-box">
+          <span style="color:var(--mut);font-size:12px;">📷 Tap to attach stock photo</span>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
+        <button class="btn btn-g btn-sm" type="button" onclick="openPhotoCamera('p-photo','stock', event)">Open Camera</button>
+        <button class="btn btn-g btn-sm" type="button" onclick="openPhotoLibrary('p-photo','stock', event)">Upload Photo</button>
+        <button class="btn btn-g btn-sm" type="button" onclick="clearPhotoUpload('p-photo-preview','p-photo','stock')">Remove Photo</button>
+      </div>
+    </div>
+    <div class="f2">
+      <div class="frow"><label class="flbl">Supplier</label><input class="finp" id="p-sup" placeholder="Supplier name"></div>
+      <div class="frow"><label class="flbl">Bin / Location</label><input class="finp" id="p-loc" placeholder="Bin A1"></div>
+    </div>
+    <details id="p-more-details" style="margin-top:6px;background:var(--sur2);border:1px solid var(--bor);border-radius:10px;padding:10px 12px;">
+      <summary style="cursor:pointer;font-family:var(--fh);font-size:13px;">More details (for new parts from invoice)</summary>
+      <div class="f2" style="margin-top:12px;">
+        <div class="frow"><label class="flbl">Manufacturer</label>
+          <input class="finp" id="p-maker" placeholder="e.g. Arav Enterprise">
+        </div>
+        <div class="frow"><label class="flbl">Supplier Part No.</label>
+          <input class="finp" id="p-supplier-part" placeholder="e.g. ASKBS0212">
+        </div>
+      </div>
+      <div class="f2">
+        <div class="frow"><label class="flbl">Previous Buy Price</label><input class="finp" id="p-prev-buy" type="number" placeholder="0" disabled></div>
+        <div class="frow"><label class="flbl">Previous Sell Price</label><input class="finp" id="p-prev-sell" type="number" placeholder="0" disabled></div>
+      </div>
+      <div class="frow"><label class="flbl">Notes</label>
+        <input class="finp" id="p-notes" placeholder="Any extra manufacturer, fitment, or pricing note">
+      </div>
+    </details>
+    <div class="mftr">
+      <button class="btn btn-p" style="flex:1" onclick="savePart()">Save Part</button>
+      <button class="btn btn-g" onclick="closeM('m-part')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════
+     MODAL: CATALOG IMPORT REVIEW
+═══════════════════════════════════════════════════════ -->
+<div class="ovl" id="m-catalog-review">
+  <div class="modal wide">
+    <div class="modal-ttl">Catalog Import Review</div>
+    <div id="catalog-review-body"></div>
+    <div class="mftr" id="catalog-review-footer"></div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════
+     MODAL: ORDER STOCK
+═══════════════════════════════════════════════════════ -->
+<div class="ovl" id="m-order-stock">
+  <div class="modal wide">
+    <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:8px;">
+      <div>
+        <div class="modal-ttl" style="margin:0;">Order Stock</div>
+        <div style="font-size:12px;color:var(--mut);margin-top:4px;">Parts that are low or out of stock, ready to reorder.</div>
+      </div>
+      <div id="st-alert-count" style="font-size:12px;color:var(--mut);"></div>
+    </div>
+    <div class="alerts" id="st-alerts"></div>
+    <div class="mftr">
+      <button class="btn btn-g" type="button" onclick="closeM('m-order-stock')">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════
+     MODAL: CUSTOMER DETAIL
+═══════════════════════════════════════════════════════ -->
+<div class="ovl" id="m-cust-detail">
+  <div class="modal wide">
+    <div id="cust-detail-body"></div>
+    <div class="mftr">
+      <button class="btn btn-g" id="cust-detail-back-btn" onclick="modalBack('m-cust-detail')" style="display:none;">Back</button>
+      <button class="btn btn-g" onclick="closeM('m-cust-detail')">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════
+     MODAL: AI ASSIST
+═══════════════════════════════════════════════════════ -->
+<div class="ovl" id="m-ai-assist">
+  <div class="modal wide">
+    <div class="modal-ttl" id="ai-assist-title">AI Assist</div>
+    <div style="font-size:12px;color:var(--mut);margin-bottom:10px;">Copy this prompt into your AI agent. Review the result before using it in the business.</div>
+    <div class="frow">
+      <label class="flbl">Prompt</label>
+      <textarea class="finp" id="ai-assist-text" rows="12" style="width:100%;resize:vertical;font-family:var(--fh);"></textarea>
+    </div>
+    <div class="frow" id="ai-assist-result-wrap" style="display:none;">
+      <label class="flbl">AI Result</label>
+      <textarea class="finp" id="ai-assist-result" rows="6" style="width:100%;resize:vertical;"></textarea>
+      <div style="font-size:11px;color:var(--mut);margin-top:6px;">Paste the cleaned AI result here, then apply it back into the original field.</div>
+    </div>
+    <div class="mftr">
+      <button class="btn btn-p" type="button" onclick="copyAiAssistPrompt()">Copy Prompt</button>
+      <button class="btn btn-g" id="ai-assist-apply-btn" type="button" style="display:none;" onclick="applyAiAssistResult()">Apply to Field</button>
+      <button class="btn btn-g" type="button" onclick="closeM('m-ai-assist')">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════
+     MODAL: ADD / EDIT CUSTOMER
+═══════════════════════════════════════════════════════ -->
+<div class="ovl" id="m-cust">
+  <div class="modal">
+    <div class="modal-ttl" id="cust-modal-title">New Customer</div>
+    <div class="f2">
+      <div class="frow"><label class="flbl">Name *</label><input class="finp" id="cm-name" placeholder="Ramesh Patel"></div>
+      <div class="frow"><label class="flbl">Phone *</label><input class="finp" id="cm-phone" placeholder="98765XXXXX" type="tel"></div>
+    </div>
+    <div class="f2">
+      <div class="frow"><label class="flbl">Email</label><input class="finp" id="cm-email" type="email" placeholder="optional"></div>
+      <div class="frow"><label class="flbl">Address</label><input class="finp" id="cm-address" placeholder="Area, City"></div>
+    </div>
+    <div class="frow"><label class="flbl">Vehicles (comma separated)</label>
+      <input class="finp" id="cm-vehicles" placeholder="Ola S1 Pro, Honda Activa">
+    </div>
+    <div class="frow"><label class="flbl">Notes</label>
+      <input class="finp" id="cm-notes" placeholder="Any special notes…">
+    </div>
+    <div class="mftr">
+      <button class="btn btn-p" style="flex:1" onclick="saveCust()">Save Customer</button>
+      <button class="btn btn-g" onclick="closeM('m-cust')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════
+     MODAL: ADD / EDIT MECHANIC
+═══════════════════════════════════════════════════════ -->
+<div class="ovl" id="m-mech">
+  <div class="modal">
+    <div class="modal-ttl" id="mech-modal-title">Add Mechanic</div>
+    <div class="f2">
+      <div class="frow"><label class="flbl">Name *</label><input class="finp" id="mm-name" placeholder="Ravi Kumar"></div>
+      <div class="frow"><label class="flbl">Phone *</label><input class="finp" id="mm-phone" placeholder="98765XXXXX" type="tel"></div>
+    </div>
+    <div class="f2">
+      <div class="frow"><label class="flbl">Specialty</label><input class="finp" id="mm-specialty" placeholder="EV / Electrical, Brakes…"></div>
+      <div class="frow"><label class="flbl">Card Color</label>
+        <input type="color" id="mm-color" value="#00c896" style="width:100%;height:40px;border-radius:7px;border:1px solid var(--bor);background:var(--sur2);cursor:pointer;">
+      </div>
+    </div>
+    <div class="frow" style="display:flex;align-items:center;gap:10px;">
+      <label class="flbl" style="margin:0;">Active</label>
+      <input type="checkbox" id="mm-active" checked style="width:18px;height:18px;cursor:pointer;">
+    </div>
+    <div class="mftr">
+      <button class="btn btn-p" style="flex:1" onclick="saveMech()">Save Mechanic</button>
+      <button class="btn btn-g" onclick="closeM('m-mech')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════
+     MODAL: ADD / EDIT EXPENSE
+═══════════════════════════════════════════════════════ -->
+<div class="ovl" id="m-expense">
+  <div class="modal">
+    <div class="modal-ttl" id="exp-modal-title">Add Expense</div>
+    <div class="f2">
+      <div class="frow"><label class="flbl">Date</label><input class="finp" type="date" id="em-date"></div>
+      <div class="frow"><label class="flbl">Category</label>
+        <select class="fsel" id="em-cat">
+          <option>Parts</option><option>Tools</option><option>Rent</option><option>Salary</option>
+          <option>Utilities</option><option>Marketing</option><option>Miscellaneous</option>
+        </select>
+      </div>
+    </div>
+    <div class="frow"><label class="flbl">Description *</label>
+      <input class="finp" id="em-desc" placeholder="e.g. Bulk brake pad order">
+    </div>
+    <div class="f2">
+      <div class="frow"><label class="flbl">Amount ₹ *</label><input class="finp" id="em-amount" type="number" placeholder="0"></div>
+      <div class="frow"><label class="flbl">Paid To</label><input class="finp" id="em-paidto" placeholder="Supplier name"></div>
+    </div>
+    <div class="frow">
+      <label class="flbl">Expense Photo</label>
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        <input type="file" id="em-photo" accept="image/*" capture="environment" multiple style="display:none;" onchange="handlePhotoUpload(this,'em-photo-preview')">
+        <div id="em-photo-preview" class="finp" style="min-height:96px;display:flex;align-items:center;justify-content:center;text-align:center;overflow:hidden;"></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="btn btn-g btn-sm" type="button" onclick="openPhotoCamera('em-photo','expense', event)">Open Camera</button>
+          <button class="btn btn-g btn-sm" type="button" onclick="openPhotoLibrary('em-photo','expense', event)">Upload Photos</button>
+          <button class="btn btn-g btn-sm" type="button" onclick="clearPhotoUpload('em-photo-preview','em-photo','expense')">Remove All Photos</button>
+        </div>
+      </div>
+    </div>
+    <div class="mftr">
+      <button class="btn btn-p" style="flex:1" onclick="saveExp()">Save Expense</button>
+      <button class="btn btn-g" onclick="closeM('m-expense')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<div class="ovl" id="m-income">
+  <div class="modal">
+    <div class="modal-ttl" id="income-modal-title">Add Income</div>
+    <div class="f2">
+      <div class="frow"><label class="flbl">Date</label><input class="finp" type="date" id="im-date"></div>
+      <div class="frow"><label class="flbl">Type</label>
+        <input type="hidden" id="im-type" value="regular_income">
+        <div id="im-type-chips" class="choice-chips"></div>
+      </div>
+    </div>
+    <div class="f2">
+      <div class="frow"><label class="flbl">Amount ₹ *</label><input class="finp" id="im-amount" type="number" placeholder="0"></div>
+      <div class="frow"><label class="flbl">Method</label>
+        <input type="hidden" id="im-method" value="cash">
+        <div id="im-method-chips" class="choice-chips"></div>
+      </div>
+    </div>
+    <div class="frow" id="im-mech-row"><label class="flbl">Mechanic</label>
+      <input type="hidden" id="im-mech" value="">
+      <div id="im-mech-chips" class="choice-chips"></div>
+    </div>
+    <div class="frow"><label class="flbl">Note *</label>
+      <input class="finp" id="im-note" placeholder="e.g. Puncture, brake work, extra shop income">
+    </div>
+    <div id="im-service-chips" class="hint-chips"></div>
+    <div class="frow" id="im-invoice-row"><label class="flbl">Invoice No. <span style="color:var(--mut);font-weight:400;">(optional, for Regular only)</span></label>
+      <input class="finp" id="im-invoice-no" placeholder="4448" inputmode="numeric" autocomplete="off">
+    </div>
+    <div class="mftr">
+      <button class="btn btn-p" style="flex:1" onclick="saveIncome()">Save Income</button>
+      <button class="btn btn-g" onclick="closeM('m-income')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════
+     MODAL: INVOICE PREVIEW
+═══════════════════════════════════════════════════════ -->
+<div class="ovl" id="m-invoice">
+  <div class="modal xl">
+    <div id="invoice-content"></div>
+    <div id="invoice-reference-photo" class="no-print"></div>
+    <div class="mftr">
+      <button class="btn btn-g" id="invoice-back-btn" onclick="modalBack('m-invoice')" style="display:none;">Back</button>
+      <button class="btn btn-p" style="flex:1" onclick="printInvoice()">🖨 Print / Save PDF</button>
+      <span id="invoice-admin-actions"></span>
+      <button class="btn btn-g btn-sm" onclick="shareInvoiceWA()">📱 WhatsApp</button>
+      <button class="btn btn-g" onclick="closeM('m-invoice')">Close</button>
+    </div>
+  </div>
+</div>
+
+<div class="ovl" id="m-image-viewer">
+  <div class="modal xl">
+    <div class="modal-ttl" id="image-viewer-title">Photo Reference</div>
+    <div class="image-viewer-wrap">
+      <img id="image-viewer-img" alt="Reference photo">
+    </div>
+    <div class="mftr">
+      <button class="btn btn-g" onclick="closeM('m-image-viewer')">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════
+     MODAL: SCAN RESULT
+═══════════════════════════════════════════════════════ -->
+<div class="ovl" id="m-scan-result">
+  <div class="modal">
+    <div id="scan-result-body"></div>
+    <div class="mftr">
+      <button class="btn btn-g" style="flex:1" onclick="closeM('m-scan-result');resumeScanner()">Scan Next</button>
+    </div>
+  </div>
+</div>
+
+<div class="ovl" id="m-stock-scan">
+  <div class="modal wide">
+    <div class="modal-ttl">Receive Stock</div>
+    <div style="font-size:12px;color:var(--mut);margin-bottom:10px;">Scan an existing part label to add quantity fast, or scan a new SKU and continue with manual entry.</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
+      <button class="btn btn-p" id="stock-scan-btn" onclick="toggleScanner()">Start Camera</button>
+      <button class="btn btn-g" onclick="renderRecentScans('stock')">Refresh Recent</button>
+    </div>
+    <div id="stock-scan-reader"></div>
+    <div class="scan-status" id="stock-scan-status">
+      <div style="color:var(--mut);font-size:13px;">Camera stopped. Press Start Camera to scan.</div>
+    </div>
+    <div style="background:var(--sur);border:1px solid var(--bor);border-radius:10px;padding:14px;margin-top:12px;">
+      <div style="font-family:var(--fh);font-size:13px;margin-bottom:8px;">Search or type SKU</div>
+      <input class="sbox" id="stock-manual-search" placeholder="Search part / SKU / fitment / supplier part no / typo…" oninput="manualSearch(this.value)" style="width:100%;">
+      <div id="stock-manual-results" style="margin-top:8px;"></div>
+    </div>
+    <div style="margin-top:12px;">
+      <div style="font-family:var(--fh);font-size:13px;margin-bottom:6px;">Recent scans</div>
+      <div id="stock-recent-scans"></div>
+    </div>
+    <div id="stock-scan-found" style="margin-top:12px;"></div>
+    <div class="mftr">
+      <button class="btn btn-g" style="flex:1" onclick="closeStockReceiveModal()">Close</button>
+    </div>
+  </div>
+</div>
+
+<div class="ovl" id="m-job-parts">
+  <div class="modal wide">
+    <div class="modal-ttl">Job Parts</div>
+    <div id="job-parts-info" style="font-size:12px;color:var(--mut);margin-bottom:10px;"></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
+      <button class="btn btn-p" id="job-parts-scan-btn" onclick="toggleScanner()">Start Camera</button>
+      <button class="btn btn-g" onclick="renderRecentScans('job')">Refresh Recent</button>
+    </div>
+    <div id="job-parts-reader"></div>
+    <div class="scan-status" id="job-parts-status">
+      <div style="color:var(--mut);font-size:13px;">Camera stopped. Press Start Camera to scan.</div>
+    </div>
+    <div style="background:var(--sur);border:1px solid var(--bor);border-radius:10px;padding:14px;margin-top:12px;">
+      <div style="font-family:var(--fh);font-size:13px;margin-bottom:8px;">Search stock for this job</div>
+      <input class="sbox" id="job-parts-search" placeholder="Search part / SKU / fitment / supplier part no / typo…" oninput="manualSearch(this.value)" style="width:100%;">
+      <div id="job-parts-results" style="margin-top:8px;"></div>
+    </div>
+    <div style="margin-top:12px;">
+      <div style="font-family:var(--fh);font-size:13px;margin-bottom:6px;">Recent scans</div>
+      <div id="job-recent-scans"></div>
+    </div>
+    <div id="job-parts-found" style="margin-top:12px;"></div>
+    <div id="job-parts-current" style="margin-top:12px;"></div>
+    <div class="mftr">
+      <button class="btn btn-g" style="flex:1" onclick="closeJobPartsDrawer()">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════
+     MODAL: CLOUD SYNC
+═══════════════════════════════════════════════════════ -->
+<div class="ovl" id="m-gs">
+  <div class="modal">
+    <div class="modal-ttl">Cloud Sync Setup</div>
+    <div class="gs-form">
+      <div class="frow" id="cloud-url-row"><label class="flbl">Supabase Project URL</label>
+        <input class="finp" id="gs-url" placeholder="https://YOUR-PROJECT.supabase.co">
+      </div>
+      <div class="frow" id="cloud-key-row"><label class="flbl">Supabase Anon Key</label>
+        <textarea class="finp" id="cloud-key" rows="3" placeholder="Supabase anon key"></textarea>
+      </div>
+      <div class="frow"><label class="flbl">Staff Email</label>
+        <input class="finp" id="cloud-email" type="email" placeholder="owner@jalasai.in">
+      </div>
+      <div class="frow"><label class="flbl">Password</label>
+        <input class="finp" id="cloud-password" type="password" placeholder="Enter only when you want to sign in">
+      </div>
+      <div id="cloud-prefill-note" style="font-size:11px;color:var(--mut);margin-top:6px;">If project URL and anon key are already built into the app, staff only need email and password. Otherwise enter them once here.</div>
+    </div>
+    <div style="background:var(--sur2);border-radius:8px;padding:14px;margin-bottom:12px;">
+      <div style="font-family:var(--fh);font-size:13px;margin-bottom:8px;">Setup Instructions</div>
+      <div style="font-size:11px;color:var(--mut);line-height:1.8;">
+        1. Create a Supabase project<br>
+        2. Open SQL Editor and run the copied schema once<br>
+        3. Create your owner/staff user in Authentication<br>
+        4. If project URL and anon key are already prefilled, only enter email + password<br>
+        5. Press connect once on each device
+      </div>
+      <button class="btn btn-g" style="margin-top:8px;font-size:11px;" onclick="copyCloudSQL()">Copy Supabase SQL</button>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
+      <button class="btn btn-g btn-sm" onclick="downloadBackup()">Download Backup</button>
+      <button class="btn btn-g btn-sm" onclick="document.getElementById('restore-backup').click()">Restore Backup</button>
+      <button class="btn btn-g btn-sm" onclick="document.getElementById('legacy-import').click()">Import Original Data</button>
+      <input id="restore-backup" type="file" accept="application/json" style="display:none;" onchange="restoreBackup(this)">
+      <input id="legacy-import" type="file" accept="application/json" style="display:none;" onchange="importLegacyBundle(this)">
+    </div>
+    <div class="mftr">
+      <button class="btn btn-p" style="flex:1" onclick="saveGS()">Connect & Sync</button>
+      <button class="btn btn-r" onclick="disconnectGS()">Disconnect</button>
+      <button class="btn btn-g" onclick="closeM('m-gs')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════ TOAST ═══════════════════════════════════════ -->
+<div class="toast" id="toast"></div>
+
+<!-- ═══════════════════════════════════════════════════════
+     EXTRA CSS for new features
+═══════════════════════════════════════════════════════ -->
+<style>
+/* Photo upload */
+.photo-upload-area { cursor: pointer; }
+.photo-preview-box {
+  border: 2px dashed var(--bor); border-radius: 8px; padding: 16px;
+  text-align: center; min-height: 80px; display: flex; align-items: center;
+  justify-content: center; background: var(--sur); transition: border-color .2s;
+}
+.photo-preview-box:hover { border-color: var(--acc); }
+.photo-preview-box img { max-width: 100%; max-height: 200px; border-radius: 6px; }
+.photo-preview-box img,
+.clickable-photo { cursor: zoom-in; }
+
+/* Due badge */
+.due-badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  background: rgba(255,71,87,.12); color: var(--dan);
+  border: 1px solid rgba(255,71,87,.3); border-radius: 20px;
+  padding: 3px 10px; font-size: 11px; font-family: var(--fh); font-weight: 600;
+}
+
+/* Expense split responsive */
+@media(max-width:700px){ .exp-split { grid-template-columns: 1fr !important; } }
+
+/* Done job cards dimmed */
+#done-grid .jcard { opacity: .7; }
+#done-grid .jcard::before { background: var(--acc) !important; }
+
+/* Vehicle photo in invoice */
+.inv-photo { width: 100%; max-height: 200px; object-fit: cover; border-radius: 8px; margin: 10px 0; }
+
+/* Pending due reminder in status bar */
+#pending-dues { color: var(--warn); font-size: 12px; font-family: var(--fh); font-weight: 600; }
+
+.image-viewer-wrap {
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  min-height:320px;
+  max-height:72vh;
+  overflow:auto;
+  background:var(--sur2);
+  border:1px solid var(--bor);
+  border-radius:12px;
+  padding:12px;
+}
+
+#image-viewer-img {
+  max-width:100%;
+  max-height:calc(72vh - 24px);
+  object-fit:contain;
+  border-radius:10px;
+}
+
+#invoice-reference-photo {
+  margin-top:12px;
+}
+
+.choice-chips {
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+  margin-top:8px;
+}
+
+.choice-chips .btn {
+  min-width:72px;
+  white-space:normal;
+  text-align:center;
+  line-height:1.25;
+  overflow-wrap:anywhere;
+}
+
+.hint-chips {
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+  margin-top:8px;
+}
+
+.photo-grid {
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(88px,1fr));
+  gap:10px;
+  width:100%;
+}
+
+.photo-card {
+  position:relative;
+  border:1px solid var(--bor);
+  border-radius:10px;
+  overflow:hidden;
+  background:var(--sur2);
+}
+
+.photo-card img {
+  display:block;
+  width:100%;
+  height:96px;
+  object-fit:cover;
+}
+
+.photo-remove-btn {
+  position:absolute;
+  top:6px;
+  right:6px;
+  width:24px;
+  height:24px;
+  border:none;
+  border-radius:999px;
+  background:rgba(0,0,0,.68);
+  color:#fff;
+  cursor:pointer;
+  font-size:14px;
+  line-height:24px;
+  text-align:center;
+}
+
+.photo-count-chip {
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  min-width:22px;
+  height:22px;
+  padding:0 6px;
+  border-radius:999px;
+  background:rgba(0,0,0,.68);
+  color:#fff;
+  font-size:11px;
+  font-family:var(--fh);
+}
+</style>
+
+<!-- ═══════ SCRIPTS ══════════════════════════════════════ -->
+<script src="js/qrgen.js"></script>
+<script src="config.js"></script>
+<script src="js/cloud-config.js"></script>
+<script src="js/vendor/lz-string.min.js"></script>
+<script src="js/data.js"></script>
+<script src="js/utils.js"></script>
+<script src="js/jobs.js"></script>
+<script src="js/stock.js"></script>
+<script src="js/customers.js"></script>
+<script src="js/reminders.js"></script>
+<script src="js/mechanics.js"></script>
+<script src="js/expenses.js"></script>
+<script src="js/reports.js"></script>
+<script src="js/scanner.js"></script>
+<script src="js/print.js"></script>
+<script src="js/vendor/supabase.js"></script>
+<script src="js/sync.js"></script>
+<script>
+// ═══════════════════════════════════════════════════════
+//  Bootstrap — runs after all JS files are loaded
+//  NOTE: No function overrides here to avoid hoisting bugs.
+//        Extra logic lives in the module files.
+// ═══════════════════════════════════════════════════════
+
+startInitialDataLoadOverlay(
+  typeof hasLocalBusinessDataSnapshot === 'function' && hasLocalBusinessDataSnapshot()
+    ? 'Opening saved data...'
+    : 'Loading data from cloud...',
+  { delayMs: 0 }
+);
+setTimeout(() => {
+  if (window.__appInitialised) return;
+  window.__appInitialised = true;
+  loadAll();
+  applyDataEntryDateLimits();
+  initVehicleBrands();
+  bindStickyJobDrafts();
+  bindStickyInvoiceDrafts();
+  bindSearchAutoSelect();
+  bindEditableAutoSelect();
+  if (!document.getElementById('page-' + currentPage)) currentPage = 'jobs';
+  renderCurrentPage();
+  initGSSync();
+}, 40);
+if ('serviceWorker' in navigator) {
+  const registerServiceWorker = () => navigator.serviceWorker.register('sw.js?v=BUILD_TIMESTAMP', { updateViaCache: 'none' }).catch(() => {});
+  if ('requestIdleCallback' in window) requestIdleCallback(registerServiceWorker, { timeout: 2500 });
+  else setTimeout(registerServiceWorker, 1200);
+}
+
+// ── Mark Done modal ──────────────────────────────────────
+// (jobs.js does not define markDone — this is the only definition)
+function markDone(id) {
+  prepareDoneModal(id, 'create');
+  openM('m-done');
+}
+
+function escapeAttr(value) {
+  return String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+function escapeJsAttr(value) {
+  return String(value || '')
+    .replace(/\\/g, '\\\\')
+    .replace(/'/g, "\\'")
+    .replace(/\r/g, '\\r')
+    .replace(/\n/g, '\\n')
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '\\x3C');
+}
+
+function photoPreviewMarkup(url, title = 'Photo reference') {
+  const safeUrl = escapeAttr(url);
+  const safeTitle = escapeAttr(title);
+  return `<img src="${safeUrl}" class="clickable-photo" style="max-width:100%;max-height:200px;border-radius:6px;" onclick="event.stopPropagation();openImageViewer('${safeUrl}','${safeTitle}')">`;
+}
+
+function normalizePhotoArray(value) {
+  if (Array.isArray(value)) return value.map(item => String(item || '').trim()).filter(Boolean);
+  if (typeof value === 'string') {
+    const text = value.trim();
+    if (!text) return [];
+    if (text.startsWith('[')) {
+      try {
+        const parsed = JSON.parse(text);
+        if (Array.isArray(parsed)) return parsed.map(item => String(item || '').trim()).filter(Boolean);
+      } catch (_) {}
+    }
+    return [text];
+  }
+  return [];
+}
+
+function photoMetaForPreview(previewId) {
+  return {
+    'jm-photo-preview': { title: 'Vehicle Photo Reference', persistKind: 'job' },
+    'qi-photo-preview': { title: 'Quick Invoice Photo Reference', persistKind: 'quick' },
+    'done-photo-preview': { title: 'Invoice Photo Reference', persistKind: 'invoice' },
+    'em-photo-preview': { title: 'Expense Photo Reference', persistKind: 'expense' },
+    'p-photo-preview': { title: 'Stock Photo Reference', persistKind: 'stock' },
+  }[previewId] || { title: 'Photo Reference', persistKind: '' };
+}
+
+function getPhotoPreviewList(previewId) {
+  const prev = document.getElementById(previewId);
+  if (!prev) return [];
+  return normalizePhotoArray(prev.dataset.photoList || prev.dataset.dataUrl || '');
+}
+
+function photoGalleryMarkup(previewId, urls = [], title = 'Photo Reference', persistKind = '') {
+  const list = normalizePhotoArray(urls);
+  if (!list.length) return photoPlaceholderMarkup(previewId);
+  return `<div class="photo-grid">${list.map((url, index) => {
+    const safeUrl = escapeAttr(url);
+    const safeTitle = escapeAttr(`${title} ${index + 1}`);
+    const removeBtn = persistKind ? `<button type="button" class="photo-remove-btn" onclick="event.stopPropagation();removePhotoFromPreview('${previewId}',${index},'${persistKind}')">×</button>` : '';
+    return `<div class="photo-card">${removeBtn}<img src="${safeUrl}" class="clickable-photo" onclick="event.stopPropagation();openImageViewer('${safeUrl}','${safeTitle}')"></div>`;
+  }).join('')}</div>`;
+}
+
+function getPhotoPreviewList(previewId) {
+  const prev = document.getElementById(previewId);
+  if (!prev) return [];
+  return normalizePhotoArray(prev.dataset.photoList || prev.dataset.dataUrl || '');
+}
+
+function photoGalleryMarkup(previewId, urls = [], title = 'Photo Reference', persistKind = '') {
+  const list = normalizePhotoArray(urls);
+  if (!list.length) return photoPlaceholderMarkup(previewId);
+  return `<div class="photo-grid">${list.map((url, index) => {
+    const safeUrl = escapeAttr(url);
+    const safeTitle = escapeAttr(`${title} ${index + 1}`);
+    const removeBtn = persistKind ? `<button type="button" class="photo-remove-btn" onclick="event.stopPropagation();removePhotoFromPreview('${previewId}',${index},'${persistKind}')">×</button>` : '';
+    return `<div class="photo-card">${removeBtn}<img src="${safeUrl}" class="clickable-photo" onclick="event.stopPropagation();openImageViewer('${safeUrl}','${safeTitle}')"></div>`;
+  }).join('')}</div>`;
+}
+
+function photoPlaceholderMarkup(previewId) {
+  const label = {
+    'jm-photo-preview': '📷 Tap to take / upload photo',
+    'qi-photo-preview': '📷 Tap to take / upload photo',
+    'done-photo-preview': '📷 Tap to take / upload final invoice photo',
+    'em-photo-preview': '📷 Tap to take / upload expense photo',
+    'p-photo-preview': '📷 Tap to take / upload stock photo',
+  }[previewId] || '📷 Tap to take / upload photo';
+  return `<span style="color:var(--mut);font-size:12px;">${label}</span>`;
+}
+
+function setPhotoPreview(previewId, url = '', title = 'Photo Reference') {
+  setPhotoPreviewList(previewId, url ? [url] : [], title);
+}
+
+function setPhotoPreviewList(previewId, urls = [], title = '') {
+  const prev = document.getElementById(previewId);
+  if (!prev) return;
+  const list = normalizePhotoArray(urls);
+  const meta = photoMetaForPreview(previewId);
+  const finalTitle = title || meta.title;
+  prev.dataset.photoList = JSON.stringify(list);
+  prev.dataset.dataUrl = list[0] || '';
+  prev.dataset.photoReady = 'true';
+  prev.dataset.removed = list.length ? 'false' : 'true';
+  prev.innerHTML = photoGalleryMarkup(previewId, list, finalTitle, meta.persistKind);
+}
+
+function triggerPhotoPicker(inputId, persistKind = '', event = null, mode = 'camera') {
+  if (event) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
+  if (persistKind === 'invoice' && typeof persistInvoiceDraft === 'function') persistInvoiceDraft();
+  if (persistKind === 'job' && typeof persistJobDraft === 'function') persistJobDraft();
+  if (persistKind === 'quick' && typeof persistQuickInvoiceDraft === 'function') persistQuickInvoiceDraft();
+  const input = setPhotoInputCapture(inputId, mode);
+  if (!input) {
+    toast('Photo input not found');
+    return;
+  }
+  try {
+    if (typeof input.showPicker === 'function') {
+      input.showPicker();
+      return;
+    }
+  } catch (_) {}
+
+  const prevDisplay = input.style.display;
+  const prevPosition = input.style.position;
+  const prevOpacity = input.style.opacity;
+  const prevPointerEvents = input.style.pointerEvents;
+  const prevWidth = input.style.width;
+  const prevHeight = input.style.height;
+  const prevZIndex = input.style.zIndex;
+
+  input.style.display = 'block';
+  input.style.position = 'fixed';
+  input.style.opacity = '0';
+  input.style.pointerEvents = 'none';
+  input.style.width = '1px';
+  input.style.height = '1px';
+  input.style.zIndex = '-1';
+  input.click();
+  setTimeout(() => {
+    input.style.display = prevDisplay;
+    input.style.position = prevPosition;
+    input.style.opacity = prevOpacity;
+    input.style.pointerEvents = prevPointerEvents;
+    input.style.width = prevWidth;
+    input.style.height = prevHeight;
+    input.style.zIndex = prevZIndex;
+  }, 0);
+}
+
+function setPhotoInputCapture(inputId, mode = 'library') {
+  const input = document.getElementById(inputId);
+  if (!input) return null;
+  if (mode === 'camera') input.setAttribute('capture', 'environment');
+  else input.removeAttribute('capture');
+  return input;
+}
+
+function openPhotoCamera(inputId, persistKind = '', event = null) {
+  const input = setPhotoInputCapture(inputId, 'camera');
+  if (!input) {
+    toast('Photo input not found');
+    return;
+  }
+  triggerPhotoPicker(inputId, persistKind, event, 'camera');
+}
+
+function openPhotoLibrary(inputId, persistKind = '', event = null) {
+  const input = setPhotoInputCapture(inputId, 'library');
+  if (!input) {
+    toast('Photo input not found');
+    return;
+  }
+  triggerPhotoPicker(inputId, persistKind, event, 'library');
+}
+
+function removePhotoFromPreview(previewId, index, persistKind = '') {
+  const list = getPhotoPreviewList(previewId);
+  if (index < 0 || index >= list.length) return;
+  list.splice(index, 1);
+  const meta = photoMetaForPreview(previewId);
+  setPhotoPreviewList(previewId, list, meta.title);
+  if (persistKind === 'invoice' && typeof persistInvoiceDraft === 'function') persistInvoiceDraft();
+  if (persistKind === 'job' && typeof persistJobDraft === 'function') persistJobDraft();
+  if (persistKind === 'quick' && typeof persistQuickInvoiceDraft === 'function') persistQuickInvoiceDraft();
+}
+
+function clearPhotoUpload(previewId, inputId, persistKind = '') {
+  const prev = document.getElementById(previewId);
+  const input = document.getElementById(inputId);
+  if (input) input.value = '';
+  if (prev) {
+    prev.dataset.photoList = '[]';
+    prev.dataset.dataUrl = '';
+    prev.dataset.photoReady = 'true';
+    prev.dataset.removed = 'true';
+    prev.innerHTML = photoPlaceholderMarkup(previewId);
+  }
+  window._photoUploadBusy = false;
+  if (persistKind === 'invoice' && typeof persistInvoiceDraft === 'function') persistInvoiceDraft();
+  if (persistKind === 'job' && typeof persistJobDraft === 'function') persistJobDraft();
+  if (persistKind === 'quick' && typeof persistQuickInvoiceDraft === 'function') persistQuickInvoiceDraft();
+}
+
+function persistPhotoDraftForPreview(previewId) {
+  const meta = photoMetaForPreview(previewId);
+  if (meta.persistKind === 'invoice' && typeof persistInvoiceDraft === 'function') persistInvoiceDraft();
+  if (meta.persistKind === 'job' && typeof persistJobDraft === 'function') persistJobDraft();
+  if (meta.persistKind === 'quick' && typeof persistQuickInvoiceDraft === 'function') persistQuickInvoiceDraft();
+}
+
+function selectInputText(input) {
+  if (!input || typeof input.select !== 'function') return;
+  requestAnimationFrame(() => {
+    try {
+      input.select();
+    } catch (_) {}
+  });
+}
+
+function bindSearchAutoSelect() {
+  document.querySelectorAll('input.sbox').forEach(input => {
+    if (input.dataset.autoselectBound === 'true') return;
+    input.dataset.autoselectBound = 'true';
+    input.addEventListener('focus', () => selectInputText(input));
+  });
+}
+
+function bindEditableAutoSelect() {
+  document.querySelectorAll('input.finp, textarea.finp').forEach(input => {
+    const type = String(input.type || '').toLowerCase();
+    if (['date', 'file', 'hidden', 'checkbox', 'radio'].includes(type)) return;
+    if (input.dataset.autoselectBound === 'true') return;
+    input.dataset.autoselectBound = 'true';
+    input.addEventListener('focus', () => selectInputText(input));
+  });
+}
+
+function openAiAssistModal(title, prompt, options = {}) {
+  const ttl = document.getElementById('ai-assist-title');
+  const box = document.getElementById('ai-assist-text');
+  const resultWrap = document.getElementById('ai-assist-result-wrap');
+  const resultBox = document.getElementById('ai-assist-result');
+  const applyBtn = document.getElementById('ai-assist-apply-btn');
+  window._aiAssistState = {
+    applyTargetId: options.applyTargetId || '',
+    applyLabel: options.applyLabel || 'Apply to Field',
+  };
+  if (ttl) ttl.textContent = title || 'AI Assist';
+  if (box) {
+    box.value = prompt || '';
+    requestAnimationFrame(() => {
+      box.focus();
+      box.select();
+    });
+  }
+  if (resultBox) resultBox.value = '';
+  if (resultWrap) resultWrap.style.display = options.applyTargetId ? '' : 'none';
+  if (applyBtn) {
+    applyBtn.style.display = options.applyTargetId ? '' : 'none';
+    applyBtn.textContent = options.applyLabel || 'Apply to Field';
+  }
+  openM('m-ai-assist');
+}
+
+async function copyAiAssistPrompt() {
+  const box = document.getElementById('ai-assist-text');
+  const text = box?.value || '';
+  if (!text) { toast('No AI prompt to copy'); return; }
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+    } else {
+      box.focus();
+      box.select();
+      document.execCommand('copy');
+    }
+    toast('AI prompt copied');
+  } catch (_) {
+    box.focus();
+    box.select();
+    toast('Copy failed. Prompt selected for manual copy.');
+  }
+}
+
+function applyAiAssistResult() {
+  const state = window._aiAssistState || {};
+  const targetId = state.applyTargetId || '';
+  const result = document.getElementById('ai-assist-result')?.value?.trim() || '';
+  if (!targetId) { toast('No target field selected'); return; }
+  if (!result) { toast('Paste AI result first'); return; }
+  const target = document.getElementById(targetId);
+  if (!target) { toast('Target field not found'); return; }
+  target.value = result;
+  target.dispatchEvent(new Event('input', { bubbles: true }));
+  target.dispatchEvent(new Event('change', { bubbles: true }));
+  closeM('m-ai-assist');
+  toast('AI result applied');
+}
+
+function openImageViewer(src, title = 'Photo Reference') {
+  const img = document.getElementById('image-viewer-img');
+  const ttl = document.getElementById('image-viewer-title');
+  if (!img || !src) return;
+  img.src = src;
+  if (ttl) ttl.textContent = title || 'Photo Reference';
+  openM('m-image-viewer');
+}
+
+function prepareDoneModal(id, mode = 'create') {
+  const j = jobs.find(x => x.id === id);
+  if (!j) return;
+  const doneModal = document.querySelector('#m-done');
+  const doneTitle = document.querySelector('#m-done .modal-ttl');
+  const due   = jobDue(j);
+  if (doneTitle) doneTitle.textContent = mode === 'edit' ? 'Edit Invoice' : 'Mark Job Complete';
+  document.getElementById('done-job-info').innerHTML =
+    `<b>${j.id}</b> — ${j.cust}<br>` +
+    `<span style="color:var(--mut);font-size:12px;">${j.veh} · ${j.vno||''}</span>` +
+    (mode === 'edit'
+      ? `<br><span style="color:var(--acc2)">Editing invoice ${j.invoiceNo || j.id}</span>`
+      : due > 0 ? `<br><span style="color:var(--dan)">Owe: ${fmtMoney(due)}</span>` : jobAdvance(j) > 0 ? `<br><span style="color:#00c896">Advance: ${fmtMoney(jobAdvance(j))}</span>` : `<br><span style="color:var(--mut)">Clear</span>`);
+  document.getElementById('done-invoice-date').value = (j.doneAt || '').slice(0, 10) || j.date || today();
+  const editDisplayTotal = Math.max(0, jobTotal(j) + jobDiscountAmount(j));
+  document.getElementById('done-total').value        = editDisplayTotal || '';
+  document.getElementById('done-payment').value      = mode === 'edit' ? (jobPaid(j) || '') : (due > 0 ? due : '');
+  document.getElementById('done-discount').value     = jobDiscountAmount(j) || '';
+  document.getElementById('done-notes').value        = j.notes || '';
+  document.getElementById('done-invoice-no').value   = j.invoiceNo || (mode === 'edit' ? '' : suggestedNextInvoiceNo());
+  document.getElementById('done-pay-method').value   = j.payMethod || getStoredPaymentMethod();
+  if (typeof renderDonePaymentChips === 'function') renderDonePaymentChips(j.payMethod || getStoredPaymentMethod());
+  const paymentInput = document.getElementById('done-payment');
+  const paymentHelp = document.getElementById('done-payment-help');
+  const paymentChips = document.getElementById('done-pay-chips');
+  const hasPaymentHistory = mode === 'edit' && Array.isArray(j.payments) && j.payments.length > 0;
+  if (paymentInput) paymentInput.disabled = false;
+  if (paymentHelp) {
+    paymentHelp.style.display = hasPaymentHistory ? '' : 'none';
+    paymentHelp.textContent = hasPaymentHistory ? 'This invoice has payment history. Editing this total will add an adjustment entry to keep the history accurate.' : '';
+  }
+  if (paymentChips) {
+    paymentChips.style.pointerEvents = hasPaymentHistory ? 'none' : '';
+    paymentChips.style.opacity = hasPaymentHistory ? '0.6' : '';
+  }
+  document.getElementById('done-applied-advance').value = '0';
+  const doneBtn = document.querySelector('#m-done .btn.btn-p');
+  if (doneBtn) doneBtn.textContent = mode === 'edit' ? 'Save Invoice Changes' : 'Mark Done & Close Job';
+  const nextBtn = document.getElementById('done-next-btn');
+  const newCustomerBtn = document.getElementById('done-new-customer-btn');
+  if (nextBtn) nextBtn.style.display = mode === 'edit' ? 'none' : '';
+  if (newCustomerBtn) newCustomerBtn.style.display = mode === 'edit' ? 'none' : '';
+  const donePrev = document.getElementById('done-photo-preview');
+  if (donePrev) {
+    setPhotoPreviewList('done-photo-preview', j.invoicePhotos || j.invoicePhoto || [], 'Invoice Photo Reference');
+  }
+  if (doneModal) {
+    doneModal._jobId = id;
+    doneModal.dataset.mode = mode;
+  }
+  restoreInvoiceDraft(id, mode);
+  refreshDoneBalanceSummary();
+}
+
+function refreshDoneBalanceSummary() {
+  const id = document.querySelector('#m-done')?._jobId;
+  const j = jobs.find(x => x.id === id);
+  const box = document.getElementById('done-balance-summary');
+  const btn = document.getElementById('done-apply-advance-btn');
+  const appliedInput = document.getElementById('done-applied-advance');
+  const mode = document.querySelector('#m-done')?.dataset?.mode || 'create';
+  if (!box || !j) return;
+  if (mode === 'edit') {
+    const editedTotal = parseFloat(document.getElementById('done-total')?.value) || 0;
+    const discount = parseFloat(document.getElementById('done-discount')?.value) || 0;
+    const netTotal = Math.max(0, editedTotal - discount);
+    const totalPaid = parseFloat(document.getElementById('done-payment')?.value) || 0;
+    const remaining = Math.max(0, netTotal - totalPaid);
+    box.innerHTML = `
+      <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;">
+        <span>Invoice Total: <b style="color:var(--acc);">${fmtMoney(editedTotal)}</b></span>
+        <span>Net After Discount: <b style="color:${netTotal > 0 ? 'var(--acc2)' : 'var(--mut)'}">${fmtMoney(netTotal)}</b></span>
+        <span>Total Paid: <b style="color:${totalPaid > 0 ? '#00c896' : 'var(--mut)'}">${fmtMoney(totalPaid)}</b></span>
+        <span>${remaining > 0 ? `Remaining Owe: <b style="color:var(--dan)">${fmtMoney(remaining)}</b>` : '<b style="color:#00c896;">Clear</b>'}</span>
+      </div>`;
+    if (btn) btn.style.display = 'none';
+    return;
+  }
+  const enteredTotal = parseFloat(document.getElementById('done-total')?.value);
+  const invoiceTotal = Number.isFinite(enteredTotal) ? enteredTotal : jobSubtotal(j);
+  const currentDue = Math.max(0, (invoiceTotal - (parseFloat(document.getElementById('done-discount')?.value) || 0)) - jobPaid(j));
+  const availableAdvance = j.custId ? customerAdvanceAmount(j.custId, { excludeJobId: j.id }) : 0;
+  let appliedAdvance = parseFloat(appliedInput?.value || '0') || 0;
+  const maxAdvanceUse = Math.min(currentDue, availableAdvance);
+  if (appliedAdvance > maxAdvanceUse) {
+    appliedAdvance = maxAdvanceUse;
+    if (appliedInput) appliedInput.value = String(appliedAdvance);
+  }
+  const remainingAfterAdvance = Math.max(0, currentDue - appliedAdvance);
+  const customerMeta = j.custId ? balanceStateMeta(customerBalance(j.custId)) : balanceStateMeta('clear');
+  box.innerHTML = `
+    <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;">
+      <span>Customer Account: <b style="color:${customerMeta.color};">${customerMeta.label}</b></span>
+      <span>Available Advance: <b style="color:${availableAdvance > 0 ? '#00c896' : 'var(--mut)'}">${fmtMoney(availableAdvance)}</b></span>
+      <span>Applied Here: <b style="color:${appliedAdvance > 0 ? '#00c896' : 'var(--mut)'}">${fmtMoney(appliedAdvance)}</b></span>
+      <span>${remainingAfterAdvance > 0 ? `Remaining Owe: <b style="color:var(--dan)">${fmtMoney(remainingAfterAdvance)}</b>` : '<b style="color:#00c896;">Clear after advance</b>'}</span>
+    </div>`;
+  if (btn) btn.style.display = availableAdvance > 0 && currentDue > 0 ? '' : 'none';
+}
+
+function applyCustomerAdvanceToDone() {
+  const id = document.querySelector('#m-done')?._jobId;
+  const j = jobs.find(x => x.id === id);
+  if (!j || !j.custId) return;
+  const enteredTotal = parseFloat(document.getElementById('done-total')?.value);
+  const invoiceTotal = Number.isFinite(enteredTotal) ? enteredTotal : jobSubtotal(j);
+  const currentDue = Math.max(0, (invoiceTotal - (parseFloat(document.getElementById('done-discount')?.value) || 0)) - jobPaid(j));
+  const availableAdvance = customerAdvanceAmount(j.custId, { excludeJobId: j.id });
+  const useAdvance = Math.min(currentDue, availableAdvance);
+  if (useAdvance <= 0) { toast('No customer advance available'); return; }
+  document.getElementById('done-applied-advance').value = String(useAdvance);
+  const payInput = document.getElementById('done-payment');
+  if (payInput) {
+    const currentPayment = parseFloat(payInput.value || '0') || 0;
+    if (currentPayment >= currentDue - 0.009 || currentPayment === 0) {
+      payInput.value = Math.max(0, currentDue - useAdvance);
+    }
+  }
+  refreshDoneBalanceSummary();
+  persistInvoiceDraft();
+  toast(`Applied ${fmtMoney(useAdvance)} from customer advance`);
+}
+
+function confirmDone(nextAction = 'close') {
+  const doneModal = document.querySelector('#m-done');
+  const mode = doneModal?.dataset?.mode || 'create';
+  if (!requireCloudWriteAccess(mode === 'edit' ? 'edit invoices' : 'complete jobs and create invoices')) return;
+  const id     = doneModal?._jobId;
+  const j      = jobs.find(x => x.id === id);
+  if (!j) return;
+  const isEditMode = mode === 'edit';
+  j.payments = Array.isArray(j.payments) ? j.payments : [];
+  j.discount = parseFloat(document.getElementById('done-discount').value) || 0;
+  const invoiceTotalInput = document.getElementById('done-total');
+  const invoiceTotalRaw = String(invoiceTotalInput?.value ?? '').trim();
+  const invoiceGrossTotal = invoiceTotalRaw === ''
+    ? Math.max(0, isEditMode ? jobTotal(j) + jobDiscountAmount(j) : jobSubtotal(j))
+    : (parseFloat(invoiceTotalRaw) || 0);
+  const netInvoiceTotal = Math.max(0, invoiceGrossTotal - j.discount);
+  const pay    = parseFloat(document.getElementById('done-payment').value) || 0;
+  const method = document.getElementById('done-pay-method').value;
+  const notes  = document.getElementById('done-notes').value.trim();
+  const invoiceDate = document.getElementById('done-invoice-date').value || j.date || today();
+  const typedInvoiceNo = document.getElementById('done-invoice-no').value.trim();
+  if (!requireNotFutureBusinessDate(invoiceDate, 'Invoice date')) return;
+  const duplicateInvoice = typedInvoiceNo ? findDuplicateInvoiceNumber(typedInvoiceNo, j.id) : null;
+  if (duplicateInvoice) {
+    toast(`Invoice number already exists: ${duplicateInvoice.invoiceNo || duplicateInvoice.id}`);
+    return;
+  }
+  if (invoiceGrossTotal < 0) { toast('Enter valid invoice total'); return; }
+  if (pay < 0) { toast('Enter valid payment'); return; }
+  const invNo  = isEditMode
+    ? (typedInvoiceNo || j.invoiceNo || nextInvoiceNo(''))
+    : nextInvoiceNo(typedInvoiceNo);
+  const currentDueBeforeApply = Math.max(0, (isEditMode ? jobTotal(j) : netInvoiceTotal) - jobPaid(j));
+  const appliedAdvance = Math.min(
+    parseFloat(document.getElementById('done-applied-advance')?.value || '0') || 0,
+    currentDueBeforeApply,
+    j.custId ? customerAdvanceAmount(j.custId, { excludeJobId: j.id }) : 0
+  );
+  const donePhotoPreview = document.getElementById('done-photo-preview');
+  const invoicePhotos = donePhotoPreview?.dataset?.removed === 'true'
+    ? []
+    : (typeof getPhotoPreviewList === 'function' ? getPhotoPreviewList('done-photo-preview') : normalizePhotoArray(donePhotoPreview?.dataset?.dataUrl || j.invoicePhoto || ''));
+  const invoicePhoto = invoicePhotos[0] || '';
+  if (isEditMode) {
+    const hasPaymentHistory = Array.isArray(j.payments) && j.payments.length > 0;
+    j.totalOverride = netInvoiceTotal;
+    if (hasPaymentHistory) {
+      const historySum = j.payments.reduce((sum, entry) => sum + (parseFloat(entry.amount || 0) || 0), 0);
+      const delta = pay - historySum;
+      if (Math.abs(delta) > 0.009) {
+        j.payments.push({
+          id: nextId('pay'),
+          amount: delta,
+          method,
+          notes: 'Manual adjustment from edit invoice',
+          at: nowISO(),
+          by: actorEmail(),
+          source: 'edit-invoice-adjust',
+        });
+        j.payMethod = method;
+      }
+      j.payment = pay;
+    } else {
+      j.payment = pay;
+      j.payMethod = method;
+      j.payments = [];
+    }
+    j.status = 'done';
+    j.invoiceNo = invNo;
+    j.date = invoiceDate;
+    j.doneAt = invoiceDateTime(invoiceDate, j.time || '');
+    j.notes = notes;
+    j.collectedBy = '';
+    j.invoicePhotos = invoicePhotos;
+    j.invoicePhoto = invoicePhoto;
+    j.updatedAt = nowISO();
+    markOptimisticInvoice(j.id);
+    rememberPaymentMethod(method);
+    clearInvoiceDraft(j.id, mode);
+    logAction('update', 'invoice', j.id, { invoiceNo: j.invoiceNo, discount: j.discount, paid: j.payment });
+    closeM('m-done');
+    saveAll({ domain: 'invoice' });
+    renderInvoices();
+    renderJobs();
+    if (_currentInvoiceJobId === j.id) openInvoice(j.id);
+    toast('Invoice updated');
+    return;
+  }
+  j.totalOverride = netInvoiceTotal;
+  if (appliedAdvance > 0) {
+    j.payment = (j.payment || 0) + appliedAdvance;
+    j.payments.push({
+      id: nextId('pay'),
+      amount: appliedAdvance,
+      method: 'advance-adjustment',
+      notes: 'Applied customer advance on invoice completion',
+      at: nowISO(),
+      by: actorEmail(),
+      source: 'customer-advance-apply',
+    });
+    if (!pay) j.payMethod = 'advance-adjustment';
+  }
+  if (pay > 0) {
+    j.payment = (j.payment||0) + pay;
+    j.payMethod = method;
+    j.payments.push({
+      id: nextId('pay'),
+      amount: pay,
+      method,
+      notes: notes || 'Final payment on completion',
+      at: nowISO(),
+      by: actorEmail(),
+      source: 'mark-done',
+    });
+  }
+  j.status      = 'done';
+  j.collectedBy = '';
+  j.invoiceNo   = invNo;
+  j.date        = invoiceDate;
+  j.doneAt      = invoiceDateTime(invoiceDate, j.time || '');
+  j.invoicePhotos = invoicePhotos;
+  j.invoicePhoto = invoicePhoto;
+  if (notes) j.notes = (j.notes ? j.notes + ' | ' : '') + notes;
+  j.updatedAt = nowISO();
+  markOptimisticInvoice(j.id);
+  rememberPaymentMethod(method);
+  clearInvoiceDraft(j.id, mode);
+  document.getElementById('done-invoice-no').value = '';
+  document.getElementById('done-invoice-date').value = today();
+  document.getElementById('done-applied-advance').value = '0';
+  const donePrev = document.getElementById('done-photo-preview');
+  if (donePrev) {
+    setPhotoPreviewList('done-photo-preview', [], 'Invoice Photo Reference');
+  }
+  closeM('m-done');
+  logAction('complete', 'invoice', j.id, { invoiceNo: invNo, discount: j.discount, total: jobTotal(j), paid: j.payment || 0, appliedAdvance });
+  saveAll({ domain: 'invoice' }); renderJobs();
+  if (nextAction === 'next') {
+    const nextJob = nextInvoiceCandidate(j.id);
+    if (nextJob) {
+      markDone(nextJob.id);
+      toast(`Saved ${invNo}. Opened ${nextJob.id} for next invoice.`);
+    } else {
+      toast(`Saved ${invNo}. No next invoice waiting.`);
+    }
+  } else if (nextAction === 'new-customer') {
+    openNewJob({ skipDraftRestore: true, startFresh: true, focusCustomer: true });
+    toast(`Saved ${invNo}. Ready for the next customer.`);
+  } else {
+    toast(`Job done! ${j.cust} · ${invNo}`);
+  }
+  pushGS();
+}
+
+// ── Invoices page ────────────────────────────────────────
+let invoiceSort    = 'invoice';
+let invoiceSortDir = -1;
+let invoiceSearch  = '';
+
+function normalizeInvoiceRef(value = '') {
+  return String(value || '')
+    .trim()
+    .toUpperCase()
+    .replace(/\bINVOICE\b/g, '')
+    .replace(/\bINV\b/g, '')
+    .replace(/[^A-Z0-9]/g, '');
+}
+
+function invoiceRefMatches(left = '', right = '') {
+  const a = normalizeInvoiceRef(left);
+  const b = normalizeInvoiceRef(right);
+  if (!a || !b) return false;
+  if (a === b) return true;
+  if (a.endsWith(b) || b.endsWith(a)) return true;
+  const aDigits = a.replace(/\D/g, '');
+  const bDigits = b.replace(/\D/g, '');
+  if (aDigits && bDigits && (aDigits === bDigits || aDigits.endsWith(bDigits) || bDigits.endsWith(aDigits))) {
+    return true;
+  }
+  return false;
+}
+
+function invoiceRefExactMatch(left = '', right = '') {
+  const a = normalizeInvoiceRef(left);
+  const b = normalizeInvoiceRef(right);
+  if (!a || !b) return false;
+  if (a === b) return true;
+  const aDigits = a.replace(/\D/g, '');
+  const bDigits = b.replace(/\D/g, '');
+  return !!(aDigits && bDigits && aDigits === bDigits);
+}
+
+function invoiceSortParts(job) {
+  const raw = String(job?.invoiceNo || job?.id || '').trim();
+  const key = typeof invoiceRefKey === 'function' ? invoiceRefKey(raw) : normalizeInvoiceRef(raw);
+  const digitGroups = raw.match(/\d+/g) || key.match(/\d+/g) || [];
+  return {
+    number: digitGroups.length ? (parseInt(digitGroups[0], 10) || 0) : Number.NEGATIVE_INFINITY,
+    text: key || raw.toUpperCase(),
+  };
+}
+
+function compareInvoiceNumbers(leftJob, rightJob) {
+  const left = invoiceSortParts(leftJob);
+  const right = invoiceSortParts(rightJob);
+  if (left.number !== right.number) return left.number - right.number;
+  return left.text.localeCompare(right.text);
+}
+
+function invoiceDefaultSortDir(col) {
+  return -1;
+}
+
+function invoiceRecentSortValue(job) {
+  return Date.parse(
+    job?.doneAt
+    || job?.createdAt
+    || job?.updatedAt
+    || job?.timestamp
+    || (job?.date ? `${job.date}T${job.time || '00:00:00'}` : 0)
+    || 0
+  ) || 0;
+}
+
+function linkedRegularIncomeForInvoice(invoiceNo = '') {
+  const target = String(invoiceNo || '').trim();
+  if (!target) return [];
+  return (incomeEntries || [])
+    .map(normalizeIncomeEntry)
+    .filter(entry => String(entry.invoiceNo || '').trim() && invoiceRefExactMatch(entry.invoiceNo || '', target));
+}
+
+function buildLinkedIncomeInvoiceIndex() {
+  const byKey = new Map();
+  const byDigits = new Map();
+  (incomeEntries || []).map(normalizeIncomeEntry).forEach(entry => {
+    if (!isLiveIncomeEntry(entry) || !String(entry.invoiceNo || '').trim()) return;
+    const key = normalizeInvoiceRef(entry.invoiceNo || '');
+    const digits = key.replace(/\D/g, '');
+    if (key) {
+      if (!byKey.has(key)) byKey.set(key, []);
+      byKey.get(key).push(entry);
+    }
+    if (digits) {
+      if (!byDigits.has(digits)) byDigits.set(digits, []);
+      byDigits.get(digits).push(entry);
+    }
+  });
+  return { byKey, byDigits };
+}
+
+function linkedRegularIncomeForInvoiceFromIndex(invoiceNo = '', index = buildLinkedIncomeInvoiceIndex()) {
+  const target = normalizeInvoiceRef(invoiceNo || '');
+  if (!target) return [];
+  const digits = target.replace(/\D/g, '');
+  const seen = new Set();
+  return []
+    .concat(index.byKey.get(target) || [])
+    .concat(digits ? (index.byDigits.get(digits) || []) : [])
+    .filter(entry => {
+      if (!invoiceRefExactMatch(entry.invoiceNo || '', target)) return false;
+      const key = entry.id || `${entry.invoiceNo}:${entry.amount}:${entry.timestamp}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+}
+
+function invoiceTableColumnsHtml(arw) {
+  return `<tr>
+    <th style="cursor:pointer;" onclick="sortInvoices('invoice')">Invoice #${arw('invoice')}</th>
+    <th style="cursor:pointer;" onclick="sortInvoices('date')">Date / Time${arw('date')}</th>
+    <th>Customer</th>
+    <th>Vehicle</th>
+    <th>Photo</th>
+    <th style="cursor:pointer;" onclick="sortInvoices('amount')">Amount${arw('amount')}</th>
+    <th>Paid</th>
+    <th>Linked Income</th>
+    <th>Due</th>
+    <th></th>
+  </tr>`;
+}
+
+function invoicePendingDot(jobId = '') {
+  return typeof isOptimisticInvoice === 'function' && isOptimisticInvoice(jobId)
+    ? `<span class="invoice-pending-dot" title="Syncing in background"></span>`
+    : '';
+}
+
+function invoiceTableRowHtml(j, linkedIncomeIndex) {
+  const total = jobTotal(j);
+  const paid  = jobPaid(j);
+  const due   = jobDue(j);
+  const advance = jobAdvance(j);
+  const stamp = j.doneAt || `${j.date}T${j.time || '00:00'}`;
+  const linkedIncome = linkedRegularIncomeForInvoiceFromIndex(j.invoiceNo || j.id, linkedIncomeIndex);
+  const linkedIncomeTotal = linkedIncome.reduce((sum, entry) => sum + (entry.amount || 0), 0);
+  const linkedIncomeLabel = linkedIncome.length
+    ? linkedIncome.map(entry => `${fmtMoney(entry.amount)}${entry.note ? ` · ${entry.note}` : ''}`).join('<br>')
+    : '';
+  return `<tr>
+    <td style="font-family:var(--fh);font-weight:700;color:var(--acc);display:flex;align-items:center;gap:8px;">${j.invoiceNo||j.id}${invoicePendingDot(j.id)}</td>
+    <td style="font-size:12px;">${fmtDate(stamp)}<br><span style="color:var(--mut)">${new Date(stamp).toLocaleTimeString('en-IN', { hour:'2-digit', minute:'2-digit' })}</span></td>
+    <td>
+      <button class="btn btn-g btn-sm" style="padding:0;border:none;background:none;color:var(--txt);font-weight:600;text-align:left;" onclick="openCustomerHistory('${escapeJsAttr(j.custId || '')}','${escapeJsAttr(j.cust || '')}','${escapeJsAttr(j.phone || '')}','${escapeJsAttr(j.id || '')}')">${j.cust}</button>
+      <br><span style="font-size:11px;color:var(--mut)">${j.phone||''}</span>
+    </td>
+    <td style="font-size:12px;">${j.veh}<br><span style="color:var(--mut)">${j.vno||''}</span></td>
+    <td>${typeof photoThumbWithCount === 'function' ? photoThumbWithCount(j.invoicePhotos || j.invoicePhoto || j.photos || j.photo || '', 'Invoice Photo Reference') : ((j.invoicePhoto || j.photo) ? `<img src="${j.invoicePhoto || j.photo}" alt="Vehicle photo" class="clickable-photo" style="width:46px;height:46px;object-fit:cover;border-radius:8px;border:1px solid var(--bor);" onclick="openImageViewer('${escapeAttr(j.invoicePhoto || j.photo)}','Invoice Photo Reference')">` : '<span style="color:var(--mut);font-size:12px;">—</span>')}</td>
+    <td style="font-family:var(--fh);font-weight:700;">${fmtMoney(total)}</td>
+    <td style="color:#00c896;">${paid>0?fmtMoney(paid):'—'}</td>
+    <td style="font-size:11px;color:${linkedIncomeTotal > 0 ? 'var(--acc2)' : 'var(--mut)'};">${linkedIncomeTotal > 0 ? `<div style="font-weight:700;">${fmtMoney(linkedIncomeTotal)}</div><div style="margin-top:3px;">${linkedIncomeLabel}</div>` : '—'}</td>
+    <td style="${due>0?'color:var(--dan);font-weight:700':advance>0?'color:#00c896;font-weight:700':'color:var(--mut)'};">${due>0?`Owe ${fmtMoney(due)}`:advance>0?`Advance ${fmtMoney(advance)}`:'Clear'}</td>
+    <td style="white-space:nowrap;">
+      <button class="btn btn-g btn-sm" onclick="openInvoice('${j.id}')">🖨</button>
+      ${isAdminUser() ? `<button class="btn btn-g btn-sm" onclick="openInvoiceEdit('${j.id}')">Edit</button>
+      <button class="btn btn-r btn-sm" onclick="removeInvoice('${j.id}')">Del</button>` : ''}
+      <button class="btn btn-g btn-sm" onclick="sendBill('${j.id}')">📱</button>
+    </td>
+  </tr>`;
+}
+
+function renderInvoices() {
+  let done = (window.appState?.invoices || jobs.filter(j => isLiveJob(j) && j.status === 'done'));
+  const linkedIncomeIndex = buildLinkedIncomeInvoiceIndex();
+  if (invoiceSearch) {
+    const q = invoiceSearch.toLowerCase();
+    done = done.filter(j => String(j?._searchText || '').includes(q));
+  }
+  done.sort((a, b) => {
+    if (invoiceSort === 'last-added') {
+      return invoiceSortDir * (invoiceRecentSortValue(a) - invoiceRecentSortValue(b));
+    }
+    if (invoiceSort === 'invoice') {
+      return invoiceSortDir * compareInvoiceNumbers(a, b);
+    }
+    if (invoiceSort === 'amount') {
+      return invoiceSortDir * (jobTotal(a) - jobTotal(b));
+    }
+    return invoiceSortDir * (invoiceSortValue(a) - invoiceSortValue(b));
+  });
+  const allDone    = jobs.filter(j => isLiveJob(j) && j.status === 'done');
+  const totAmt     = allDone.reduce((s,j) => s + jobTotal(j), 0);
+  const totPaid    = allDone.reduce((s,j) => s + jobPaid(j), 0);
+  const totBalance = totAmt - totPaid;
+  const todayCollected = allRevenueEntries()
+    .filter(entry => entry.date === today())
+    .reduce((sum, entry) => sum + (entry.amount || 0), 0);
+  const invStats = document.getElementById('inv-stats');
+  if (invStats) {
+    invStats.innerHTML = isAdminUser()
+      ? `${allDone.length} invoices · <span style="color:var(--acc)">${fmtMoney(totAmt)}</span>` +
+        ` · <span style="color:#00c896">Collected ${fmtMoney(totPaid)}</span>` +
+        ` · <span style="color:#7dd3fc">Today ${fmtMoney(todayCollected)}</span>` +
+        (totBalance > 0 ? ` · <span style="color:var(--dan)">Owe ${fmtMoney(totBalance)}</span>` : totBalance < 0 ? ` · <span style="color:#00c896">Advance ${fmtMoney(Math.abs(totBalance))}</span>` : ` · <span style="color:var(--mut)">Clear</span>`)
+      : '';
+  }
+
+  const container = document.getElementById('inv-list');
+  if (!container) return;
+  if (!done.length) {
+    container.innerHTML = '<div style="text-align:center;padding:48px;color:var(--mut);">No completed jobs yet.</div>';
+    return;
+  }
+  const arw = col => invoiceSort === col ? (invoiceSortDir > 0 ? ' ▲' : ' ▼') : '';
+  if (typeof renderVirtualTable === 'function') {
+    renderVirtualTable({
+      key: 'invoices',
+      container,
+      items: done,
+      columnsHtml: invoiceTableColumnsHtml(arw),
+      rowHtml: j => invoiceTableRowHtml(j, linkedIncomeIndex),
+      colspan: 10,
+      rowHeight: 78,
+      visibleCount: 25,
+      minWidth: '640px',
+      label: 'invoices',
+      version: [invoiceSort, invoiceSortDir, invoiceSearch, window.__JALASAI_DATA_VERSION || 0].join('|'),
+      emptyHtml: '<div style="text-align:center;padding:48px;color:var(--mut);">No completed jobs yet.</div>',
+    });
+    return;
+  }
+  container.innerHTML = `<table style="width:100%;border-collapse:collapse;min-width:640px;">
+    <thead>${invoiceTableColumnsHtml(arw)}</thead>
+    <tbody>${done.slice(0, 25).map(j => invoiceTableRowHtml(j, linkedIncomeIndex)).join('')}</tbody>
+  </table>`;
+}
+
+function sortInvoices(col) {
+  if (invoiceSort === col) { invoiceSortDir *= -1; }
+  else { invoiceSort = col; invoiceSortDir = invoiceDefaultSortDir(col); }
+  if (typeof resetLongListPage === 'function') resetLongListPage('invoices');
+  const sel = document.getElementById('inv-sort-sel');
+  if (sel) sel.value = col;
+  renderInvoices();
+}
+
+function setInvoiceSort(col) {
+  invoiceSort = col || 'invoice';
+  invoiceSortDir = invoiceDefaultSortDir(invoiceSort);
+  if (typeof resetLongListPage === 'function') resetLongListPage('invoices');
+  renderInvoices();
+}
+
+function filterInvoices(q) {
+  invoiceSearch = q;
+  if (typeof resetLongListPage === 'function') resetLongListPage('invoices');
+  if (typeof debouncePerf === 'function') {
+    debouncePerf('invoice-search', renderInvoices, 150);
+  } else {
+    renderInvoices();
+  }
+}
+
+function openInvoiceEdit(id) {
+  if (!requireAdminAccess('edit invoices')) return;
+  prepareDoneModal(id, 'edit');
+  openM('m-done');
+}
+
+function removeInvoice(id) {
+  if (!requireAdminAccess('delete invoice')) return;
+  if (!confirm('Delete this invoice permanently? This cannot be undone.')) return;
+
+  const idx = jobs.findIndex(j => j.id === id);
+  if (idx === -1) return;
+
+  const job = jobs[idx];
+  job.deleted_at = nowISO();
+  job.deletedAt = job.deleted_at;
+  job.deleted_by = actorEmail();
+  job.deletedBy = job.deleted_by;
+
+  logAction('delete', 'invoice', id, {
+    invoice_no: job.invoice_no || job.invoiceNo,
+    customer: job.customer || job.cust
+  });
+
+  saveAll({ domain: 'jobs' });
+  renderInvoices();
+  toast('Invoice deleted.');
+}
+
+// ── Done jobs section ────────────────────────────────────
+function toggleDoneJobs() {
+  const grid   = document.getElementById('done-grid');
+  const toggle = document.getElementById('done-toggle');
+  const hidden = grid.style.display === 'none';
+  grid.style.display  = hidden ? '' : 'none';
+  toggle.textContent  = hidden ? '▲ Hide' : '▼ Show';
+  if (hidden) renderDoneJobs();
+}
+
+function renderDoneJobs() {
+  const done = jobs.filter(j => isLiveJob(j) && j.status === 'done' && j.date === today())
+    .sort((a, b) => invoiceSortValue(b) - invoiceSortValue(a));
+  document.getElementById('done-grid').innerHTML = done.map(j => `
+    <div class="jcard done">
+      <div class="jtop"><span class="jnum">${j.id} · ${j.time}</span><span class="jnum">${j.vno||''}</span></div>
+      <div class="jcust">${j.cust}</div>
+      <div class="jveh">${j.veh}</div>
+      <div class="jprob">${j.prob}</div>
+      <div class="jftr">
+        <span style="font-size:11px;color:var(--acc)">${fmtMoney(jobTotal(j))}</span>
+        <span class="sbadge ready">Done ✓</span>
+      </div>
+      ${j.invoiceNo ? `<div style="font-size:11px;color:var(--mut);margin-top:4px;">🧾 ${j.invoiceNo}</div>` : ''}
+      <div class="jacts">
+        <button class="btn btn-g btn-sm" onclick="viewJob('${j.id}')">Details</button>
+        <button class="btn btn-g btn-sm" onclick="openInvoice('${j.id}')">Invoice</button>
+      </div>
+    </div>`).join('');
+}
+
+// ── Photo upload ─────────────────────────────────────────
+function handlePhotoUpload(input, previewId) {
+  const files = Array.from(input.files || []);
+  if (!files.length) return;
+  if (files.some(file => !file.type.startsWith('image/'))) { toast('Please choose image files'); return; }
+  window._photoUploadBusy = true;
+  const prev = document.getElementById(previewId);
+  prev.dataset.photoReady = 'false';
+  prev.dataset.removed = 'false';
+  prev.innerHTML = `<span style="color:var(--mut);font-size:12px;">Uploading ${files.length} photo${files.length > 1 ? 's' : ''}...</span>`;
+  const existingPhotos = getPhotoPreviewList(previewId);
+  Promise.all(files.map(async (file, index) => {
+    const blob = await compressImageFile(file, 1280, 960, 0.72);
+    let url = '';
+    const uploadKind = previewId === 'done-photo-preview'
+      ? 'invoice'
+      : previewId === 'em-photo-preview'
+        ? 'expense'
+        : previewId === 'p-photo-preview'
+          ? 'stock'
+          : 'job';
+    const recordId = editJobId || document.querySelector('#m-done')?._jobId || `draft-${Date.now()}`;
+    try {
+      if (cloudSessionActive && typeof uploadPhotoToCloud === 'function') {
+        url = await uploadPhotoToCloud(new File([blob], `${uploadKind}-${Date.now()}-${index}.jpg`, { type: 'image/jpeg' }), { kind: uploadKind, recordId });
+      } else {
+        url = await blobToDataUrl(blob);
+      }
+    } catch (_) {
+      url = await blobToDataUrl(blob);
+    }
+    return url;
+  }))
+    .then(urls => {
+      const meta = photoMetaForPreview(previewId);
+      setPhotoPreviewList(previewId, existingPhotos.concat(urls), meta.title);
+      window._photoUploadBusy = false;
+      if (input) input.value = '';
+      persistPhotoDraftForPreview(previewId);
+    })
+    .catch(() => {
+      window._photoUploadBusy = false;
+      prev.dataset.photoReady = 'false';
+      prev.dataset.removed = 'false';
+      prev.innerHTML = '<span style="color:var(--dan);font-size:12px;">Photo failed. Try again.</span>';
+      toast('Photo upload failed');
+    });
+}
+
+function blobToDataUrl(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = e => resolve(e.target.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
+
+function compressImageFile(file, maxW = 1280, maxH = 960, quality = 0.72) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      const img = new Image();
+      img.onload = () => {
+        let { width, height } = img;
+        const ratio = Math.min(maxW / width, maxH / height, 1);
+        width = Math.round(width * ratio);
+        height = Math.round(height * ratio);
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+        canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('Compression failed')), 'image/jpeg', quality);
+      };
+      img.onerror = reject;
+      img.src = e.target.result;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,23 @@
+{
+  "name": "JalaSai Garage System",
+  "short_name": "JalaSai",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#0b0d10",
+  "theme_color": "#0b0d10",
+  "description": "Workshop operations app for jobs, stock, invoices, and paperwork.",
+  "icons": [
+    {
+      "src": "icons/jalasai-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icons/jalasai-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

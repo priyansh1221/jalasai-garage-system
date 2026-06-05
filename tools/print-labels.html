@@ -1,0 +1,782 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JalaSai — Stock Import + QR Labels</title>
+
+<!-- ▶ Exact same QR engine the garage app uses — no copy, no risk -->
+<script src="../js/qrgen.js"></script>
+
+<style>
+/* ── Reset ───────────────────────────────────────────────────── */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Helvetica Neue',Arial,sans-serif;background:#f0f0f0;color:#222;font-size:13px;}
+
+/* ── Top bar ─────────────────────────────────────────────────── */
+#topbar{
+  background:#fff;border-bottom:1px solid #ddd;
+  padding:9px 16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  position:sticky;top:0;z-index:200;
+}
+#topbar h1{font-size:15px;font-weight:800;color:#e65c00;white-space:nowrap;}
+.sep{color:#ddd;}
+
+/* Step tabs */
+.step-tabs{display:flex;gap:0;border:1px solid #ddd;border-radius:8px;overflow:hidden;}
+.step-tab{
+  padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer;
+  background:#f8f8f8;color:#777;border:none;border-right:1px solid #ddd;
+  transition:background .15s,color .15s;
+}
+.step-tab:last-child{border-right:none;}
+.step-tab.active{background:#e65c00;color:#fff;}
+.step-tab:disabled{opacity:.45;cursor:not-allowed;}
+
+.btn{padding:7px 14px;border:none;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;}
+.btn-orange{background:#e65c00;color:#fff;}
+.btn-gray  {background:#eee;color:#333;}
+.btn-green {background:#00a86b;color:#fff;}
+.btn-blue  {background:#2563eb;color:#fff;}
+.btn:disabled{opacity:.4;cursor:not-allowed;}
+#top-count{font-size:11px;color:#aaa;margin-left:4px;}
+
+/* ── Pages ───────────────────────────────────────────────────── */
+.pg{display:none;height:calc(100vh - 49px);overflow:hidden;}
+.pg.active{display:flex;}
+
+/* ═══════════════════════════════════════════════════════════════
+   STEP 1 — IMPORT
+═══════════════════════════════════════════════════════════════ */
+#pg-import{flex-direction:row;gap:0;}
+
+.imp-panel{
+  flex:1;background:#fff;border-right:1px solid #ddd;
+  display:flex;flex-direction:column;overflow:hidden;
+}
+.imp-panel:last-child{border-right:none;}
+
+.panel-head{padding:14px 16px 10px;border-bottom:1px solid #f0f0f0;}
+.panel-head h2{font-size:13px;font-weight:700;color:#333;margin-bottom:3px;}
+.panel-head p{font-size:11px;color:#999;line-height:1.5;}
+.panel-body{flex:1;overflow-y:auto;padding:14px 16px;display:flex;flex-direction:column;gap:11px;}
+
+.lbl{font-size:11px;color:#666;font-weight:600;display:block;margin-bottom:3px;}
+input[type=text],input[type=number],input[type=date],input[type=file],select,textarea{
+  width:100%;font-size:12px;padding:7px 10px;
+  border:1px solid #ddd;border-radius:7px;background:#fafafa;color:#222;
+  outline:none;transition:border .15s;
+}
+input:focus,select:focus,textarea:focus{border-color:#e65c00;background:#fff;}
+textarea{resize:vertical;font-family:monospace;font-size:11px;}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+.hint{font-size:10px;color:#aaa;line-height:1.6;background:#f8f8f8;padding:8px 10px;border-radius:6px;}
+.hint code{background:#efefef;padding:1px 4px;border-radius:3px;font-size:10px;}
+.file-drop{
+  border:2px dashed #ddd;border-radius:10px;padding:20px;text-align:center;
+  color:#aaa;font-size:12px;cursor:pointer;transition:border .15s,color .15s;
+}
+.file-drop:hover{border-color:#e65c00;color:#e65c00;}
+.file-drop input{display:none;}
+#imp-err{font-size:11px;color:#dc2626;margin-top:4px;}
+#imp-ok {font-size:11px;color:#00a86b;margin-top:4px;}
+#state-status{font-size:10px;color:#888;margin-top:3px;}
+
+/* ═══════════════════════════════════════════════════════════════
+   STEP 2 — STOCK TABLE
+═══════════════════════════════════════════════════════════════ */
+#pg-stock{flex-direction:column;}
+
+#stock-toolbar{
+  background:#fff;border-bottom:1px solid #ddd;
+  padding:8px 14px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+}
+#stock-toolbar h2{font-size:13px;font-weight:700;margin-right:4px;}
+#sel-count{font-size:11px;color:#888;}
+#table-wrap{flex:1;overflow:auto;background:#fff;}
+
+table{width:100%;border-collapse:collapse;font-size:11px;}
+thead th{
+  background:#f8f8f8;border-bottom:2px solid #e8e8e8;
+  padding:7px 7px;text-align:left;font-size:10px;
+  text-transform:uppercase;letter-spacing:.5px;color:#777;
+  position:sticky;top:0;white-space:nowrap;z-index:10;
+}
+tbody tr{border-bottom:1px solid #f3f3f3;}
+tbody tr:hover{background:#fef7f2;}
+tbody tr.selected{background:#fff8f4;}
+tbody td{padding:4px 5px;vertical-align:middle;}
+tbody td input[type=text],tbody td input[type=number],tbody td select{
+  padding:4px 6px;font-size:11px;border-radius:5px;
+  border:1px solid #e8e8e8;width:100%;min-width:55px;background:#fff;
+}
+tbody td input:focus,tbody td select:focus{border-color:#e65c00;}
+.td-cb{width:30px;text-align:center;}
+.td-no{width:28px;text-align:center;color:#bbb;font-size:10px;}
+.td-del{width:28px;text-align:center;}
+.del-btn{background:none;border:none;cursor:pointer;font-size:14px;color:#ddd;padding:2px 5px;}
+.del-btn:hover{color:#dc2626;}
+.td-sku input{font-family:monospace;font-size:10px;}
+.dupe-badge{font-size:9px;color:#e65c00;display:block;}
+.add-row-row td{padding:0;}
+.add-row-btn{
+  width:100%;padding:9px;background:#fafafa;border:none;
+  border-top:1px dashed #e0e0e0;cursor:pointer;
+  font-size:12px;color:#aaa;text-align:center;
+}
+.add-row-btn:hover{background:#fff3ec;color:#e65c00;}
+
+#stock-footer{
+  background:#fff;border-top:1px solid #ddd;
+  padding:9px 14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+}
+#stock-footer .note{font-size:11px;color:#999;flex:1;}
+
+/* ═══════════════════════════════════════════════════════════════
+   STEP 3 — PRINT PREVIEW (screen)
+═══════════════════════════════════════════════════════════════ */
+#pg-print{flex-direction:column;background:#e0e0e0;overflow:auto;}
+
+#print-bar{
+  background:#fff;border-bottom:1px solid #ddd;
+  padding:9px 16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  flex-shrink:0;
+}
+#print-bar h2{font-size:13px;font-weight:700;flex:1;}
+#pg-print #sheet-wrap{flex:1;overflow:auto;padding:20px;}
+#sheet-info{font-size:11px;color:#888;text-align:center;margin-bottom:12px;}
+
+/* ── A4 Landscape sheet ──────────────────────────────────────── */
+.a4-sheet{
+  width:297mm;height:210mm;
+  background:#fff;
+  display:grid;
+  grid-template-columns:repeat(10,29.7mm);
+  grid-template-rows:   repeat(4, 52.5mm);
+  gap:0;
+  margin:0 auto 20px;
+  box-shadow:0 2px 20px rgba(0,0,0,.18);
+  overflow:hidden;
+  page-break-after:always;
+}
+
+/* ── Label cell ──────────────────────────────────────────────── */
+.label{
+  width:29.7mm;height:52.5mm;
+  border:0.3mm dashed #c8c8c8;
+  display:flex;flex-direction:column;
+  align-items:center;justify-content:center;
+  padding:1.2mm 0.8mm 0.6mm;
+  overflow:hidden;background:#fff;
+}
+.label-empty{
+  width:29.7mm;height:52.5mm;
+  border:0.3mm dashed #ececec;background:#fafafa;
+}
+
+/* QR area — fixed physical size, CSS scales canvas to fit */
+.label .qr-wrap{
+  width:22mm;height:22mm;
+  flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;
+  margin-bottom:0.8mm;
+}
+.label .qr-wrap img,
+.label .qr-wrap canvas{
+  width:22mm !important;
+  height:22mm !important;
+  display:block;
+  image-rendering:pixelated;
+  background:#fff;
+}
+
+/* Label text */
+.label .lbl-bike{font-size:5.2px;color:#e65c00;font-weight:700;line-height:1.2;text-align:center;width:100%;}
+.label .lbl-name{font-size:6px;  color:#111;    font-weight:700;line-height:1.15;text-align:center;width:100%;}
+.label .lbl-name.xs {font-size:5.2px;}
+.label .lbl-name.xxs{font-size:4.5px;}
+.label .lbl-sku {font-size:4.8px;color:#666;    font-family:monospace;line-height:1.2;text-align:center;width:100%;}
+.label .lbl-qty {font-size:5px;  color:#333;    font-weight:600;line-height:1.3;text-align:center;width:100%;}
+.label .lbl-loc {font-size:4.5px;color:#777;    line-height:1.2;text-align:center;width:100%;}
+
+/* ── Print media ─────────────────────────────────────────────── */
+@media print{
+  @page{size:A4 landscape;margin:0;}
+  body{background:#fff !important;}
+  #topbar,#pg-import,#pg-stock,#print-bar,#sheet-info{display:none !important;}
+  #pg-print{display:block !important;height:auto !important;background:#fff !important;overflow:visible !important;}
+  #pg-print #sheet-wrap{padding:0 !important;overflow:visible !important;}
+  .a4-sheet{
+    box-shadow:none !important;
+    margin:0 !important;
+    width:297mm !important;height:210mm !important;
+    overflow:hidden !important;
+    break-after:page;
+  }
+  .label{border:0.3mm dashed #c8c8c8 !important;}
+  .label-empty{display:block !important;border:0.3mm dashed #ececec !important;background:#fff !important;}
+}
+
+/* ── Toast ───────────────────────────────────────────────────── */
+#toast{
+  position:fixed;bottom:22px;right:22px;
+  background:#222;color:#fff;padding:9px 16px;
+  border-radius:8px;font-size:13px;opacity:0;
+  transition:opacity .25s;pointer-events:none;z-index:9999;
+  max-width:320px;line-height:1.4;
+}
+#toast.show{opacity:1;}
+
+/* ── Export modal overlay ────────────────────────────────────── */
+#export-overlay{
+  display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:500;
+  align-items:center;justify-content:center;
+}
+#export-overlay.show{display:flex;}
+#export-box{
+  background:#fff;border-radius:12px;padding:22px 24px;
+  width:min(600px,95vw);box-shadow:0 8px 40px rgba(0,0,0,.25);
+}
+#export-box h3{font-size:15px;font-weight:700;margin-bottom:10px;}
+#export-box textarea{font-family:monospace;font-size:10px;height:140px;resize:vertical;}
+#export-box .row2{margin-top:10px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;}
+</style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════════════════════
+     TOP BAR
+══════════════════════════════════════════════════════════ -->
+<div id="topbar">
+  <h1>JalaSai · Stock + Labels</h1>
+  <div class="step-tabs">
+    <button class="step-tab active" onclick="goStep(1)">1 · Import</button>
+    <button class="step-tab"        onclick="goStep(2)">2 · Stock Table</button>
+    <button class="step-tab"        onclick="goStep(3)">3 · Print Labels</button>
+  </div>
+  <span class="sep">|</span>
+  <span id="top-count"></span>
+  <span style="flex:1"></span>
+  <button class="btn btn-green"  onclick="goStep(2)">→ Review Stock</button>
+  <button class="btn btn-blue"   onclick="goStep(3)">🖨 Preview Labels</button>
+  <button class="btn btn-orange" onclick="window.print()">Print Now</button>
+</div>
+
+<datalist id="bike-list">
+  <option>Ola S1</option><option>Ola S1 Pro</option>
+  <option>Honda Activa</option><option>TVS Jupiter</option>
+  <option>Royal Enfield</option><option>Bajaj Pulsar</option>
+  <option>Hero Splendor</option><option>Yamaha FZ</option>
+  <option>Universal</option>
+</datalist>
+
+<!-- ══════════════════════════════════════════════════════════
+     STEP 1 · IMPORT
+══════════════════════════════════════════════════════════ -->
+<div class="pg active" id="pg-import">
+
+  <div class="imp-panel">
+    <div class="panel-head">
+      <h2>Stock Labels Tool</h2>
+      <p>Dealer invoice import is paused for now. Use this tool to load stock, review rows, and print labels.</p>
+    </div>
+    <div class="panel-body">
+      <div class="hint">
+        <strong>Current use:</strong><br>
+        1. Load your current <code>garage_state.json</code><br>
+        2. Review / edit stock rows manually if needed<br>
+        3. Print labels for selected items
+      </div>
+      <div id="imp-err"></div><div id="imp-ok"></div>
+      <div class="hint">
+        <strong>SKU auto-format:</strong> <code>{BIKE}-{CAT}-{DESC}</code><br>
+        e.g. <code>OLA-BRA-PAD-FRT</code> = Ola · Brakes · Pad Front<br><br>
+        Bike codes: OLA HON TVS RE BAJ HER YAM UNI<br>
+        Cat codes: BRA ENG ELC BOD TYR SUS TRN FUL ACC
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT: Load existing garage_state -->
+  <div class="imp-panel">
+    <div class="panel-head">
+      <h2>Load Existing Stock</h2>
+      <p>
+        Load your <strong>garage_state.json</strong> (from app → ☁ Cloud → Download Backup)
+        to bring in all existing stock items for editing and label printing.
+      </p>
+    </div>
+    <div class="panel-body">
+      <div>
+        <label class="lbl">Load garage_state.json</label>
+        <label class="file-drop">
+          <input type="file" id="state-file" accept=".json" onchange="loadStateFile(event)">
+          📂 Click to choose file<br><span style="font-size:10px;color:#bbb;">garage_state.json or stock-only .json</span>
+        </label>
+        <div id="state-status"></div>
+      </div>
+
+      <div style="border-top:1px solid #f0f0f0;padding-top:11px;">
+        <label class="lbl">Or paste JSON directly</label>
+        <textarea id="state-paste" rows="6" placeholder='Paste full garage_state JSON here…'></textarea>
+        <button class="btn btn-gray" style="width:100%;margin-top:6px;" onclick="loadStatePaste()">Load Pasted JSON</button>
+      </div>
+      <div class="hint" style="margin-top:4px;">
+        <strong>Workflow:</strong><br>
+        1. Load existing state (your real stock) →<br>
+        2. Review / edit in Stock Table →<br>
+        3. Export updated garage_state.json if needed →<br>
+        4. Restore in app via ☁ Cloud → Restore Backup<br>
+        5. Print QR labels for selected items
+      </div>
+    </div>
+  </div>
+
+</div><!-- /pg-import -->
+
+
+<!-- ══════════════════════════════════════════════════════════
+     STEP 2 · STOCK TABLE
+══════════════════════════════════════════════════════════ -->
+<div class="pg" id="pg-stock">
+
+  <div id="stock-toolbar">
+    <h2>Stock Items</h2>
+    <span id="sel-count"></span>
+    <button class="btn btn-gray" style="font-size:11px;padding:5px 10px;" onclick="selectAll(true)">☑ All</button>
+    <button class="btn btn-gray" style="font-size:11px;padding:5px 10px;" onclick="selectAll(false)">☐ None</button>
+    <button class="btn btn-gray" style="font-size:11px;padding:5px 10px;" onclick="autoSku()">⚡ Auto-SKU</button>
+    <button class="btn btn-gray" style="font-size:11px;padding:5px 10px;" onclick="addRow()">+ Row</button>
+    <span style="flex:1"></span>
+    <button class="btn btn-blue"  onclick="openExport()">⬇ Export garage_state</button>
+    <button class="btn btn-orange" onclick="goStep(3)">🖨 Preview Labels →</button>
+  </div>
+
+  <div id="table-wrap">
+    <table id="stock-table">
+      <thead>
+        <tr>
+          <th class="td-cb"><input type="checkbox" id="cb-all" title="Select all" onchange="selectAll(this.checked)"></th>
+          <th class="td-no">#</th>
+          <th style="min-width:155px;">Part Name *</th>
+          <th style="min-width:115px;">SKU *</th>
+          <th style="min-width:95px;">Bike</th>
+          <th style="min-width:90px;">Category</th>
+          <th style="width:52px;">Qty</th>
+          <th style="width:52px;">Min</th>
+          <th style="width:65px;">Cost ₹</th>
+          <th style="width:65px;">Sell ₹</th>
+          <th style="min-width:75px;">Location</th>
+          <th style="min-width:80px;">Supplier</th>
+          <th class="td-del"></th>
+        </tr>
+      </thead>
+      <tbody id="stock-body">
+        <tr><td colspan="13" style="text-align:center;padding:40px;color:#bbb;">
+          Go to Step 1 → load stock JSON
+        </td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div id="stock-footer">
+    <span class="note">Checked rows = printed on labels. Uncheck items you don't need to reprint.</span>
+    <button class="btn btn-blue"   onclick="openExport()">⬇ Export garage_state.json</button>
+    <button class="btn btn-orange" onclick="goStep(3)">🖨 Preview Labels for Selected</button>
+  </div>
+
+</div><!-- /pg-stock -->
+
+
+<!-- ══════════════════════════════════════════════════════════
+     STEP 3 · PRINT PREVIEW
+══════════════════════════════════════════════════════════ -->
+<div class="pg" id="pg-print">
+
+  <div id="print-bar">
+    <h2>Label Preview — A4 Landscape · 10 × 4 = 40 per page</h2>
+    <span id="print-label-count" style="font-size:11px;color:#999;"></span>
+    <span style="flex:1"></span>
+    <button class="btn btn-gray"   onclick="goStep(2)">← Back to Table</button>
+    <button class="btn btn-orange" onclick="window.print()">🖨 Print</button>
+  </div>
+
+  <div id="sheet-wrap">
+    <div id="sheet-info"></div>
+    <!-- A4 sheets injected here by JS -->
+  </div>
+
+</div><!-- /pg-print -->
+
+
+<!-- ══════════════════════════════════════════════════════════
+     EXPORT MODAL
+══════════════════════════════════════════════════════════ -->
+<div id="export-overlay" onclick="if(event.target===this)closeExport()">
+  <div id="export-box">
+    <h3>Export Updated garage_state.json</h3>
+    <p style="font-size:11px;color:#888;margin-bottom:10px;">
+      New items are added. Existing SKUs have their qty updated. Download and restore in the app via ☁ Cloud → Restore Backup.
+    </p>
+    <textarea id="export-text" readonly onclick="this.select()"></textarea>
+    <div class="row2">
+      <button class="btn btn-green" onclick="downloadExport()">⬇ Download File</button>
+      <button class="btn btn-gray"  onclick="copyExport()">📋 Copy JSON</button>
+      <button class="btn btn-gray"  onclick="closeExport()">Close</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<!-- ══════════════════════════════════════════════════════════
+     JAVASCRIPT
+══════════════════════════════════════════════════════════ -->
+<script>
+'use strict';
+
+// ── State ────────────────────────────────────────────────────
+let rows         = [];   // working stock items [{...}]
+let baseState    = null; // full loaded garage_state (for merge export)
+let _idCtr       = 1;
+const PER_PAGE   = 40;   // 10 cols × 4 rows per A4 landscape sheet
+
+function uid() { return 'i' + Date.now() + (_idCtr++); }
+
+// ── Step navigation ───────────────────────────────────────────
+function goStep(n) {
+  document.querySelectorAll('.pg').forEach((el,i) => el.classList.toggle('active', i+1===n));
+  document.querySelectorAll('.step-tab').forEach((el,i) => el.classList.toggle('active', i+1===n));
+  if (n === 2) renderTable();
+  if (n === 3) renderSheets();
+}
+
+// ═════════════════════════════════════════════════════════════
+// BIKE / CAT CODE HELPERS
+// ═════════════════════════════════════════════════════════════
+const BIKE_CODE = {
+  'ola s1 pro':'OLA','ola s1':'OLA','ola':'OLA',
+  'honda activa':'HON','activa':'HON','honda':'HON',
+  'tvs jupiter':'TVS','tvs':'TVS','jupiter':'TVS',
+  'royal enfield':'RE','enfield':'RE','re':'RE',
+  'bajaj pulsar':'BAJ','bajaj':'BAJ','pulsar':'BAJ',
+  'hero splendor':'HER','hero':'HER','splendor':'HER',
+  'yamaha fz':'YAM','yamaha':'YAM','fz':'YAM',
+  'universal':'UNI','general':'UNI',
+};
+const CAT_CODE = {
+  'brakes':'BRA','brake':'BRA','engine':'ENG','electrical':'ELC',
+  'body':'BOD','tyres':'TYR','tyre':'TYR','suspension':'SUS',
+  'transmission':'TRN','fuel system':'FUL','fuel':'FUL',
+  'accessories':'ACC','miscellaneous':'MIS',
+};
+
+function bikeCode(b){
+  const k = (b||'').toLowerCase().trim();
+  return BIKE_CODE[k] || (b||'').replace(/\s+/g,'').substring(0,3).toUpperCase() || 'UNI';
+}
+function catCode(c){
+  const k = (c||'').toLowerCase().trim();
+  return CAT_CODE[k] || (c||'').substring(0,3).toUpperCase() || 'MIS';
+}
+
+function genSku(name, bike, cat){
+  const bk = bikeCode(bike), ct = catCode(cat);
+  const abbr = { FRONT:'FRT',REAR:'RER',LEFT:'LFT',RIGHT:'RGT',
+    UPPER:'UPR',LOWER:'LWR',ASSEMBLY:'ASM',FILTER:'FLT',
+    BRAKE:'BRK',PAD:'PAD',DISC:'DSC',CABLE:'CBL',
+    LIGHT:'LGT',BULB:'BLB',PLATE:'PLT',COVER:'CVR',
+    FRONT:'FRT',SHOCK:'SHK',SPRING:'SPR',CHAIN:'CHN',
+    SPROCKET:'SPK',BEARING:'BRG',SEAL:'SEL',RING:'RNG',
+  };
+  const words = String(name||'').toUpperCase().replace(/[^A-Z0-9 ]/g,'').split(/\s+/).filter(Boolean);
+  const desc = words.slice(0,3).map(w => abbr[w] || w.substring(0,3)).join('-');
+  return `${bk}-${ct}-${desc || 'PART'}`;
+}
+
+function buildPayload(sku){
+  return `JALASAI|SKU|${String(sku||'').trim().toUpperCase()}`;
+}
+
+function qrImgUrl(payload, px){
+  return `https://api.qrserver.com/v1/create-qr-code/?size=${px}x${px}&ecc=M&data=${encodeURIComponent(payload)}`;
+}
+
+function nameClass(name){
+  const l = String(name||'').trim().length;
+  if(l>28) return 'xxs';
+  if(l>18) return 'xs';
+  return '';
+}
+
+// ═════════════════════════════════════════════════════════════
+// IMPORT — garage_state
+// ═════════════════════════════════════════════════════════════
+function loadStateFile(e){
+  const file = e.target.files[0]; if(!file) return;
+  const r = new FileReader();
+  r.onload = ev => parseStateJSON(ev.target.result);
+  r.readAsText(file);
+}
+function loadStatePaste(){
+  const raw = document.getElementById('state-paste').value.trim();
+  if(!raw){ toast('Paste JSON first.'); return; }
+  parseStateJSON(raw);
+}
+function parseStateJSON(raw){
+  try{
+    const obj = JSON.parse(raw);
+    let stock;
+    if(Array.isArray(obj))        { stock = obj;       baseState = null; }
+    else if(obj.stock)            { stock = obj.stock;  baseState = obj;  }
+    else { setImpErr('JSON must have a stock[] array or be a full garage_state export.'); return; }
+    rows = stock.map(s => ({ ...s, _sel: true, _src: 'existing', id: s.id || uid() }));
+    setImpOk(`✓ Loaded ${rows.length} stock items.`);
+    updateTopCount();
+    document.getElementById('state-status').textContent = `Loaded: ${rows.length} items from state.`;
+  } catch(ex){ setImpErr('Invalid JSON: ' + ex.message); }
+}
+
+function titleCase(s){ return s.toLowerCase().replace(/\b\w/g,c=>c.toUpperCase()); }
+
+// ═════════════════════════════════════════════════════════════
+// STOCK TABLE
+// ═════════════════════════════════════════════════════════════
+function renderTable(){
+  const tbody = document.getElementById('stock-body');
+  if(!rows.length){
+    tbody.innerHTML='<tr><td colspan="13" style="text-align:center;padding:40px;color:#bbb;">No items yet — go to Step 1</td></tr>';
+    document.getElementById('sel-count').textContent='';
+    return;
+  }
+
+  // Check if SKU exists in loaded state (for dupe badge)
+  const existingSkus = new Set((baseState&&baseState.stock||[]).filter(s=>!rows.find(r=>r.id===s.id)).map(s=>s.sku));
+
+  tbody.innerHTML = rows.map((r,i)=>{
+    const inState = existingSkus.has(r.sku);
+    return `<tr id="tr-${r.id}" class="${r._sel?'selected':''}">
+      <td class="td-cb"><input type="checkbox" ${r._sel?'checked':''} onchange="toggleSel('${r.id}',this.checked)"></td>
+      <td class="td-no">${i+1}</td>
+      <td><input type="text"   value="${esc(r.name)}"     oninput="upd('${r.id}','name',this.value)"      placeholder="Part name"></td>
+      <td class="td-sku">
+        <input type="text"     value="${esc(r.sku)}"      oninput="upd('${r.id}','sku',this.value)"       placeholder="SKU">
+        ${inState?'<span class="dupe-badge">⚠ updates existing qty</span>':''}
+      </td>
+      <td><input type="text"   value="${esc(r.bike)}"     oninput="upd('${r.id}','bike',this.value)"      list="bike-list" placeholder="Bike"></td>
+      <td><select onchange="upd('${r.id}','cat',this.value)">${catOpts(r.cat)}</select></td>
+      <td><input type="number" value="${r.qty??''}"        oninput="upd('${r.id}','qty',this.value)"       min="0" placeholder="Qty"></td>
+      <td><input type="number" value="${r.min??1}"         oninput="upd('${r.id}','min',this.value)"       min="0" placeholder="Min"></td>
+      <td><input type="number" value="${r.cost||''}"       oninput="upd('${r.id}','cost',this.value)"      min="0" placeholder="₹"></td>
+      <td><input type="number" value="${r.sellPrice||''}"  oninput="upd('${r.id}','sellPrice',this.value)" min="0" placeholder="₹"></td>
+      <td><input type="text"   value="${esc(r.location)}"  oninput="upd('${r.id}','location',this.value)"  placeholder="Bin A1"></td>
+      <td><input type="text"   value="${esc(r.sup||'')}"   oninput="upd('${r.id}','sup',this.value)"       placeholder="Supplier"></td>
+      <td class="td-del"><button class="del-btn" onclick="delRow('${r.id}')">✕</button></td>
+    </tr>`;
+  }).join('');
+
+  // Add-row button row
+  tbody.innerHTML += `<tr class="add-row-row"><td colspan="13"><button class="add-row-btn" onclick="addRow()">+ Add Empty Row</button></td></tr>`;
+
+  updateSelCount();
+  updateTopCount();
+  syncCbAll();
+}
+
+function catOpts(selected){
+  return ['','Brakes','Engine','Electrical','Body','Tyres','Suspension','Transmission','Fuel System','Accessories','Miscellaneous']
+    .map(c=>`<option value="${c}"${c===selected?' selected':''}>${c||'—'}</option>`).join('');
+}
+
+function upd(id, field, value){
+  const r = rows.find(r=>r.id===id); if(!r) return;
+  r[field] = ['qty','min','cost','sellPrice'].includes(field) ? parseFloat(value)||0 : value;
+}
+function toggleSel(id, v){
+  const r=rows.find(r=>r.id===id); if(r) r._sel=v;
+  document.getElementById('tr-'+id)?.classList.toggle('selected',v);
+  updateSelCount(); syncCbAll();
+}
+function selectAll(v){
+  rows.forEach(r=>r._sel=v);
+  document.getElementById('cb-all').checked=v;
+  renderTable();
+}
+function delRow(id){
+  rows=rows.filter(r=>r.id!==id);
+  document.getElementById('tr-'+id)?.remove();
+  updateSelCount(); updateTopCount(); syncCbAll();
+}
+function addRow(){
+  rows.push({ id:uid(), name:'', sku:'', bike:'Universal', cat:'Miscellaneous', qty:1, min:1, cost:0, sellPrice:0, sup:'', location:'', _sel:true, _src:'manual' });
+  renderTable();
+  requestAnimationFrame(()=>{
+    const inputs=[...document.querySelectorAll('#stock-body td:nth-child(3) input')];
+    inputs[inputs.length-1]?.focus();
+  });
+}
+function autoSku(){
+  rows.forEach(r=>{ if(!r.sku||r.sku.endsWith('-PART')) r.sku=genSku(r.name,r.bike,r.cat); });
+  renderTable(); toast('SKUs regenerated.');
+}
+function updateSelCount(){
+  const sel=rows.filter(r=>r._sel).length;
+  document.getElementById('sel-count').textContent=`${sel} of ${rows.length} selected for print`;
+}
+function syncCbAll(){
+  const cb=document.getElementById('cb-all');
+  if(cb){ const s=rows.filter(r=>r._sel).length; cb.checked=s===rows.length&&s>0; cb.indeterminate=s>0&&s<rows.length; }
+}
+function updateTopCount(){ document.getElementById('top-count').textContent=rows.length?`${rows.length} parts · ${rows.filter(r=>r._sel).length} selected`:''; }
+
+// ═════════════════════════════════════════════════════════════
+// EXPORT / MERGE
+// ═════════════════════════════════════════════════════════════
+let _exportJson='', _exportFilename='';
+
+function openExport(){
+  if(!rows.length){ toast('No rows to export.'); return; }
+  const clean = rows.map(r=>({
+    id:r.id, sku:(r.sku||'').toUpperCase().trim(), name:(r.name||'').trim(),
+    bike:r.bike||'', cat:r.cat||'', qty:+r.qty||0, min:+r.min||1,
+    cost:+r.cost||0, sellPrice:+r.sellPrice||0,
+    sup:r.sup||'', location:r.location||'',
+  }));
+
+  let out;
+  if(baseState){
+    // Merge: update existing by SKU, insert new
+    const state  = JSON.parse(JSON.stringify(baseState));
+    const skuMap = {};
+    (state.stock||[]).forEach(s=>skuMap[s.sku]=s);
+    clean.forEach(item=>{
+      if(skuMap[item.sku]){ skuMap[item.sku].qty+=item.qty; if(item.cost) skuMap[item.sku].cost=item.cost; if(item.sellPrice) skuMap[item.sku].sellPrice=item.sellPrice; if(item.location) skuMap[item.sku].location=item.location; }
+      else { (state.stock=state.stock||[]).push(item); skuMap[item.sku]=item; }
+    });
+    out = state;
+    _exportFilename = 'garage_state_updated.json';
+  } else {
+    out = { stock: clean };
+    _exportFilename = 'jalasai-stock.json';
+  }
+
+  _exportJson = JSON.stringify(out, null, 2);
+  document.getElementById('export-text').value = _exportJson;
+  document.getElementById('export-overlay').classList.add('show');
+}
+function closeExport(){ document.getElementById('export-overlay').classList.remove('show'); }
+function downloadExport(){
+  if(!_exportJson) return;
+  const a=document.createElement('a');
+  a.href='data:application/json;charset=utf-8,'+encodeURIComponent(_exportJson);
+  a.download=_exportFilename; a.click();
+  toast('Downloaded: '+_exportFilename);
+}
+function copyExport(){
+  navigator.clipboard.writeText(_exportJson).then(()=>toast('Copied!')).catch(()=>{
+    document.getElementById('export-text').select(); document.execCommand('copy'); toast('Copied!');
+  });
+}
+
+// ═════════════════════════════════════════════════════════════
+// PRINT SHEETS — exactly mirrors the main website's approach:
+function renderSheets(){
+  const toPrint = rows.filter(r=>r._sel);
+  const wrap    = document.getElementById('sheet-wrap');
+  const info    = document.getElementById('sheet-info');
+  const count   = document.getElementById('print-label-count');
+
+  if(!toPrint.length){
+    wrap.innerHTML='<p style="text-align:center;color:#aaa;padding:40px;">No items selected — go back and check some rows.</p>';
+    info.textContent=''; count.textContent=''; return;
+  }
+
+  const pages  = Math.ceil(toPrint.length / PER_PAGE);
+  info.textContent   = `${toPrint.length} labels · ${pages} page${pages>1?'s':''} · A4 landscape`;
+  count.textContent  = `${toPrint.length} labels · ${pages} page${pages>1?'s':''}`;
+
+  wrap.innerHTML = '';
+
+  // QR canvas px — 200px in memory → CSS scales to 22mm, great print quality
+  const QR_PX = 200;
+
+  for(let p=0; p<pages; p++){
+    const chunk = toPrint.slice(p*PER_PAGE, (p+1)*PER_PAGE);
+    const sheet = document.createElement('div');
+    sheet.className = 'a4-sheet';
+
+    const cells = [];
+    for(let i=0; i<PER_PAGE; i++){
+      const s = chunk[i];
+      if(!s){ cells.push(`<div class="label-empty"></div>`); continue; }
+
+      const payload = buildPayload(s.sku);
+      const nc      = nameClass(s.name);
+      const cvsId   = 'qc-' + s.id;
+
+      cells.push(`
+        <div class="label">
+          <div class="qr-wrap">
+            <canvas id="${cvsId}" data-payload="${esc(payload)}" width="${QR_PX}" height="${QR_PX}"></canvas>
+          </div>
+          <div class="lbl-bike">${esc(s.bike||'')}</div>
+          <div class="lbl-name ${nc}">${esc(s.name||'')}</div>
+          <div class="lbl-sku">${esc(s.sku||'')}</div>
+          <div class="lbl-qty">Qty:${s.qty??'—'} Min:${s.min??'—'}</div>
+          ${s.location?`<div class="lbl-loc">&#128230; ${esc(s.location)}</div>`:''}
+        </div>`);
+    }
+    sheet.innerHTML = cells.join('');
+    wrap.appendChild(sheet);
+  }
+
+  requestAnimationFrame(drawLabelQRCodes);
+}
+
+function fallbackQR(cvsId, payload, px){
+  const c = document.getElementById(cvsId);
+  if(!c) return;
+  c.width = px; c.height = px;
+  try{ QRGen.draw(c, payload); } catch(_){}
+}
+
+function drawLabelQRCodes(){
+  document.querySelectorAll('#sheet-wrap canvas[id^="qc-"]').forEach(c=>{
+    const payload = c.dataset.payload || buildPayload(c.closest('.label')?.querySelector('.lbl-sku')?.textContent || '');
+    drawLabelQRCodeFromAppSource(c, payload);
+  });
+}
+
+function drawLabelQRCodeFromAppSource(canvas, payload){
+  if(!canvas) return;
+  const px = canvas.width || 200;
+  const img = new Image();
+  img.crossOrigin = 'anonymous';
+  img.onload = () => {
+    try{
+      const ctx = canvas.getContext('2d');
+      ctx.imageSmoothingEnabled = false;
+      ctx.clearRect(0, 0, px, px);
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(0, 0, px, px);
+      ctx.drawImage(img, 0, 0, px, px);
+    } catch(_){
+      fallbackQR(canvas.id, payload, px);
+    }
+  };
+  img.onerror = () => fallbackQR(canvas.id, payload, px);
+  img.src = qrImgUrl(payload, px);
+}
+
+// ═════════════════════════════════════════════════════════════
+// HELPERS
+// ═════════════════════════════════════════════════════════════
+function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function setImpErr(m){ document.getElementById('imp-err').textContent=m; document.getElementById('imp-ok').textContent=''; }
+function setImpOk(m) { document.getElementById('imp-ok').textContent=m;  document.getElementById('imp-err').textContent=''; }
+let _tt;
+function toast(msg){ const el=document.getElementById('toast'); el.textContent=msg; el.classList.add('show'); clearTimeout(_tt); _tt=setTimeout(()=>el.classList.remove('show'),2800); }
+
+</script>
+</body>
+</html>
