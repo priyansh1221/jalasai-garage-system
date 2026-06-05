@@ -1122,6 +1122,22 @@ function scheduleInvoiceSaveUiRefresh(options = {}) {
   });
 }
 
+function runAfterInvoiceSavePaint(callback) {
+  const raf = typeof requestAnimationFrame === 'function'
+    ? requestAnimationFrame
+    : (cb) => setTimeout(cb, 0);
+  raf(() => setTimeout(callback, 0));
+}
+
+function saveInvoiceAfterPaint(domain = 'invoice', refreshOptions = {}) {
+  const pages = ['jobs', 'invoices', 'customers', 'reminders', 'reports', 'home'];
+  if (typeof markAppTabsStale === 'function') markAppTabsStale(pages);
+  runAfterInvoiceSavePaint(() => {
+    if (typeof saveAll === 'function') saveAll({ domain });
+    scheduleInvoiceSaveUiRefresh(refreshOptions);
+  });
+}
+
 function saveQuickInvoice(nextAction = 'close') {
   if (!requireCloudWriteAccess(nextAction === 'job-card' ? 'create jobs from quick invoice' : 'create quick invoices')) return;
   if (window._photoUploadBusy) { toast('Please wait for photo upload to finish'); return; }
@@ -1241,10 +1257,9 @@ function saveQuickInvoice(nextAction = 'close') {
     if (paid > 0) rememberPaymentMethod(payMethod);
     clearQuickInvoiceDraft();
     logAction('create', 'job', newJob.id, { customer: custName, quick: true, paid, source: 'quick-job-card' });
-    saveAll({ domain: 'jobs' });
     closeM('m-quick-invoice');
+    saveInvoiceAfterPaint('jobs');
     if (typeof showPage === 'function') showPage('jobs', { forceRender: true });
-    else scheduleInvoiceSaveUiRefresh();
     toast(`Saved ${newJob.id} as job card`);
     return;
   }
@@ -1300,8 +1315,7 @@ function saveQuickInvoice(nextAction = 'close') {
   rememberPaymentMethod(payMethod);
   clearQuickInvoiceDraft();
   logAction('create', 'invoice', newJob.id, { invoiceNo, customer: custName, quick: true, paid });
-  saveAll({ domain: 'invoice' });
-  scheduleInvoiceSaveUiRefresh();
+  saveInvoiceAfterPaint('invoice');
 
   if (nextAction === 'next') {
     resetQuickInvoiceForm({ focusCustomer: true, preserveMethod: true });
@@ -2391,7 +2405,6 @@ function savePayment() {
   }
   logAction('payment', 'job', j.id, { amount, discount, method, due: dueAfter, advance: advanceAfter });
   if (j.status === 'done') markOptimisticInvoice(j.id);
-  saveAll({ domain: 'payment' });
-  scheduleInvoiceSaveUiRefresh();
+  saveInvoiceAfterPaint('payment');
   if (typeof updateDuesBadge === 'function') updateDuesBadge();
 }

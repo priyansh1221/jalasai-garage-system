@@ -2241,8 +2241,11 @@ function confirmDone(nextAction = 'close') {
     clearInvoiceDraft(j.id, mode);
     logAction('update', 'invoice', j.id, { invoiceNo: j.invoiceNo, discount: j.discount, paid: j.payment });
     closeM('m-done');
-    saveAll({ domain: 'invoice' });
-    if (typeof scheduleInvoiceSaveUiRefresh === 'function') scheduleInvoiceSaveUiRefresh({ renderInvoiceId: j.id });
+    if (typeof saveInvoiceAfterPaint === 'function') saveInvoiceAfterPaint('invoice', { renderInvoiceId: j.id });
+    else {
+      saveAll({ domain: 'invoice' });
+      if (typeof scheduleInvoiceSaveUiRefresh === 'function') scheduleInvoiceSaveUiRefresh({ renderInvoiceId: j.id });
+    }
     toast('Invoice updated');
     return;
   }
@@ -2294,8 +2297,11 @@ function confirmDone(nextAction = 'close') {
   }
   closeM('m-done');
   logAction('complete', 'invoice', j.id, { invoiceNo: invNo, discount: j.discount, total: jobTotal(j), paid: j.payment || 0, appliedAdvance });
-  saveAll({ domain: 'invoice' });
-  if (typeof scheduleInvoiceSaveUiRefresh === 'function') scheduleInvoiceSaveUiRefresh();
+  if (typeof saveInvoiceAfterPaint === 'function') saveInvoiceAfterPaint('invoice');
+  else {
+    saveAll({ domain: 'invoice' });
+    if (typeof scheduleInvoiceSaveUiRefresh === 'function') scheduleInvoiceSaveUiRefresh();
+  }
   if (nextAction === 'next') {
     const nextJob = nextInvoiceCandidate(j.id);
     if (nextJob) {
