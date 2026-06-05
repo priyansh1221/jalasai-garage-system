@@ -1101,6 +1101,27 @@ function openQuickInvoice(options = {}) {
   });
 }
 
+function scheduleInvoiceSaveUiRefresh(options = {}) {
+  const pages = ['jobs', 'invoices', 'customers', 'reminders', 'reports', 'home'];
+  if (typeof markAppTabsStale === 'function') markAppTabsStale(pages);
+  const raf = typeof requestAnimationFrame === 'function'
+    ? requestAnimationFrame
+    : (cb) => setTimeout(cb, 0);
+  raf(() => {
+    const page = typeof currentPage !== 'undefined' ? currentPage : '';
+    if (page === 'jobs' && typeof renderJobs === 'function') renderJobs();
+    else if (page === 'invoices' && typeof renderInvoices === 'function') renderInvoices();
+    else if (page === 'home' && typeof renderCurrentPage === 'function') renderCurrentPage({ forceRender: true });
+    else {
+      if (typeof updateStats === 'function') updateStats();
+      if (typeof updateDuesBadge === 'function') updateDuesBadge();
+    }
+    if (options.renderInvoiceId && typeof _currentInvoiceJobId !== 'undefined' && _currentInvoiceJobId === options.renderInvoiceId && typeof openInvoice === 'function') {
+      openInvoice(options.renderInvoiceId);
+    }
+  });
+}
+
 function saveQuickInvoice(nextAction = 'close') {
   if (!requireCloudWriteAccess(nextAction === 'job-card' ? 'create jobs from quick invoice' : 'create quick invoices')) return;
   if (window._photoUploadBusy) { toast('Please wait for photo upload to finish'); return; }
@@ -1221,11 +1242,9 @@ function saveQuickInvoice(nextAction = 'close') {
     clearQuickInvoiceDraft();
     logAction('create', 'job', newJob.id, { customer: custName, quick: true, paid, source: 'quick-job-card' });
     saveAll({ domain: 'jobs' });
-    renderJobs();
-    if (typeof renderInvoices === 'function') renderInvoices();
-    pushGS();
     closeM('m-quick-invoice');
-    showPage?.('jobs');
+    if (typeof showPage === 'function') showPage('jobs', { forceRender: true });
+    else scheduleInvoiceSaveUiRefresh();
     toast(`Saved ${newJob.id} as job card`);
     return;
   }
@@ -1282,9 +1301,7 @@ function saveQuickInvoice(nextAction = 'close') {
   clearQuickInvoiceDraft();
   logAction('create', 'invoice', newJob.id, { invoiceNo, customer: custName, quick: true, paid });
   saveAll({ domain: 'invoice' });
-  renderJobs();
-  if (typeof renderInvoices === 'function') renderInvoices();
-  pushGS();
+  scheduleInvoiceSaveUiRefresh();
 
   if (nextAction === 'next') {
     resetQuickInvoiceForm({ focusCustomer: true, preserveMethod: true });
@@ -2374,6 +2391,7 @@ function savePayment() {
   }
   logAction('payment', 'job', j.id, { amount, discount, method, due: dueAfter, advance: advanceAfter });
   if (j.status === 'done') markOptimisticInvoice(j.id);
-  saveAll({ domain: 'payment' }); renderJobs(); pushGS();
+  saveAll({ domain: 'payment' });
+  scheduleInvoiceSaveUiRefresh();
   if (typeof updateDuesBadge === 'function') updateDuesBadge();
 }
