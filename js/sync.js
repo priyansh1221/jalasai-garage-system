@@ -85,6 +85,17 @@ let lastOptimisticSyncFailureToastAt = 0;
 let realtimeReconnectTimer = null;
 let realtimeReconnectAttempt = 0;
 let recentRefreshBusy = false;
+let recentSyncBusy = false;
+
+function beginRecentSyncWork() {
+  if (recentSyncBusy) return false;
+  recentSyncBusy = true;
+  return true;
+}
+
+function endRecentSyncWork() {
+  recentSyncBusy = false;
+}
 
 function showOptimisticSyncFailureToast(msg = '') {
   const now = Date.now();
@@ -1620,6 +1631,7 @@ function handleRealtimeShadowChange(config, payload) {
 async function refreshRecentCloudChanges(windowMs = VISIBILITY_GAP_FILL_MS, options = {}) {
   if (recentRefreshBusy || !cloudSessionActive || cloudSyncBusy || !cloudClient) return false;
   if (typeof navigator !== 'undefined' && navigator.onLine === false) return false;
+  if (!beginRecentSyncWork()) return false;
   const since = new Date(Date.now() - (parseInt(windowMs, 10) || VISIBILITY_GAP_FILL_MS)).toISOString();
   recentRefreshBusy = true;
   let changed = false;
@@ -1645,6 +1657,7 @@ async function refreshRecentCloudChanges(windowMs = VISIBILITY_GAP_FILL_MS, opti
     return false;
   } finally {
     recentRefreshBusy = false;
+    endRecentSyncWork();
   }
 }
 
@@ -1705,6 +1718,7 @@ function startRealtimeSync(client) {
 // Checks if any other device pushed after our last pull.
 async function checkAndPullIfStale(client) {
   if (!client) return;
+  if (!beginRecentSyncWork()) return;
   try {
     const { data } = await client
       .from('garage_sync_heartbeat')
@@ -1719,6 +1733,8 @@ async function checkAndPullIfStale(client) {
     if (remoteTs > localTs) pullGS({ quiet: true, allowEmpty: true, automatic: true, criticalOnly: true });
   } catch (err) {
     console.warn('[realtime] stale check failed', err);
+  } finally {
+    endRecentSyncWork();
   }
 }
 
