@@ -1568,7 +1568,7 @@ function tombstoneRealtimeItem(list, id, deletedAt = nowISO()) {
     : item);
 }
 
-function applyRealtimeShadowRecord(key, rawRecord, eventType = 'UPDATE') {
+function applyRealtimeShadowRecord(key, rawRecord, eventType = 'UPDATE', options = {}) {
   const record = { ...(rawRecord || {}) };
   if (!record.id && rawRecord?.sku && key === 'stock') record.id = rawRecord.sku;
   if (!record.id) return false;
@@ -1588,11 +1588,11 @@ function applyRealtimeShadowRecord(key, rawRecord, eventType = 'UPDATE') {
   } else {
     return false;
   }
-  markDataChanged(`realtime:${key}`);
+  if (!options.deferDataChanged) markDataChanged(`realtime:${key}`);
   return true;
 }
 
-function applyRealtimeShadowDelete(key, id, deletedAt = nowISO()) {
+function applyRealtimeShadowDelete(key, id, deletedAt = nowISO(), options = {}) {
   if (key === 'jobs') jobs = tombstoneRealtimeItem(jobs, id, deletedAt).map(normalizeJob);
   else if (key === 'stock') stock = tombstoneRealtimeItem(stock, id, deletedAt).map(normalizeStockItem);
   else if (key === 'customers') customers = tombstoneRealtimeItem(customers, id, deletedAt).map(normalizeCustomer);
@@ -1600,7 +1600,7 @@ function applyRealtimeShadowDelete(key, id, deletedAt = nowISO()) {
   else if (key === 'incomeEntries') incomeEntries = tombstoneRealtimeItem(incomeEntries, id, deletedAt).map(normalizeIncomeEntry);
   else if (key === 'mechanics') mechanics = tombstoneRealtimeItem(mechanics, id, deletedAt).map(normalizeMechanic);
   else return false;
-  markDataChanged(`realtime-delete:${key}`);
+  if (!options.deferDataChanged) markDataChanged(`realtime-delete:${key}`);
   return true;
 }
 
@@ -1613,22 +1613,35 @@ function refreshRealtimePages(key, pages = []) {
   if (key === 'jobs' && typeof updateStats === 'function') updateStats();
 }
 
-function handleRealtimeShadowChange(config, payload) {
+function refreshRealtimePagesBatch(keys = [], pages = []) {
+  const keyList = [...new Set(keys)];
+  const pageList = [...new Set(pages)];
+  if (typeof markAppTabsStale === 'function') markAppTabsStale(pageList);
+  const activePage = typeof currentPage !== 'undefined' ? currentPage : '';
+  if (activePage && pageList.includes(activePage) && typeof renderCurrentPage === 'function') {
+    renderCurrentPage({ forceRender: true });
+  }
+  if (keyList.includes('jobs') && typeof updateStats === 'function') updateStats();
+}
+
+function handleRealtimeShadowChange(config, payload, options = {}) {
   if (!config || !payload) return false;
   const row = payload.new || payload.old || {};
   if (row.device_id && row.device_id === syncMeta.deviceId) return true;
   if (syncMeta.pendingSync) return false;
   const deletedAt = payload.new?.deleted_at || (payload.eventType === 'DELETE' ? nowISO() : '');
   const id = payload.new?.id || payload.old?.id || payload.new?.record_data?.id || payload.old?.record_data?.id || '';
+  const applyOptions = { deferDataChanged: !!options.deferSideEffects };
   const applied = deletedAt
-    ? applyRealtimeShadowDelete(config.key, id, deletedAt)
-    : applyRealtimeShadowRecord(config.key, payload.new?.record_data || payload.old?.record_data, payload.eventType);
+    ? applyRealtimeShadowDelete(config.key, id, deletedAt, applyOptions)
+    : applyRealtimeShadowRecord(config.key, payload.new?.record_data || payload.old?.record_data, payload.eventType, applyOptions);
   if (!applied) return false;
   const remoteStamp = shadowTimestamp(row.source_updated_at || row.mirrored_at || '');
   if (remoteStamp) {
     syncMeta.lastPulledAt = nowISO();
     syncMeta.lastRemoteUpdatedAt = remoteStamp;
   }
+  if (options.deferSideEffects) return true;
   saveAll({ preserveUpdatedAt: true, skipSync: true, domain: config.key });
   refreshRealtimePages(config.key, config.pages || []);
   return true;
@@ -1641,6 +1654,8 @@ async function refreshRecentCloudChanges(windowMs = VISIBILITY_GAP_FILL_MS, opti
   const since = new Date(Date.now() - (parseInt(windowMs, 10) || VISIBILITY_GAP_FILL_MS)).toISOString();
   recentRefreshBusy = true;
   let changed = false;
+  const changedKeys = new Set();
+  const changedPages = new Set();
   try {
     for (const config of REALTIME_SHADOW_TABLES) {
       const { data, error } = await cloudClient
@@ -1654,10 +1669,18 @@ async function refreshRecentCloudChanges(windowMs = VISIBILITY_GAP_FILL_MS, opti
       for (let i = 0; i < rows.length; i += RECENT_REFRESH_CHUNK_SIZE) {
         const chunk = rows.slice(i, i + RECENT_REFRESH_CHUNK_SIZE);
         chunk.forEach(row => {
-          if (handleRealtimeShadowChange(config, { eventType: row.deleted_at ? 'DELETE' : 'UPDATE', new: row })) changed = true;
+          if (handleRealtimeShadowChange(config, { eventType: row.deleted_at ? 'DELETE' : 'UPDATE', new: row }, { deferSideEffects: true })) {
+            changed = true;
+            changedKeys.add(config.key);
+            (config.pages || []).forEach(page => changedPages.add(page));
+          }
         });
         if (i + RECENT_REFRESH_CHUNK_SIZE < rows.length) await yieldRecentRefreshChunk();
       }
+    }
+    if (changed) {
+      saveAll({ preserveUpdatedAt: true, skipSync: true, domains: [...changedKeys] });
+      refreshRealtimePagesBatch(changedKeys, changedPages);
     }
     if (changed && !options.quiet) updateGSStatus('Pulled recent cloud changes.');
     return changed;
