@@ -1493,6 +1493,7 @@
         <input class="finp" id="cloud-password" type="password" placeholder="Enter only when you want to sign in">
       </div>
       <div id="cloud-prefill-note" style="font-size:11px;color:var(--mut);margin-top:6px;">If project URL and anon key are already built into the app, staff only need email and password. Otherwise enter them once here.</div>
+      <div id="cloud-login-feedback" class="cloud-login-feedback" aria-live="polite"></div>
     </div>
     <div style="background:var(--sur2);border-radius:8px;padding:14px;margin-bottom:12px;">
       <div style="font-family:var(--fh);font-size:13px;margin-bottom:8px;">Setup Instructions</div>
@@ -1513,7 +1514,7 @@
       <input id="legacy-import" type="file" accept="application/json" style="display:none;" onchange="importLegacyBundle(this)">
     </div>
     <div class="mftr">
-      <button class="btn btn-p" style="flex:1" onclick="saveGS()">Connect & Sync</button>
+      <button class="btn btn-p" id="cloud-connect-btn" style="flex:1" onclick="saveGS()">Connect & Sync</button>
       <button class="btn btn-r" onclick="disconnectGS()">Disconnect</button>
       <button class="btn btn-g" onclick="closeM('m-gs')">Cancel</button>
     </div>

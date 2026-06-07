@@ -1018,6 +1018,38 @@ nav {
 
 /* ─── GS modal ────────────────────────────────────────── */
 .gs-form { background: var(--sur2); border-radius: 8px; padding: 14px; margin-bottom: 12px; }
+.cloud-login-feedback {
+  display: none;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--mut);
+  line-height: 1.4;
+}
+.cloud-login-feedback.show { display: flex; }
+.cloud-login-feedback.error { color: var(--dan); }
+.cloud-login-feedback.warn { color: var(--acc2); }
+.cloud-login-spinner {
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  border: 2px solid rgba(255,255,255,.18);
+  border-top-color: var(--acc);
+  flex: 0 0 auto;
+  animation: cloudLoginSpin .8s linear infinite;
+}
+@keyframes cloudLoginSpin {
+  to { transform: rotate(360deg); }
+}
+.btn.cloud-loading {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  opacity: .82;
+  pointer-events: none;
+}
 
 /* ─── Print media — invoice printing (portrait) ───────── */
 @media print {

@@ -1628,9 +1628,10 @@
       <div class="frow"><label class="flbl">Password</label>
         <input class="finp" id="cloud-password" type="password" placeholder="Enter only when you want to sign in">
       </div>
+      <div id="cloud-login-feedback" class="cloud-login-feedback" aria-live="polite"></div>
     </div>
     <div class="mftr">
-      <button class="btn btn-p" style="flex:1" onclick="saveGS()">Connect & Sync</button>
+      <button class="btn btn-p" id="cloud-connect-btn" style="flex:1" onclick="saveGS()">Connect & Sync</button>
       <button class="btn btn-r" onclick="disconnectGS()">Disconnect</button>
       <button class="btn btn-g" onclick="closeM('m-gs')">Cancel</button>
     </div>

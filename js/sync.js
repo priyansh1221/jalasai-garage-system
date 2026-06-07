@@ -247,6 +247,8 @@ async function quickSyncNow() {
 
 function openGS() {
   openM('m-gs');
+  setCloudConnectLoading(false);
+  setCloudLoginFeedback('');
   document.getElementById('gs-url').value = gsUrl;
   document.getElementById('cloud-key').value = cloudKey || '';
   document.getElementById('cloud-email').value = cloudEmail || '';
@@ -360,6 +362,53 @@ function syncErrMsg(err, fallback) {
     ? (err.message || err.error_description || err.details || err.hint)
     : fallback;
   return `${fallback}${msg && msg !== fallback ? ' (' + msg + ')' : ''}`;
+}
+
+function isAuthCredentialError(err) {
+  const raw = String(err?.message || err?.error_description || err?.details || err || '').toLowerCase();
+  return /invalid login|invalid credentials|email.*password|password.*invalid|invalid email|user not found|login credentials/i.test(raw);
+}
+
+function isCloudConfigFetchError(err) {
+  const raw = String(err?.message || err?.error_description || err?.details || err?.hint || err || '').toLowerCase();
+  return /failed to fetch|networkerror|network request failed|load failed|fetch failed|timeout|timed out|aborted/i.test(raw);
+}
+
+function cloudSetupFriendlyMessage(err, fallback = 'Cloud setup failed') {
+  if (isAuthCredentialError(err)) {
+    return 'Email or password is wrong. Please check and try again.';
+  }
+  if (isCloudConfigFetchError(err)) {
+    return 'Supabase project URL or anon/publishable key may be wrong, or Supabase is not responding.';
+  }
+  return syncErrMsg(err, fallback);
+}
+
+function setCloudLoginFeedback(message = '', options = {}) {
+  const el = document.getElementById('cloud-login-feedback');
+  if (!el) return;
+  const text = String(message || '').trim();
+  el.className = 'cloud-login-feedback';
+  if (!text) {
+    el.innerHTML = '';
+    return;
+  }
+  if (options.error) el.classList.add('error');
+  else if (options.warn) el.classList.add('warn');
+  el.classList.add('show');
+  el.innerHTML = `${options.loading ? '<span class="cloud-login-spinner" aria-hidden="true"></span>' : ''}<span>${text}</span>`;
+}
+
+function setCloudConnectLoading(loading, message = '') {
+  const btn = document.getElementById('cloud-connect-btn');
+  if (btn) {
+    btn.disabled = !!loading;
+    btn.classList.toggle('cloud-loading', !!loading);
+    btn.innerHTML = loading
+      ? '<span class="cloud-login-spinner" aria-hidden="true"></span><span>Connecting...</span>'
+      : 'Connect & Sync';
+  }
+  if (loading) setCloudLoginFeedback(message || 'Connecting to cloud...', { loading: true });
 }
 
 function canUseCloudConfig() {
@@ -1571,12 +1620,20 @@ async function signInCloud(password) {
   if (!client) throw new Error('Enter Supabase Project URL and anon key first');
   if (!cloudEmail) throw new Error('Enter your staff email');
   if (!password) throw new Error('Enter your password');
+  setCloudLoginFeedback('Checking email and password...', { loading: true });
 
   const { data, error } = await client.auth.signInWithPassword({
     email: cloudEmail,
     password,
   });
-  if (error) throw error;
+  if (error) {
+    if (isAuthCredentialError(error)) {
+      const friendly = new Error('Email or password is wrong. Please check and try again.');
+      friendly.code = 'INVALID_LOGIN_CREDENTIALS';
+      throw friendly;
+    }
+    throw error;
+  }
   cloudSessionActive = !!data.session;
   if (data.session?.user?.email) {
     cloudEmail = data.session.user.email;
@@ -1585,6 +1642,7 @@ async function signInCloud(password) {
   updateGSBadge();
   if (typeof refreshAccessControls === 'function') refreshAccessControls();
   updateGSStatus(`Signed in as ${cloudEmail}.`);
+  setCloudLoginFeedback('Signed in. Syncing latest cloud data...', { loading: true });
   return data.session;
 }
 
@@ -1868,28 +1926,37 @@ async function saveGS() {
     toast('Cloud sync is disabled', 2600);
     return;
   }
+  setCloudConnectLoading(true, 'Connecting to cloud...');
   try {
     persistCloudSettings();
     if (!canUseCloudConfig()) throw new Error('Enter Supabase Project URL and anon key');
 
     updateGSStatus('Checking cloud session...');
+    setCloudLoginFeedback('Checking cloud session...', { loading: true });
     const session = await ensureCloudSession();
     if (!session) {
       updateGSStatus('Project saved. Enter your password to sign in.');
+      setCloudLoginFeedback('Enter your email and password, then press Connect & Sync again.', { warn: true });
       toast('Project saved. Enter password to sign in.', 3600);
       return;
     }
 
+    setCloudLoginFeedback('Downloading latest cloud data...', { loading: true });
     const pulled = await pullGS({ quiet: false, allowEmpty: true });
     if (pulled === 'empty' || pulled === 'local-newer') {
+      setCloudLoginFeedback('Uploading local changes to cloud...', { loading: true });
       await pushGS({ quiet: false });
     }
     document.getElementById('cloud-password').value = '';
+    setCloudLoginFeedback('Cloud connected and synced.');
     closeM('m-gs');
   } catch (err) {
-    const msg = syncErrMsg(err, 'Cloud setup failed');
+    const msg = cloudSetupFriendlyMessage(err, 'Cloud setup failed');
     updateGSStatus(msg);
+    setCloudLoginFeedback(msg, { error: isAuthCredentialError(err), warn: !isAuthCredentialError(err) });
     toast(msg, 4200);
+  } finally {
+    setCloudConnectLoading(false);
   }
 }
 
