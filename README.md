@@ -63,6 +63,8 @@ Vanilla JS | Local-first architecture | Supabase cloud sync | PWA-ready | Real w
 - Complete architecture and function reference: [docs/ARCHITECTURE_AND_FUNCTION_REFERENCE.md](docs/ARCHITECTURE_AND_FUNCTION_REFERENCE.md)
 - Product journey: [PROJECT_HISTORY.md](PROJECT_HISTORY.md)
 - Release changes: [CHANGELOG.md](CHANGELOG.md)
+- Incident log: [docs/INCIDENTS.md](docs/INCIDENTS.md)
+- Latest cloud incident: [docs/SUPABASE_PROJECT_UNHEALTHY_INCIDENT_2026_06_07.md](docs/SUPABASE_PROJECT_UNHEALTHY_INCIDENT_2026_06_07.md)
 - Deployment setup: [DEPLOYMENT.md](DEPLOYMENT.md)
 - Build and operations: [OPERATIONS.md](OPERATIONS.md)
 - Implementation details: [IMPLEMENTATION.md](IMPLEMENTATION.md)

@@ -4,6 +4,14 @@ Last updated: 2026-06-07
 
 ## 2026-06-07
 
+### Supabase project unhealthy incident documentation
+
+- Documented the 2026-06-07 Supabase project unhealthy incident in `docs/SUPABASE_PROJECT_UNHEALTHY_INCIDENT_2026_06_07.md`.
+- Added `docs/INCIDENTS.md` as a central incident index.
+- Added an Operations runbook for the `Supabase project URL or anon/publishable key may be wrong, or Supabase is not responding.` warning.
+- Recorded the verified cause: Supabase project database connection path was unhealthy; restarting the Supabase database restored Auth, PostgREST, Storage, and Cloud Sync.
+- Clarified that valid Cloudflare runtime config and anon key were present, so Cloudflare/app deployment changes were not required for recovery.
+
 ### Save and stock-search freeze follow-up
 
 - Fixed foreground cloud-sync work after routine saves: stock, scan, and job save paths no longer call `pushGS()` directly after `saveAll()`.

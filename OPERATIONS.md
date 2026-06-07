@@ -1,6 +1,6 @@
 # JalaSai Garage System — Operations Guide
 
-Last updated: 2026-04-03
+Last updated: 2026-06-07
 
 Project history and implementation journey:
 - [PROJECT_HISTORY.md](/Users/priyansh/Projects/JalaSai/PROJECT_HISTORY.md)
@@ -311,6 +311,30 @@ Income is included in:
 - Jobs today revenue
 - Reports revenue totals
 - daily summary calculations
+
+## Cloud Sync Incident Response
+
+If `Connect & Sync` shows:
+
+```text
+Supabase project URL or anon/publishable key may be wrong, or Supabase is not responding.
+```
+
+Check Supabase Project Status before rotating Cloudflare keys.
+
+Project-side signs:
+- Database, Auth, PostgREST, or Storage show `Unhealthy`
+- Realtime logs mention `UnableToConnectToProject`, `UnableToConnectToTenantDatabase`, `DBConnection.ConnectionError`, or `connection not available`
+- missing/bogus API keys return fast `401` responses, but the real anon key hangs or times out
+
+Fast recovery:
+1. Restart the Supabase database from the dashboard.
+2. Wait 2-5 minutes.
+3. Confirm Database, Auth, PostgREST, and Storage are healthy.
+4. Retry `Connect & Sync`.
+
+Incident reference:
+- [docs/SUPABASE_PROJECT_UNHEALTHY_INCIDENT_2026_06_07.md](docs/SUPABASE_PROJECT_UNHEALTHY_INCIDENT_2026_06_07.md)
 
 ## Current Change History
 

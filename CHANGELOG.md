@@ -1,6 +1,16 @@
 # JalaSai Changelog
 
-Last updated: 2026-04-03
+Last updated: 2026-06-07
+
+## 2026-06-07
+
+### Supabase project unhealthy incident documentation
+
+- Added `docs/SUPABASE_PROJECT_UNHEALTHY_INCIDENT_2026_06_07.md` with symptoms, investigation, root cause, restart recovery, and prevention notes.
+- Added `docs/INCIDENTS.md` as the central incident index.
+- Updated Operations with a runbook for the cloud warning: `Supabase project URL or anon/publishable key may be wrong, or Supabase is not responding.`
+- Recorded that the incident was caused by the Supabase project database connection path becoming unhealthy, not by Cloudflare config or app code.
+- Confirmed restart of the Supabase database restored Auth, PostgREST, Storage, and Cloud Sync.
 
 ## 2026-04-03
 

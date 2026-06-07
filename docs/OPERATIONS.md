@@ -270,6 +270,42 @@ If diagnostics show a Table Sync Error:
 - blob remains readable as fallback for pull
 - rerun the latest [supabase/schema.sql](/Users/priyansh/Projects/JalaSai/supabase/schema.sql)
 
+### Supabase project unhealthy response
+
+If `Connect & Sync` shows a warning such as:
+
+```text
+Supabase project URL or anon/publishable key may be wrong, or Supabase is not responding.
+```
+
+Check the Supabase dashboard before rotating keys.
+
+Likely project-side incident signs:
+- Database, Auth, PostgREST, or Storage show `Unhealthy`
+- Realtime logs include `UnableToConnectToProject`, `UnableToConnectToTenantDatabase`, `DBConnection.ConnectionError`, or `connection not available`
+- requests with missing/bogus API keys fail quickly, but requests with the configured anon key hang or time out
+
+Fast recovery:
+1. Restart the Supabase database from the dashboard.
+2. Wait 2-5 minutes.
+3. Confirm Database, Auth, PostgREST, and Storage are healthy.
+4. Retry `Connect & Sync`.
+
+If the issue repeats, check database connections and connection limit:
+
+```sql
+select count(*) from pg_stat_activity;
+select datconnlimit from pg_database where datname = 'postgres';
+```
+
+`datconnlimit` should normally be `-1`. If it is not, reset it:
+
+```sql
+ALTER DATABASE postgres CONNECTION LIMIT DEFAULT;
+```
+
+Incident reference: [SUPABASE_PROJECT_UNHEALTHY_INCIDENT_2026_06_07.md](/Users/priyansh/Projects/JalaSai/docs/SUPABASE_PROJECT_UNHEALTHY_INCIDENT_2026_06_07.md)
+
 ## Customer Flow
 
 ### Customer cards

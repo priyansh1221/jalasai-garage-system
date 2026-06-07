@@ -96,6 +96,8 @@ Current app behavior:
 - Release changes: [CHANGELOG.md](/Users/priyansh/Projects/JalaSai/docs/CHANGELOG.md)
 - System data reference: [SYSTEM_DATA_MAP.md](/Users/priyansh/Projects/JalaSai/docs/SYSTEM_DATA_MAP.md)
 - Performance/data cleanup note: [PERFORMANCE_AND_DATA_CLEANUP_2026_05_01.md](/Users/priyansh/Projects/JalaSai/docs/PERFORMANCE_AND_DATA_CLEANUP_2026_05_01.md)
+- Incident log: [INCIDENTS.md](/Users/priyansh/Projects/JalaSai/docs/INCIDENTS.md)
+- Latest cloud incident: [SUPABASE_PROJECT_UNHEALTHY_INCIDENT_2026_06_07.md](/Users/priyansh/Projects/JalaSai/docs/SUPABASE_PROJECT_UNHEALTHY_INCIDENT_2026_06_07.md)
 - AI operating model: [AI_OPERATING_MODEL.md](/Users/priyansh/Projects/JalaSai/docs/AI_OPERATING_MODEL.md)
 - Deployment setup: [DEPLOYMENT.md](/Users/priyansh/Projects/JalaSai/docs/DEPLOYMENT.md)
 - Build and operations: [OPERATIONS.md](/Users/priyansh/Projects/JalaSai/docs/OPERATIONS.md)
