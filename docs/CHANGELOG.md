@@ -13,6 +13,7 @@ Last updated: 2026-06-07
 - Added newer-local-change protection so a cloud push finishing late does not clear a pending save made while the upload was in flight.
 - Added missing `updatedAt` stamps to stock quantity, scan, job-part, catalog-review, and agent-import mutations so IO-saver sync uploads the changed stock rows.
 - Cached stock list sorting, bike filters, and value totals per data version so stock search/filtering does less repeated work on large inventories.
+- Added a Cloudflare Pages runtime `/config.js` worker so Supabase URL/anon key can be set permanently with Wrangler/Cloudflare variables instead of being typed into the setup modal or committed into `js/cloud-config.js`.
 - Verification completed with JavaScript parse checks, whitespace checks, direct `pushGS()` call grep, and local static HTML fetch. Playwright/browser automation was unavailable in this thread.
 
 ## 2026-06-05

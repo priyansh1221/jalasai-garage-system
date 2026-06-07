@@ -25,9 +25,25 @@ Required pieces:
    - the old `garage_state` row/table path
    - the new shadow dataset tables used for gradual migration and validation
 3. Create owner/staff users in Supabase Auth.
-4. Configure [js/cloud-config.js](/Users/priyansh/Projects/JalaSai/js/cloud-config.js) for the deployment you are shipping.
-   Current runtime supports a built-in project URL, anon key, and admin email list for private deployments.
-5. If you are moving to a different Supabase project, update `js/cloud-config.js` before deploy.
+4. Configure Cloudflare Pages runtime variables for the deployment you are shipping.
+   Production reads `/config.js` from a Pages Worker, which injects values from Cloudflare without committing them to git.
+5. If you are moving to a different Supabase project, update the Cloudflare Pages variables before deploy.
+
+Cloudflare Pages variables:
+
+```bash
+npx wrangler pages secret put SUPABASE_URL --project-name jalasai-garage
+npx wrangler pages secret put SUPABASE_ANON_KEY --project-name jalasai-garage
+npx wrangler pages secret put JALASAI_ADMIN_EMAILS --project-name jalasai-garage
+```
+
+Use a comma-separated value for `JALASAI_ADMIN_EMAILS`, for example:
+
+```text
+1.priyannsh@gmail.com,jalasaiautogarage@gmail.com
+```
+
+The Supabase anon key is still delivered to the browser because Supabase browser clients require it. Keep Supabase Row Level Security and Auth policies correct, and never use the service-role key here.
 
 ## Static Hosting
 
@@ -52,11 +68,13 @@ Maintained runtime files:
 - [style.css](/Users/priyansh/Projects/JalaSai/style.css)
 - [sw.js](/Users/priyansh/Projects/JalaSai/sw.js)
 - [js](/Users/priyansh/Projects/JalaSai/js)
+- [cloudflare/pages-worker.js](/Users/priyansh/Projects/JalaSai/cloudflare/pages-worker.js)
 - [NEW UI/index.html](/Users/priyansh/Projects/JalaSai/NEW%20UI/index.html)
 - [NEW UI/style.css](/Users/priyansh/Projects/JalaSai/NEW%20UI/style.css)
 
 Current deploy package notes:
 - `/deploy/` is generated output only; do not edit or mirror files there by hand
+- `/deploy/_worker.js` serves `/config.js` from Cloudflare Pages environment values
 - the service worker cache is currently `jalasai-v49`
 - the root service worker caches both the old UI and `newui/`, so old/new UI switching stays warm
 - New UI loads shared runtime scripts from root `js/`

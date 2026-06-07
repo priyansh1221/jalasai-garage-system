@@ -10,7 +10,9 @@ mkdir -p deploy/newui
 
 rsync -a index.html style.css manifest.webmanifest sw.js assets icons js deploy/
 rsync -a "NEW UI/" deploy/newui/ --exclude js
-if [ -f config.js ]; then
+cp cloudflare/pages-worker.js deploy/_worker.js
+cp cloudflare/_routes.json deploy/_routes.json
+if [ "${JALASAI_DEPLOY_STATIC_CONFIG:-0}" = "1" ] && [ -f config.js ]; then
   cp config.js deploy/config.js
 fi
 
