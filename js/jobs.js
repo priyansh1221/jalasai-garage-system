@@ -2158,7 +2158,7 @@ function saveJob(options = {}) {
 
   clearJobDraft();
   closeM('m-job');
-  saveAll({ domain: 'jobs' }); renderJobs(); pushGS();
+  saveAll({ domain: 'jobs' }); renderJobs();
   if (shouldCreateInvoice && savedJob && !editJobId && typeof markDone === 'function') {
     markDone(savedJob.id);
     if (advance > 0) {
@@ -2192,7 +2192,10 @@ function addPartToJob(jobId, stockId, qty, useAs = '', unitPrice = null) {
   if (!j || !s) return false;
   const finalSellPrice = chosenPrice > 0 ? chosenPrice : stockSellPriceValue(s);
   if (chosenPrice > 0) setStockSellPrice(stockId, chosenPrice);
+  const stamp = nowISO();
   s.qty -= useQty;
+  s.updatedAt = stamp;
+  j.updatedAt = stamp;
   j.prt = (j.prt || 0) + finalSellPrice * useQty;
   j.partsUsed = Array.isArray(j.partsUsed) ? j.partsUsed : [];
   const existing = j.partsUsed.find(p =>
@@ -2222,7 +2225,6 @@ function addPartToJob(jobId, stockId, qty, useAs = '', unitPrice = null) {
   renderJobs();
   renderStock?.();
   renderPrintManager?.();
-  pushGS();
   if (s.qty < 0) {
     setTimeout(() => toast(`⚠ NEGATIVE STOCK: ${s.name} is now ${s.qty}`), 800);
   } else if (s.qty <= s.min) {

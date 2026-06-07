@@ -1,6 +1,19 @@
 # JalaSai Changelog
 
-Last updated: 2026-06-05
+Last updated: 2026-06-07
+
+## 2026-06-07
+
+### Save and stock-search freeze follow-up
+
+- Fixed foreground cloud-sync work after routine saves: stock, scan, and job save paths no longer call `pushGS()` directly after `saveAll()`.
+- Added domain-scoped auto-sync so invoice/job saves mirror job-related Supabase shadow tables and stock saves mirror stock-related tables instead of rebuilding every table on the browser main thread.
+- Added short yields during shadow-table mirror preparation so background sync gives the browser event loop time between table batches.
+- Preserved the local-first save behavior: data is still written locally immediately, while cloud upload continues through queued background sync.
+- Added newer-local-change protection so a cloud push finishing late does not clear a pending save made while the upload was in flight.
+- Added missing `updatedAt` stamps to stock quantity, scan, job-part, catalog-review, and agent-import mutations so IO-saver sync uploads the changed stock rows.
+- Cached stock list sorting, bike filters, and value totals per data version so stock search/filtering does less repeated work on large inventories.
+- Verification completed with JavaScript parse checks, whitespace checks, direct `pushGS()` call grep, and local static HTML fetch. Playwright/browser automation was unavailable in this thread.
 
 ## 2026-06-05
 

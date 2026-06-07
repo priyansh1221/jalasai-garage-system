@@ -263,6 +263,30 @@ No schema, auth, or layout-level redesign changes were made.
 
 After the v49 refresh-critical-path patch, local browser testing was stopped at operator request. Completed checks were limited to JavaScript parse checks and source/deploy mirror parity. Live-site verification still requires a successful Cloudflare deploy; the current local environment previously returned Cloudflare authentication error code `10000`.
 
+## 2026-06-07 Save/Sync Freeze Follow-Up
+
+Staff reported that saving invoices or stock could freeze the browser for around 10 seconds, tab switching was blocked while loading/saving, and stock search sometimes paused badly on both phone and desktop.
+
+The confirmed code-level problem was that routine save flows were still starting foreground cloud work. `saveAll()` already queued auto-sync, but several stock/job/scan paths immediately called `pushGS()` in the same click handler. `pushGS()` is async for network I/O, but before its awaits it still builds and hashes shadow-table rows on the browser main thread. A single stock save could therefore prepare jobs, payments, customers, audit, catalog, stock movements, and other tables before the browser could respond.
+
+The 2026-06-07 patch changed routine saves to stay local-first:
+
+- `saveAll()` now passes its changed domain to `queueAutoSync()`.
+- auto-sync accumulates domain scopes and passes relevant shadow-table keys into `pushGS()`.
+- routine auto pushes mirror only the affected table group; manual/full sync can still mirror the full dataset.
+- shadow-table mirroring yields between table preparations so the browser can process UI work.
+- stock/job/scan save paths no longer call `pushGS()` directly after local save/render.
+- stock mutations now stamp `updatedAt`, allowing IO-saver sync to pick up the exact changed rows.
+- stock search reuses cached sorted rows, bike filter options, and total stock value until the data version changes.
+
+Verification completed in the local environment:
+
+- `node --check` passed for `js/data.js`, `js/sync.js`, `js/stock.js`, `js/jobs.js`, and `js/scanner.js`.
+- `git diff --check` passed.
+- grep confirmed normal stock/job/scan modules no longer call `pushGS()` directly.
+- local static serving returned `200 OK` for the app shell.
+- Playwright/browser automation was not available in this thread, so live browser interaction still needs post-deploy device verification.
+
 ## Brave Verification
 
 Local test target:

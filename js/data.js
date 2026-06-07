@@ -496,7 +496,9 @@ function saveAll(options = {}) {
       }
     }
     if (typeof renderSyncDiagnostics === 'function') renderSyncDiagnostics();
-    if (!options.skipSync && typeof queueAutoSync === 'function') queueAutoSync();
+    if (!options.skipSync && typeof queueAutoSync === 'function') {
+      queueAutoSync({ domain: options.domain, domains: options.domains });
+    }
   } catch(e) { console.warn('localStorage save failed', e); }
 }
 

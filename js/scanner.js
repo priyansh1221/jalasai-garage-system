@@ -370,6 +370,7 @@ function confirmUse(sid) {
     const s = stock.find(x => x.id === sid);
     if (!s) return;
     s.qty = Math.max(0, s.qty - qty);
+    s.updatedAt = nowISO();
     for (let i = 0; i < qty; i++) {
       partsLog.push({ part: s.name, sku: s.sku, time: new Date().toLocaleTimeString('en-IN', { hour:'2-digit', minute:'2-digit' }), date: today() });
     }
@@ -377,7 +378,6 @@ function confirmUse(sid) {
     saveAll({ domain: 'stock' });
     renderStock?.();
     renderPrintManager?.();
-    pushGS();
     toast(`${qty}× ${s.name} used — stock: ${s.qty}`);
   }
   closeM('m-scan-result');

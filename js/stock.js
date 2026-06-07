@@ -10,6 +10,7 @@ let stockRowOrderKey = '';
 const STOCK_VIRTUAL_ROW_HEIGHT = 74;
 const STOCK_VIRTUAL_ROW_COUNT = 25;
 let stockVirtualState = { start: -1, total: 0, version: '', raf: 0 };
+let stockListCache = { version: '', live: [], sorted: [], bikes: [], totalValue: 0 };
 
 function resetStockVirtualRows() {
   if (stockVirtualState.raf) {
@@ -229,29 +230,44 @@ function syncStockRows(tbody, liveStock) {
   }
 }
 
-function filteredStockRows(stateStock, indexedQuery) {
-  return stateStock
-    .filter(isLiveStockItem)
+function stockListData(stateStock) {
+  const version = [
+    window.__JALASAI_DATA_VERSION || 0,
+    Array.isArray(stateStock) ? stateStock.length : 0,
+  ].join('|');
+  if (stockListCache.version === version) return stockListCache;
+  const live = (Array.isArray(stateStock) ? stateStock : []).filter(isLiveStockItem);
+  stockListCache = {
+    version,
+    live,
+    sorted: live.slice().sort((left, right) => String(left.name || '').localeCompare(String(right.name || ''))),
+    bikes: [...new Set(live.map(s => s.bike).filter(Boolean))].sort(),
+    totalValue: live.reduce((a, s) => a + s.qty * (s.cost || 0), 0),
+  };
+  return stockListCache;
+}
+
+function filteredStockRows(stockData, indexedQuery) {
+  return stockData.sorted
     .filter(item =>
       (!indexedQuery || String(item._searchText || '').includes(indexedQuery))
       && (!stF.cat  || item.cat  === stF.cat)
       && (!stF.st   || stSt(item) === stF.st)
-      && (!stF.bike || item.bike === stF.bike))
-    .sort((left, right) => String(left.name || '').localeCompare(String(right.name || '')));
+      && (!stF.bike || item.bike === stF.bike));
 }
 
 function renderStockTable() {
   const q = String(stF.q || '').trim();
   const indexedQuery = normalizeStockSearchText(q);
   const stateStock = window.appState?.stock || stock;
-  const fil = filteredStockRows(stateStock, indexedQuery);
+  const stockData = stockListData(stateStock);
+  const fil = filteredStockRows(stockData, indexedQuery);
 
   // Update bike filter options
   const bikeSel = document.getElementById('st-bike');
   if (bikeSel) {
     const cur = bikeSel.value;
-    const bikes = [...new Set(stateStock.filter(isLiveStockItem).map(s => s.bike))].sort();
-    bikeSel.innerHTML = '<option value="">All bikes</option>' + bikes.map(b => `<option value="${b}"${b===cur?' selected':''}>${b}</option>`).join('');
+    bikeSel.innerHTML = '<option value="">All bikes</option>' + stockData.bikes.map(b => `<option value="${b}"${b===cur?' selected':''}>${b}</option>`).join('');
     bikeSel.value = cur;
   }
 
@@ -260,9 +276,8 @@ function renderStockTable() {
   renderVirtualStockRows(fil);
 
   // Stock value summary
-  const totalVal = stateStock.filter(isLiveStockItem).reduce((a, s) => a + s.qty * (s.cost || 0), 0);
   const el = document.getElementById('stock-value');
-  if (el) el.textContent = 'Stock Value: ' + fmtMoney(totalVal);
+  if (el) el.textContent = 'Stock Value: ' + fmtMoney(stockData.totalValue);
   const pagerEl = document.getElementById('stock-pager');
   if (pagerEl) pagerEl.textContent = fil.length ? `1-${Math.min(STOCK_VIRTUAL_ROW_COUNT, fil.length)} of ${fil.length} parts` : '0 parts';
 }
@@ -327,7 +342,9 @@ function adj(id, d) {
   if (!requireCloudWriteAccess('update stock')) return;
   const s = stock.find(x => x.id === id && isLiveStockItem(x));
   if (!s) return;
+  const stamp = nowISO();
   s.qty = Math.max(0, s.qty + d);
+  s.updatedAt = stamp;
   logAction('update', 'stock', id, { qty: s.qty, delta: d });
   if (d < 0) {
     partsLog.push({ part: s.name, sku: s.sku, time: new Date().toLocaleTimeString('en-IN', {hour:'2-digit',minute:'2-digit'}), date: today() });
@@ -336,7 +353,7 @@ function adj(id, d) {
   } else {
     toast(s.name + ' restocked → ' + s.qty);
   }
-  saveAll({ domain: 'stock' }); renderStockTable(); pushGS();
+  saveAll({ domain: 'stock' }); renderStockTable();
 }
 
 function orderPart(id) {
@@ -434,6 +451,7 @@ function receivePartQty(id, qty) {
   const s = stock.find(x => x.id === id);
   if (!s) return;
   const add = Math.max(1, parseInt(qty, 10) || 0);
+  s.updatedAt = nowISO();
   s.qty += add;
   logAction('update', 'stock', id, { qty: s.qty, delta: add, source: 'receive-stock' });
   markPartForRecentPrint?.(id);
@@ -441,7 +459,6 @@ function receivePartQty(id, qty) {
   saveAll({ domain: 'stock' });
   renderStock();
   renderPrintManager?.();
-  pushGS();
 }
 
 function renderStockReceiveFound(s, scannedRaw = '') {
@@ -535,6 +552,7 @@ function savePart() {
     photo: photos[0] || '',
     lastPurchaseRate: buyPrice,
     lastSellPrice: sellPrice,
+    updatedAt: nowISO(),
   });
 
   if (editPartId) {
@@ -562,7 +580,7 @@ function savePart() {
     markPartForRecentPrint?.(part.id);
     toast('Part added: ' + name);
   }
-  closeM('m-part'); saveAll({ domain: 'stock' }); renderStock(); renderPrintManager?.(); pushGS();
+  closeM('m-part'); saveAll({ domain: 'stock' }); renderStock(); renderPrintManager?.();
 }
 
 const SUPPLIER_IMPORT_REPLACEMENTS = [
@@ -963,7 +981,6 @@ function confirmCatalogReviewRow() {
   saveAll({ domain: 'catalog' });
   renderStock();
   renderPrintManager?.();
-  pushGS();
   toast(importResult.action === 'created' ? 'Part added to stock and ready in search' : 'Part updated in stock and ready in search', 2600);
   renderCatalogReviewStep();
 }
@@ -1070,7 +1087,6 @@ function applyCatalogReviewImport() {
   saveAll({ domain: 'catalog' });
   renderStock();
   renderPrintManager?.();
-  pushGS();
   const declined = catalogImportSession.declined.length;
   const reviewLater = catalogImportSession.reviewLater.length;
   clearSavedCatalogReviewSession();
@@ -1079,6 +1095,7 @@ function applyCatalogReviewImport() {
 }
 
 function upsertCatalogReviewItem(item) {
+  const stamp = nowISO();
   let existing = null;
   if (item.importedStockId) {
     existing = stock.find(entry => entry.id === item.importedStockId) || null;
@@ -1115,6 +1132,7 @@ function upsertCatalogReviewItem(item) {
     previousSellPrice: existing ? (parseFloat(existing.sellPrice || 0) || 0) : 0,
     location: existing?.location || '',
     sup: existing?.sup || '',
+    updatedAt: stamp,
   });
 
   if (existing) {
@@ -1162,7 +1180,6 @@ function rollbackCatalogReviewSession() {
   saveAll({ domain: 'catalog' });
   renderStock();
   renderPrintManager?.();
-  pushGS();
 }
 
 function setCatalogImportMode(mode) {
@@ -1361,7 +1378,6 @@ function importAgentJsonFile(input) {
       toast(`Imported ${summary.created} new and updated ${summary.updated} existing parts.`);
       renderStock();
       renderPrintManager?.();
-      pushGS();
     } catch (err) {
       toast((err && err.message) ? err.message : 'Agent JSON import failed', 4200);
     } finally {
@@ -1402,6 +1418,7 @@ function ingestAgentStockJson(raw, options = {}) {
       ...normalized,
       previousBuyPrice: 0,
       previousSellPrice: 0,
+      updatedAt: nowISO(),
     };
     stock.push(part);
     stockMovements.unshift({
@@ -1577,9 +1594,11 @@ function findStockMatchForAgentImport(item) {
 }
 
 function restockFromAgentImport(existing, incoming, context = {}) {
+  const stamp = nowISO();
   const prevBuy = parseFloat(existing.cost || 0) || 0;
   const prevSell = parseFloat(existing.sellPrice || 0) || 0;
   existing.qty = Math.max(0, parseFloat(existing.qty || 0) || 0) + incoming.qty;
+  existing.updatedAt = stamp;
   existing.previousBuyPrice = incoming.cost && incoming.cost !== prevBuy ? prevBuy : (existing.previousBuyPrice || 0);
   existing.previousSellPrice = incoming.sellPrice && incoming.sellPrice !== prevSell ? prevSell : (existing.previousSellPrice || 0);
   if (incoming.cost) existing.cost = incoming.cost;
@@ -1606,7 +1625,7 @@ function restockFromAgentImport(existing, incoming, context = {}) {
     source: 'agent-json-import',
     sourceId: context.invoiceLabel || '',
     supplier: '',
-    createdAt: nowISO(),
+    createdAt: stamp,
   });
   logAction('update', 'stock', existing.id, {
     source: 'agent-json-import',

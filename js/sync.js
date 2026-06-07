@@ -65,6 +65,28 @@ const REALTIME_SHADOW_TABLES = Object.freeze([
   { key: 'mechanics', table: 'garage_mechanics', pages: ['mechanics', 'jobs', 'reports'] },
 ]);
 
+const SYNC_DOMAIN_TABLE_KEYS = Object.freeze({
+  jobs: ['jobs', 'jobPayments', 'customers', 'partsLog', 'auditLog'],
+  job: ['jobs', 'jobPayments', 'customers', 'partsLog', 'auditLog'],
+  invoices: ['jobs', 'jobPayments', 'customers', 'auditLog'],
+  invoice: ['jobs', 'jobPayments', 'customers', 'auditLog'],
+  payments: ['jobs', 'jobPayments', 'customers', 'auditLog'],
+  payment: ['jobs', 'jobPayments', 'customers', 'auditLog'],
+  stock: ['stock', 'partsLog', 'stockMovements', 'auditLog'],
+  catalog: ['stock', 'reviewItems', 'importBatches', 'purchaseEntries', 'stockMovements', 'supplierCatalogMap', 'invoiceImportReviews', 'auditLog'],
+  customers: ['customers', 'auditLog'],
+  customer: ['customers', 'auditLog'],
+  reminders: ['customers', 'auditLog'],
+  reminder: ['customers', 'auditLog'],
+  expenses: ['expenses', 'auditLog'],
+  expense: ['expenses', 'auditLog'],
+  income: ['incomeEntries', 'auditLog'],
+  mechanics: ['mechanics', 'auditLog'],
+  mechanic: ['mechanics', 'auditLog'],
+  logs: ['auditLog'],
+  audit: ['auditLog'],
+});
+
 // Pull tables — same as SHADOW_SYNC_TABLES but excludes derived jobPayments table
 const SHADOW_PULL_TABLES = Object.freeze(
   SHADOW_SYNC_TABLES.filter(c => c.key !== 'jobPayments')
@@ -88,6 +110,8 @@ let realtimeReconnectTimer = null;
 let realtimeReconnectAttempt = 0;
 let recentRefreshBusy = false;
 let recentSyncBusy = false;
+let pendingAutoSyncTableKeys = new Set();
+let pendingAutoSyncFullScope = false;
 
 function beginRecentSyncWork() {
   if (recentSyncBusy) return false;
@@ -101,6 +125,53 @@ function endRecentSyncWork() {
 
 function yieldRecentRefreshChunk() {
   return new Promise(resolve => setTimeout(resolve, 0));
+}
+
+function syncTableKeysForDomains(domainInput) {
+  if (!domainInput) return null;
+  const requested = Array.isArray(domainInput) ? domainInput : String(domainInput).split(/[,\s]+/);
+  const keys = new Set();
+  for (const raw of requested) {
+    const domain = String(raw || '').trim();
+    if (!domain) continue;
+    const mapped = SYNC_DOMAIN_TABLE_KEYS[domain];
+    if (!mapped) return null;
+    mapped.forEach(key => keys.add(key));
+  }
+  return keys.size ? keys : null;
+}
+
+function rememberAutoSyncScope(options = {}) {
+  const domainInput = options.domains || options.domain;
+  if (!domainInput) {
+    if (!pendingAutoSyncFullScope && !pendingAutoSyncTableKeys.size) pendingAutoSyncFullScope = true;
+    return;
+  }
+  const keys = syncTableKeysForDomains(domainInput);
+  if (!keys) {
+    pendingAutoSyncFullScope = true;
+    pendingAutoSyncTableKeys.clear();
+    return;
+  }
+  if (pendingAutoSyncFullScope) return;
+  keys.forEach(key => pendingAutoSyncTableKeys.add(key));
+}
+
+function consumeAutoSyncScope() {
+  const tableKeys = pendingAutoSyncFullScope ? null : [...pendingAutoSyncTableKeys];
+  pendingAutoSyncFullScope = false;
+  pendingAutoSyncTableKeys.clear();
+  return tableKeys && tableKeys.length ? tableKeys : null;
+}
+
+function restoreAutoSyncScope(tableKeys) {
+  if (!Array.isArray(tableKeys) || !tableKeys.length) {
+    pendingAutoSyncFullScope = true;
+    pendingAutoSyncTableKeys.clear();
+    return;
+  }
+  if (pendingAutoSyncFullScope) return;
+  tableKeys.forEach(key => pendingAutoSyncTableKeys.add(key));
 }
 
 function showOptimisticSyncFailureToast(msg = '') {
@@ -783,13 +854,16 @@ function isCustomerShapedRaw(raw) {
 }
 // --- END PATCH ---
 
-function buildCustomerShadowRows(payload, session) {
-  const jobsList = shadowNormalizedJobs(payload);
+function buildCustomerShadowRows(payload, session, options = {}) {
+  const skipDerivedBalances = !!options.skipDerivedBalances;
+  const jobsList = skipDerivedBalances ? [] : shadowNormalizedJobs(payload);
   return normaliseArray(payload?.customers)
     .filter(raw => raw && !String(raw.deletedAt || '').trim() && String(raw.name || '').trim() && isCustomerShapedRaw(raw))
     .map(raw => {
       const item = normalizeCustomer(raw);
-      const balance = shadowCustomerBalance(item, jobsList);
+      const balance = skipDerivedBalances
+        ? { state: 'clear', amount: 0 }
+        : shadowCustomerBalance(item, jobsList);
       const id = String(item.id || item.phone || item.name || shadowSyntheticId('cust', item)).trim();
       return {
         ...shadowBaseRow(id, item, session),
@@ -1200,15 +1274,25 @@ function shadowMirrorErrorMessage(err) {
 async function mirrorPayloadToShadowTables(client, payload, session, options = {}) {
   ensureShadowValidationWindow();
   const validationActive = !IO_SAVER_SYNC && shadowValidationWindowActive();
+  const tableKeyFilter = Array.isArray(options.tableKeys) && options.tableKeys.length && !options.fullMirror
+    ? new Set(options.tableKeys)
+    : null;
+  const tablesToMirror = tableKeyFilter
+    ? SHADOW_SYNC_TABLES.filter(config => tableKeyFilter.has(config.key))
+    : SHADOW_SYNC_TABLES;
   const results = [];
 
-  for (const config of SHADOW_SYNC_TABLES) {
-    const builtRows = config.buildRows(payload, session);
+  for (const config of tablesToMirror) {
+    await yieldRecentRefreshChunk();
+    const builtRows = config.buildRows(payload, session, {
+      skipDerivedBalances: !!tableKeyFilter && IO_SAVER_SYNC,
+    });
     const deduped = dedupeShadowRows(builtRows);
     const expectedRows = deduped.rows;
     let remoteMeta = null;
     let upserts = ioSaverRowsForPush(expectedRows, options);
     let deletes = [];
+    await yieldRecentRefreshChunk();
 
     if (!IO_SAVER_SYNC || options.fullMirror) {
       remoteMeta = await fetchShadowRemoteMeta(client, config.table);
@@ -1512,8 +1596,9 @@ async function ensureCloudSession() {
   return signInCloud(pw);
 }
 
-function queueAutoSync() {
+function queueAutoSync(options = {}) {
   if (!canUseCloudConfig()) return;
+  rememberAutoSyncScope(options);
   if (typeof navigator !== 'undefined' && navigator.onLine === false) {
     syncMeta.lastSyncError = 'Offline: local changes are safe on this device and will sync later.';
     localStorage.setItem(SK.syncMeta, JSON.stringify(syncMeta));
@@ -1523,11 +1608,17 @@ function queueAutoSync() {
   }
   clearTimeout(cloudSyncTimer);
   cloudSyncTimer = setTimeout(async () => {
-    const result = await pushGS({ quiet: true });
+    const tableKeys = consumeAutoSyncScope();
+    const result = await pushGS({ quiet: true, tableKeys });
     if (result === 'busy') {
+      restoreAutoSyncScope(tableKeys);
       clearTimeout(cloudSyncTimer);
-      cloudSyncTimer = setTimeout(() => { pushGS({ quiet: true }); }, AUTO_PUSH_BUSY_RETRY_MS);
+      cloudSyncTimer = setTimeout(() => {
+        const retryTableKeys = consumeAutoSyncScope();
+        pushGS({ quiet: true, tableKeys: retryTableKeys });
+      }, AUTO_PUSH_BUSY_RETRY_MS);
     } else if (result === false && syncMeta.lastSyncError) {
+      restoreAutoSyncScope(tableKeys);
       showOptimisticSyncFailureToast(syncMeta.lastSyncError);
       updateQuickSyncButton();
     }
@@ -2214,9 +2305,11 @@ async function pushGS(options = {}) {
   updateGSStatus('Sending latest data to cloud tables...');
 
   try {
+    await yieldRecentRefreshChunk();
     // Primary write path: shadow tables
     const localPayload = buildSyncPayload();
     localPayload.meta.updatedAt = nowISO();
+    await yieldRecentRefreshChunk();
     const syncedJobIds = new Set(
       (localPayload.jobs || []).map(j => j.id).filter(Boolean)
     );
@@ -2241,6 +2334,7 @@ async function pushGS(options = {}) {
     try {
       shadowResult = await mirrorPayloadToShadowTables(client, localPayload, session, {
         fullMirror: !!options.fullMirror,
+        tableKeys: options.tableKeys,
       });
       // Beat the heartbeat: tell all other devices data changed.
       // Non-fatal — realtime is a best-effort notification layer.
@@ -2274,14 +2368,23 @@ async function pushGS(options = {}) {
       }
     }
 
-    syncMeta.lastPushedAt = nowISO();
-    syncMeta.updatedAt = localPayload.meta.updatedAt;
-    syncMeta.lastCloudUploadAt = nowISO();
-    syncMeta.lastRemoteUpdatedAt = nowISO();
+    const pushedAt = nowISO();
+    const newerLocalChange = (Date.parse(syncMeta.updatedAt || 0) || 0) > (Date.parse(localPayload.meta.updatedAt || 0) || 0);
+    syncMeta.lastPushedAt = pushedAt;
+    syncMeta.lastCloudUploadAt = pushedAt;
+    syncMeta.lastRemoteUpdatedAt = pushedAt;
     syncMeta.lastMergeSummary = '';
-    syncMeta.pendingSync = false;
-    syncMeta.pendingSince = '';
-    syncMeta.lastSyncError = '';
+    if (!newerLocalChange) {
+      syncMeta.updatedAt = localPayload.meta.updatedAt;
+      syncMeta.pendingSync = false;
+      syncMeta.pendingSince = '';
+      syncMeta.lastSyncError = '';
+    } else {
+      syncMeta.pendingSync = true;
+      syncMeta.pendingSince = syncMeta.pendingSince || syncMeta.updatedAt || nowISO();
+      syncMeta.lastSyncError = '';
+      queueAutoSync({ domain: options.domain, domains: options.domains });
+    }
     localStorage.setItem(SK.syncMeta, JSON.stringify(syncMeta));
     let clearedOptimisticInvoice = false;
     syncedJobIds.forEach(id => {
