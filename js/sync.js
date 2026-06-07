@@ -16,6 +16,7 @@ const AUTO_PUSH_DELAY_MS = 8000;
 const AUTO_PUSH_BUSY_RETRY_MS = 60000;
 const REALTIME_PULL_DEBOUNCE_MS = 12000;
 const BACKGROUND_SYNC_INTERVAL_MS = 5 * 60 * 1000;
+const RECENT_REFRESH_CHUNK_SIZE = 10;
 const OPTIMISTIC_SYNC_FAILURE_TOAST_COOLDOWN_MS = 60 * 1000;
 const REALTIME_RECONNECT_DELAYS_MS = Object.freeze([2000, 4000, 8000, 30000]);
 const RECENT_CLOUD_REFRESH_WINDOW_MS = 2 * 60 * 1000;
@@ -96,6 +97,10 @@ function beginRecentSyncWork() {
 
 function endRecentSyncWork() {
   recentSyncBusy = false;
+}
+
+function yieldRecentRefreshChunk() {
+  return new Promise(resolve => setTimeout(resolve, 0));
 }
 
 function showOptimisticSyncFailureToast(msg = '') {
@@ -1645,10 +1650,14 @@ async function refreshRecentCloudChanges(windowMs = VISIBILITY_GAP_FILL_MS, opti
         .order('source_updated_at', { ascending: true })
         .limit(200);
       if (error) throw error;
-      (data || []).forEach(row => {
-        if (row.device_id && row.device_id === syncMeta.deviceId) return;
-        if (handleRealtimeShadowChange(config, { eventType: row.deleted_at ? 'DELETE' : 'UPDATE', new: row })) changed = true;
-      });
+      const rows = (data || []).filter(row => !(row.device_id && row.device_id === syncMeta.deviceId));
+      for (let i = 0; i < rows.length; i += RECENT_REFRESH_CHUNK_SIZE) {
+        const chunk = rows.slice(i, i + RECENT_REFRESH_CHUNK_SIZE);
+        chunk.forEach(row => {
+          if (handleRealtimeShadowChange(config, { eventType: row.deleted_at ? 'DELETE' : 'UPDATE', new: row })) changed = true;
+        });
+        if (i + RECENT_REFRESH_CHUNK_SIZE < rows.length) await yieldRecentRefreshChunk();
+      }
     }
     if (changed && !options.quiet) updateGSStatus('Pulled recent cloud changes.');
     return changed;
