@@ -278,6 +278,45 @@ const SK = {
   bootCleanupVersion: 'js_boot_cleanup_version',
 };
 
+const LOCAL_SIGN_OUT_STORAGE_KEYS = Object.freeze([
+  SK.jobs,
+  SK.stock,
+  SK.customers,
+  SK.mechanics,
+  SK.expenses,
+  SK.incomeEntries,
+  SK.partsLog,
+  SK.auditLog,
+  SK.reviewItems,
+  SK.importBatches,
+  SK.purchaseEntries,
+  SK.stockMovements,
+  SK.supplierCatalogMap,
+  SK.invoiceImportReviews,
+  SK.jobCtr,
+  SK.invoiceCtr,
+  SK.cloudEmail,
+  SK.syncMeta,
+  SK.lastPullAt,
+  SK.followupStartDate,
+  SK.localBackupLatest,
+  SK.bootCleanupVersion,
+  'js_sync_backup_before_pull',
+  'js_catalog_import_session',
+  'jala_job_draft_v1:new',
+  'jala_quick_invoice_draft_v1',
+  'jala_last_payment_method_v1',
+  'jala_last_page_v1',
+  'jala_reports_access_v1',
+]);
+
+const LOCAL_SIGN_OUT_STORAGE_PREFIXES = Object.freeze([
+  'jala_job_draft_v1:',
+  'jala_invoice_draft_v1:',
+  'sb-',
+  'supabase.',
+]);
+
 const SAVE_DOMAIN_KEYS = Object.freeze({
   jobs: ['jobs', 'customers', 'partsLog', 'auditLog', 'jobCtr', 'invoiceCtr'],
   job: ['jobs', 'customers', 'partsLog', 'auditLog', 'jobCtr', 'invoiceCtr'],
@@ -550,6 +589,52 @@ function loadAll() {
   if (!localStorage.getItem(SK.followupStartDate)) localStorage.setItem(SK.followupStartDate, followupStartDate);
   markDataChanged('load');
   scheduleDataMaintenanceCleanup({ delayMs: 20000 });
+}
+
+function clearLocalDeviceDataAfterSignOut() {
+  LOCAL_SIGN_OUT_STORAGE_KEYS.forEach(key => {
+    try { localStorage.removeItem(key); } catch (_) {}
+  });
+  try {
+    Object.keys(localStorage).forEach(key => {
+      if (LOCAL_SIGN_OUT_STORAGE_PREFIXES.some(prefix => key.startsWith(prefix))) {
+        localStorage.removeItem(key);
+      }
+    });
+  } catch (_) {}
+
+  jobs = [];
+  stock = [];
+  customers = [];
+  mechanics = [];
+  expenses = [];
+  incomeEntries = [];
+  partsLog = [];
+  auditLog = [];
+  reviewItems = [];
+  importBatches = [];
+  purchaseEntries = [];
+  stockMovements = [];
+  supplierCatalogMap = [];
+  invoiceImportReviews = [];
+  jobCtr = 9;
+  invoiceCtr = 1;
+  followupStartDate = today();
+  syncMeta = {
+    ...DEFAULT_SYNC_META,
+    deviceId: 'dev-' + Math.random().toString(36).slice(2, 10),
+    adminEmails: normalizedAdminEmailList([], CLOUD_DEFAULTS.adminEmails),
+  };
+
+  markDataChanged('sign-out-clear');
+  if (window.__JALASAI_OPTIMISTIC_INVOICES instanceof Set) {
+    window.__JALASAI_OPTIMISTIC_INVOICES.clear();
+  }
+  if (typeof clearAllPaginationState === 'function') clearAllPaginationState();
+  if (typeof renderCurrentPage === 'function') {
+    try { renderCurrentPage({ forceRender: true }); } catch (err) { console.warn('sign-out clear render failed', err); }
+  }
+  if (typeof renderSyncDiagnostics === 'function') renderSyncDiagnostics();
 }
 
 function dataMaintenanceCleanupDone() {

@@ -1524,8 +1524,8 @@ function clearCloudSettings() {
   cloudClient = null;
   cloudSessionActive = false;
   cloudAuthBound = false;
-  if (gsUrl) localStorage.setItem(SK.gsUrl, gsUrl);
-  if (cloudKey) localStorage.setItem(SK.cloudKey, cloudKey);
+  localStorage.removeItem(SK.gsUrl);
+  localStorage.removeItem(SK.cloudKey);
   localStorage.removeItem(SK.cloudEmail);
   clearLastPullAt();
   updateGSBadge();
@@ -1972,12 +1972,11 @@ async function disconnectGS() {
     console.warn('Cloud sign out failed', err);
   } finally {
     clearCloudSettings();
+    if (typeof clearLocalDeviceDataAfterSignOut === 'function') clearLocalDeviceDataAfterSignOut();
     if (typeof refreshAccessControls === 'function') refreshAccessControls();
-    updateGSStatus(canUseCloudConfig()
-      ? 'Signed out from cloud on this device. Project connection is kept.'
-      : 'Cloud disconnected. Local cache is still available on this device.');
+    updateGSStatus('Signed out. Local data was removed from this device.');
     closeM('m-gs');
-    toast(canUseCloudConfig() ? 'Signed out from cloud' : 'Cloud disconnected');
+    toast('Signed out and cleared local data');
   }
 }
 
