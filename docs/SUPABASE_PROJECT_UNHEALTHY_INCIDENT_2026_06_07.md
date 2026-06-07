@@ -126,3 +126,7 @@ Also review Supabase metrics for CPU, RAM, disk, and active connections.
 ## Operator Note
 
 The app-side warning added on 2026-06-07 is intentionally broad. It covers wrong keys, network failures, and an unhealthy Supabase backend. During this incident the warning was correct because Supabase was not responding normally, even though the configured key itself was valid.
+
+## Related UI Reference
+
+- [CLOUD_OFF_LOCAL_CACHE_REFERENCE_2026_06_07.md](CLOUD_OFF_LOCAL_CACHE_REFERENCE_2026_06_07.md) records the New UI Home screenshot state where the app shell was loaded, `Cloud: OFF` was visible, and the device was using local cache only.

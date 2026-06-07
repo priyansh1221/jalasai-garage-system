@@ -6,6 +6,8 @@ This file keeps operational incidents easy to find without mixing them into norm
 
 - [Supabase Project Unhealthy Incident - 2026-06-07](SUPABASE_PROJECT_UNHEALTHY_INCIDENT_2026_06_07.md)
   - Cloud login/sync failed because the Supabase project database connection path was unhealthy. Restarting the Supabase database restored Auth, PostgREST, Storage, and app sync.
+- [Cloud Off Local Cache Reference - 2026-06-07](CLOUD_OFF_LOCAL_CACHE_REFERENCE_2026_06_07.md)
+  - Screenshot reference note for the New UI Home state showing `Cloud: OFF` and local cache only after the incident recovery flow.
 - [Performance, Sync UI, And Startup Incident - 2026-06-04](PERFORMANCE_SYNC_UI_INCIDENT_2026_06_04.md)
   - Quick Invoice/New Job modal lag, startup refresh delay, and sync UI cleanup.
 - [Invoice Sync Stall Incident - 2026-06-03](INVOICE_SYNC_STALL_INCIDENT_2026_06_03.md)
