@@ -800,6 +800,27 @@ function hasJobFieldValue(job, fields = []) {
   });
 }
 
+function isKnownNonJobRecordId(id = '') {
+  const value = String(id || '').trim();
+  return /^(log|inc|pay|sm|pe|sir|imp|money)/i.test(value)
+    || /^e\d/i.test(value)
+    || /^s\d{8,}/i.test(value);
+}
+
+function isCustomerShapedJobPollution(job, hasWorkshopCore) {
+  if (hasWorkshopCore) return false;
+  const id = String(job?.id || '').trim();
+  const hasCustomerOnlyFields = hasJobFieldValue(job, ['name', 'email', 'address', 'lastVehicle', 'notes'])
+    || Array.isArray(job?.vehicles);
+  return /^(c|cust|customer|book2-customer|kb-customer)/i.test(id) && hasCustomerOnlyFields;
+}
+
+function isAuditShapedJobPollution(job, hasWorkshopCore) {
+  if (hasWorkshopCore) return false;
+  return hasJobFieldValue(job, ['action', 'entity', 'entityId', 'at'])
+    || (job?.details && typeof job.details === 'object');
+}
+
 function isNonWorkshopJobRecord(job) {
   if (!job || typeof job !== 'object') return false;
   const id = String(job.id || '').trim();
@@ -808,6 +829,9 @@ function isNonWorkshopJobRecord(job) {
   const hasWorkshopCore = hasJobFieldValue(job, [
     'cust', 'customerName', 'veh', 'vehicle', 'vno', 'prob', 'problem', 'invoiceNo'
   ]);
+  if (isKnownNonJobRecordId(id) && !hasWorkshopCore) return true;
+  if (isCustomerShapedJobPollution(job, hasWorkshopCore)) return true;
+  if (isAuditShapedJobPollution(job, hasWorkshopCore)) return true;
   if (/^(book2-customer|kb-customer)-/i.test(id)) return true;
   if (/^c\d{8,}/i.test(id) && !hasWorkshopCore) return true;
   if (
