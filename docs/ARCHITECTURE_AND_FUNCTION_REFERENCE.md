@@ -1,6 +1,6 @@
 # JalaSai Project Architecture and Function Reference
 
-Last updated: 2026-06-05
+Last updated: 2026-06-07
 
 This document explains how the JalaSai Garage System is structured, how it works at runtime, and what every named project-owned function does.
 
@@ -53,6 +53,8 @@ The root page loads scripts in a global-script style. Modules share global array
 
 The app writes business changes to browser memory first, then to `localStorage` through `saveAll()`. The local data remains usable offline. `saveAll()` supports scoped domain saves for hot paths, updates counters/metadata, marks UI tabs stale, stores compressed local snapshots for full saves, and queues cloud sync.
 
+Invoice hot paths are paint-first. Completing/editing an invoice, creating a quick invoice, saving a quick job-card, and recording invoice payment all update in-memory state immediately, close the modal, mark related pages stale, then defer the blocking scoped `saveAll()` call until after the browser has had a chance to paint. This keeps mobile saves feeling responsive while still using localStorage as the durable local write path and queued Supabase sync as the cloud write path.
+
 Main local storage keys are declared in `SK` inside `js/data.js`.
 
 ### Cloud Sync Layer
@@ -83,7 +85,7 @@ Realtime sync is driven by `garage_sync_heartbeat`. After a successful push, the
 
 ### PWA Layer
 
-`sw.js` caches the app shell, root assets, root JS modules, vendor libraries, and New UI assets. It serves cached shell files during offline/navigation failures and refreshes cached same-origin assets when online.
+`sw.js` caches the app shell, root assets, root JS modules, vendor libraries, and New UI assets. It serves cached shell files during offline/navigation failures and refreshes cached same-origin assets when online. `deploy.sh` injects a timestamp into `sw.js`, the service-worker registration URL, stylesheet URLs, and JS module URLs in generated deploy HTML so mobile PWA installs are forced onto the latest assets after deployment.
 
 ### New UI Layer
 
@@ -134,6 +136,7 @@ Realtime sync is driven by `garage_sync_heartbeat`. After a successful push, the
 | `js/scanner.js` | QR/SKU scanner via BarcodeDetector, ZXing, or jsQR fallback. |
 | `js/print.js` | QR sticker sheet and invoice print/share. |
 | `js/qrgen.js` | QR library loaded by printing/scanning flows; no project-owned named functions. |
+| `deploy.sh` | Generates `deploy/`, copies runtime assets/config, injects cache-busting timestamps, and deploys generated output with Wrangler. |
 | `supabase/schema.sql` | Database tables, indexes, RLS, storage bucket, helper SQL function. |
 | `apps-script/JalaSaiSync.gs` | Optional Google Sheet JSON snapshot sync. |
 | `apps-script/JalaSaiDriveBackup.gs` | Optional Supabase shadow-table backup to Google Drive/blob. |
@@ -200,7 +203,7 @@ Realtime sync is driven by `garage_sync_heartbeat`. After a successful push, the
 | `setInvoiceSort(col)` | Sets invoice sort from a selector and rerenders. |
 | `filterInvoices(q)` | Updates invoice search text and debounced rerendering. |
 | `openInvoiceEdit(id)` | Opens the done modal in invoice-edit mode after admin access checks. |
-| `removeInvoice(id)` | Admin-only action that reopens a completed invoice as a ready job and clears invoice fields. |
+| `removeInvoice(id)` | Admin-only hard invoice delete using the tombstone pattern: sets `deleted_at`/`deleted_by`, logs the delete, saves the jobs domain, and rerenders invoices. |
 | `toggleDoneJobs()` | Shows or hides today’s completed jobs section. |
 | `renderDoneJobs()` | Renders today’s completed jobs cards below the job board. |
 | `handlePhotoUpload(input, previewId)` | Compresses selected images, uploads to cloud when signed in or stores data URLs locally, then updates previews and drafts. |
@@ -493,7 +496,10 @@ Realtime sync is driven by `garage_sync_heartbeat`. After a successful push, the
 | `bindStickyQuickInvoiceDrafts()` | Binds quick-invoice inputs to draft persistence. |
 | `resetQuickInvoiceForm()` | Resets quick-invoice modal fields. |
 | `openQuickInvoice()` | Opens and hydrates quick-invoice modal. |
-| `saveQuickInvoice()` | Creates a completed invoice/job directly from the quick-invoice form, updates customer/stock/payments, logs, saves, and syncs. |
+| `scheduleInvoiceSaveUiRefresh(options)` | Marks invoice-related pages stale and refreshes only the currently visible affected page or lightweight summary badges. |
+| `runAfterInvoiceSavePaint(callback)` | Runs a callback after an animation frame and macrotask so modal close/toast feedback can paint before heavier local persistence work. |
+| `saveInvoiceAfterPaint(domain, refreshOptions)` | Paint-first invoice persistence helper: marks tabs stale, waits until after paint, calls scoped `saveAll({ domain })`, then refreshes visible invoice/job/home UI. |
+| `saveQuickInvoice()` | Creates a completed invoice/job directly from the quick-invoice form, updates customer/stock/payments, logs, uses paint-first scoped local save, and queues background sync. |
 | `jobDateTimeValue(job)` | Returns a timestamp value used for job sorting. |
 | `jobCreatedLabel(job)` | Returns a readable created/date label. |
 | `invoiceSortValue(job)` | Returns timestamp value for invoice/job sorting. |
@@ -542,7 +548,7 @@ Realtime sync is driven by `garage_sync_heartbeat`. After a successful push, the
 | `openJobPartsDrawer()` | Opens the part-search drawer. |
 | `closeJobPartsDrawer()` | Closes the part-search drawer. |
 | `openPaymentModal(jobId)` | Opens modal for adding payment to a job/invoice. |
-| `savePayment()` | Records a payment entry, updates job paid state, logs, saves, and syncs. |
+| `savePayment()` | Records a payment entry, updates job paid state, logs, uses paint-first scoped payment save, and queues background sync. |
 
 ### `js/stock.js`
 
@@ -1015,7 +1021,18 @@ No functions are declared. It assigns `window.JALASAI_CLOUD_CONFIG` with Supabas
 | --- | --- |
 | `public.jalasai_apply_authenticated_full_access(target_table regclass)` | Temporary PL/pgSQL helper that enables RLS on a table and recreates an authenticated full-access policy. The schema calls it for each JalaSai table and then drops it. |
 
-## 7. High-Risk Areas for Future Changes
+## 7. Performance and Scale Notes
+
+- Virtual invoices: `renderInvoices()` uses `renderVirtualTable()` with a 25-row window, top/bottom spacer rows, and filter/sort/search version keys. The DOM should not grow with total invoice count.
+- Virtual stock: `renderStockTable()` and `renderVirtualStockRows()` keep stock rendering to the visible window and reset scroll state on filter/search changes.
+- Scoped saves: hot paths pass `saveAll({ domain })` so saves write only the relevant localStorage keys plus shared sync metadata. Full saves are reserved for import/restore/pull/backup style operations.
+- Cached search: `normalizeJob()` and stock normalization build `_searchText` once so search paths do a single lowercase `includes()` instead of joining fields on every keystroke.
+- Page switching: `showPage()` defers heavy renders by one frame and shows skeleton rows only when the target list is stale and large enough to benefit from the placeholder.
+- Optimistic invoices: invoice save paths mark pending invoice IDs and the invoice table renders a small pending dot until confirmed sync clears the specific IDs.
+- Paint-first invoice persistence: invoice completion/edit/quick/payment paths avoid cloud push and synchronous localStorage writes in the tap handler. They update memory immediately, close UI, then defer scoped `saveAll()` until after paint.
+- Deploy cache busting: `deploy.sh` adds timestamp query strings to generated JS/CSS references and `sw.js` registration so mobile PWAs do not keep stale modules after deployment.
+
+## 8. High-Risk Areas for Future Changes
 
 - Customer matching: change carefully. `customerMatchesJob()`, `bestCustomerForJob()`, and `tidyCustomerRecords()` prevent imported/opening-balance records from attaching to the wrong customer.
 - Sync/tombstones: `SHADOW_INFER_DELETES` is disabled to avoid stale-device accidental deletes. Do not infer remote deletes from missing local rows without a fresh pull strategy.
@@ -1025,7 +1042,7 @@ No functions are declared. It assigns `window.JALASAI_CLOUD_CONFIG` with Supabas
 - Inline helper duplication: `index.html` duplicates `getPhotoPreviewList()` and `photoGalleryMarkup()` identically; browser hoisting leaves the later definition active.
 - Shared JS source: edit root `js/` only. Do not recreate `NEW UI/js/` or hand-maintained `deploy/js/` mirrors.
 
-## 8. Quick Maintenance Checklist
+## 9. Quick Maintenance Checklist
 
 When changing a workflow:
 

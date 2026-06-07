@@ -59,6 +59,7 @@ Vanilla JS | Local-first architecture | Supabase cloud sync | PWA-ready | Real w
 
 ## Documentation Map
 
+- Complete architecture and function reference: [docs/ARCHITECTURE_AND_FUNCTION_REFERENCE.md](docs/ARCHITECTURE_AND_FUNCTION_REFERENCE.md)
 - Product journey: [PROJECT_HISTORY.md](PROJECT_HISTORY.md)
 - Release changes: [CHANGELOG.md](CHANGELOG.md)
 - Deployment setup: [DEPLOYMENT.md](DEPLOYMENT.md)
