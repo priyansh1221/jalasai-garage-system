@@ -55,6 +55,7 @@ Vanilla JS | Local-first architecture | Supabase cloud sync | PWA-ready | Real w
 - Vanilla HTML/CSS/JS
 - Static deployment (no framework build pipeline)
 - Supabase Auth + Postgres + Storage
+- Cloudflare Pages runtime config via `/config.js` Worker
 - Google Apps Script helpers for backup/sync operations
 
 ## Documentation Map
@@ -77,7 +78,8 @@ Designed social preview image for repository branding:
 ## Public Repository Safety
 
 - No production API secrets are committed
-- `js/cloud-config.js` is placeholder-only in git
+- `js/cloud-config.js` is placeholder/fallback-only in git
+- Production Supabase URL and anon key are injected by Cloudflare Pages from encrypted project secrets
 - Sensitive/local artifacts are covered by `.gitignore`
 - License is `All rights reserved` to prevent unauthorized reuse
 
@@ -85,8 +87,22 @@ Designed social preview image for repository branding:
 
 1. Clone the repository.
 2. Open project root in VS Code.
-3. Configure private Supabase values in `js/cloud-config.js` only on your machine.
+3. For local-only testing, create ignored `config.js` with `SUPABASE_URL` and `SUPABASE_ANON_KEY`.
 4. Run `supabase/schema.sql`.
 5. Serve as static files using any static host/local server.
+
+## Cloudflare Deployment Config
+
+Set these once in Cloudflare Pages with Wrangler:
+
+```bash
+npx wrangler pages secret put SUPABASE_URL --project-name jalasai-garage
+npx wrangler pages secret put SUPABASE_ANON_KEY --project-name jalasai-garage
+npx wrangler pages secret put JALASAI_ADMIN_EMAILS --project-name jalasai-garage
+```
+
+`deploy.sh` ships `cloudflare/pages-worker.js` as `deploy/_worker.js`. On production, `/config.js` is generated from Cloudflare Pages environment values, so staff devices only need email/password sign-in.
+
+Use only the Supabase anon key here. Never use the Supabase service-role key in browser-delivered config.
 
 If any key was previously exposed, rotate it at provider level before publishing.
