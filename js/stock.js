@@ -2,7 +2,7 @@
 //  Stock module
 // ═══════════════════════════════════════════════════════
 
-let stF = { q: '', cat: '', st: '', bike: '' };
+let stF = { q: '', cat: '', st: '', bike: '', sort: 'name' };
 let catalogImportSession = null;
 const CATALOG_IMPORT_SESSION_KEY = 'js_catalog_import_session';
 const stockRowCache = new Map();
@@ -247,13 +247,30 @@ function stockListData(stateStock) {
   return stockListCache;
 }
 
+function stockSortTime(item) {
+  return Date.parse(item?.updatedAt || item?.createdAt || 0) || 0;
+}
+
+function sortFilteredStockRows(rows) {
+  const sortMode = stF.sort || 'name';
+  return rows.slice().sort((left, right) => {
+    if (sortMode === 'latest' || sortMode === 'oldest') {
+      const diff = stockSortTime(left) - stockSortTime(right);
+      if (diff) return sortMode === 'latest' ? -diff : diff;
+    }
+    const nameDiff = String(left.name || '').localeCompare(String(right.name || ''));
+    if (nameDiff) return nameDiff;
+    return String(left.sku || '').localeCompare(String(right.sku || ''));
+  });
+}
+
 function filteredStockRows(stockData, indexedQuery) {
-  return stockData.sorted
+  return sortFilteredStockRows(stockData.live
     .filter(item =>
       (!indexedQuery || String(item._searchText || '').includes(indexedQuery))
       && (!stF.cat  || item.cat  === stF.cat)
       && (!stF.st   || stSt(item) === stF.st)
-      && (!stF.bike || item.bike === stF.bike));
+      && (!stF.bike || item.bike === stF.bike)));
 }
 
 function renderStockTable() {
@@ -302,6 +319,7 @@ function renderVirtualStockRows(items = []) {
     stF.cat || '',
     stF.st || '',
     stF.bike || '',
+    stF.sort || '',
   ].join('|');
   const visibleCount = Math.min(STOCK_VIRTUAL_ROW_COUNT, items.length);
   const maxStart = Math.max(0, items.length - visibleCount);
@@ -337,6 +355,7 @@ function filterStock(v) {
 function filterStockCat(v) { stF.cat = v; if (typeof resetLongListPage === 'function') resetLongListPage('stock'); resetStockVirtualRows(); renderStockTable(); }
 function filterStockSt(v)  { stF.st  = v; if (typeof resetLongListPage === 'function') resetLongListPage('stock'); resetStockVirtualRows(); renderStockTable(); }
 function filterStockBike(v){ stF.bike = v; if (typeof resetLongListPage === 'function') resetLongListPage('stock'); resetStockVirtualRows(); renderStockTable(); }
+function sortStockBy(v) { stF.sort = v || 'name'; if (typeof resetLongListPage === 'function') resetLongListPage('stock'); resetStockVirtualRows(); renderStockTable(); }
 
 function adj(id, d) {
   if (!requireCloudWriteAccess('update stock')) return;
