@@ -75,6 +75,7 @@ const REALTIME_SHADOW_TABLES = Object.freeze([
   { key: 'expenses', table: 'garage_expenses', pages: ['expenses', 'reports'] },
   { key: 'incomeEntries', table: 'garage_income_entries', pages: ['income', 'invoices', 'jobs', 'reports'] },
   { key: 'mechanics', table: 'garage_mechanics', pages: ['mechanics', 'jobs', 'reports'] },
+  { key: 'auditLog', table: 'garage_audit_log', pages: ['logs'] },
 ]);
 
 const SYNC_DOMAIN_TABLE_KEYS = Object.freeze({

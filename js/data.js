@@ -2254,6 +2254,9 @@ function logAction(action, entity, entityId, details = {}) {
     details,
   });
   auditLog = auditLog.slice(0, 1000);
+  if (typeof saveAll === 'function') {
+    saveAll({ domain: 'audit' });
+  }
 }
 
 function nextJobId() {

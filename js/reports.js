@@ -1019,6 +1019,30 @@ function renderReports() {
 let logFilters = { q: '', action: '', entity: '' };
 let logsCloudRefreshBusy = false;
 
+function auditLogKey(log) {
+  return String(log?.id || '').trim()
+    || `${log?.at || ''}|${log?.by || ''}|${log?.entity || ''}|${log?.entityId || ''}|${log?.action || ''}`;
+}
+
+function auditLogStamp(log) {
+  const parsed = Date.parse(log?.at || log?.timestamp || log?.createdAt || 0);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function mergeAuditLogs(...lists) {
+  const map = new Map();
+  lists.flat().forEach(log => {
+    if (!log) return;
+    const key = auditLogKey(log);
+    if (!key) return;
+    const existing = map.get(key);
+    if (!existing || auditLogStamp(log) >= auditLogStamp(existing)) map.set(key, log);
+  });
+  return [...map.values()]
+    .sort((a, b) => auditLogStamp(b) - auditLogStamp(a))
+    .slice(0, 1000);
+}
+
 async function refreshLogsFromCloud() {
   if (logsCloudRefreshBusy || typeof canUseCloudConfig !== 'function' || !canUseCloudConfig()) return false;
   if (typeof ensureCloudClient !== 'function' || typeof getCloudSession !== 'function') return false;
@@ -1040,7 +1064,7 @@ async function refreshLogsFromCloud() {
       .map(row => row?.record_data || null)
       .filter(Boolean);
     if (!rows.length) return false;
-    auditLog = rows;
+    auditLog = mergeAuditLogs(rows, auditLog);
     if (typeof saveAll === 'function') saveAll({ preserveUpdatedAt: true, skipSync: true, domain: 'audit' });
     return true;
   } catch (err) {
@@ -1055,6 +1079,7 @@ async function refreshLogsFromCloud() {
 function renderLogs() {
   if (!requireAdminAccess('view logs')) { showPage('jobs'); return; }
   const q = (logFilters.q || '').trim().toLowerCase();
+  auditLog = mergeAuditLogs(auditLog);
   let list = auditLog.slice();
   if (q) {
     list = list.filter(log =>
