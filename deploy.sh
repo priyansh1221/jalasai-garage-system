@@ -18,7 +18,7 @@ fi
 
 sed -i.bak -E "s/jalasai-(v[0-9]+|BUILD_TIMESTAMP)/jalasai-${TIMESTAMP}/g" deploy/sw.js
 sed -i.bak -E "s/sw\\.js\\?v=([0-9]+|BUILD_TIMESTAMP)/sw.js?v=${TIMESTAMP}/g" deploy/index.html deploy/newui/index.html
-sed -i.bak -E "s#(src=\"(\\.\\./)?js/[^\"]+\\.js)(\\?v=[0-9]+)?\"#\\1?v=${TIMESTAMP}\"#g; s#(href=\"(\\.\\./)?style\\.css)(\\?v=[0-9]+)?\"#\\1?v=${TIMESTAMP}\"#g" deploy/index.html deploy/newui/index.html
+sed -i.bak -E "s#(src=\"((\\.\\./|/)?js/)[^\"]+\\.js)(\\?v=[0-9]+)?\"#\\1?v=${TIMESTAMP}\"#g; s#(href=\"(\\.\\./)?style\\.css)(\\?v=[0-9]+)?\"#\\1?v=${TIMESTAMP}\"#g" deploy/index.html deploy/newui/index.html
 rm -f deploy/sw.js.bak deploy/index.html.bak deploy/newui/index.html.bak
 
 npx wrangler pages deploy deploy --project-name "$PROJECT_NAME" --branch "$BRANCH_NAME"

@@ -30,6 +30,10 @@ const TABLES = [
   'garage_sync_heartbeat',
 ];
 
+const ORDER_COLUMNS = {
+  garage_sync_heartbeat: 'device_id',
+};
+
 if (!SUPABASE_URL || !SERVICE_ROLE) {
   console.log('::notice::SUPABASE_URL / SUPABASE_SERVICE_ROLE secrets not set — backup skipped.');
   process.exit(0);
@@ -37,8 +41,9 @@ if (!SUPABASE_URL || !SERVICE_ROLE) {
 
 async function fetchTable(table) {
   const rows = [];
+  const orderColumn = ORDER_COLUMNS[table] || 'id';
   for (let from = 0; ; from += PAGE) {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}?select=*&order=id.asc`, {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}?select=*&order=${orderColumn}.asc`, {
       headers: {
         apikey: SERVICE_ROLE,
         Authorization: `Bearer ${SERVICE_ROLE}`,

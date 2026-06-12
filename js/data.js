@@ -1105,9 +1105,9 @@ function switchUiMode(path) {
 function warmUiMode(path) {
   const targets = [path];
   if (path === 'newui/' || path === './newui/' || path.endsWith('/newui/')) {
-    targets.push('newui/style.css', 'newui/js/data.js', 'newui/js/jobs.js', 'newui/js/new-ui.js', 'newui/js/sync.js');
+    targets.push('newui/style.css', '/js/data.js', '/js/jobs.js', '/js/new-ui.js', '/js/sync.js');
   } else {
-    targets.push('../style.css', '../js/data.js', '../js/jobs.js', '../js/sync.js');
+    targets.push('../style.css', '/js/data.js', '/js/jobs.js', '/js/sync.js');
   }
   targets.forEach(target => {
     try {

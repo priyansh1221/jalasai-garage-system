@@ -1765,25 +1765,25 @@
 </style>
 
 <!-- ═══════ SCRIPTS ══════════════════════════════════════ -->
-<script src="../js/qrgen.js"></script>
+<script src="/js/qrgen.js"></script>
 <script src="/config.js"></script>
-<script src="../js/cloud-config.js"></script>
-<script src="../js/vendor/lz-string.min.js"></script>
-<script src="../js/data.js"></script>
-<script src="../js/utils.js"></script>
-<script src="../js/jobs.js"></script>
-<script src="../js/stock.js"></script>
-<script src="../js/customers.js"></script>
-<script src="../js/reminders.js"></script>
-<script src="../js/mechanics.js"></script>
-<script src="../js/expenses.js"></script>
-<script src="../js/reports.js"></script>
-<script src="../js/scanner.js"></script>
-<script src="../js/print.js"></script>
-<script src="../js/vendor/supabase.js"></script>
-<script src="../js/sync.js"></script>
-<script src="../js/shell.js"></script>
-<script src="../js/new-ui.js"></script>
+<script src="/js/cloud-config.js"></script>
+<script src="/js/vendor/lz-string.min.js"></script>
+<script src="/js/data.js"></script>
+<script src="/js/utils.js"></script>
+<script src="/js/jobs.js"></script>
+<script src="/js/stock.js"></script>
+<script src="/js/customers.js"></script>
+<script src="/js/reminders.js"></script>
+<script src="/js/mechanics.js"></script>
+<script src="/js/expenses.js"></script>
+<script src="/js/reports.js"></script>
+<script src="/js/scanner.js"></script>
+<script src="/js/print.js"></script>
+<script src="/js/vendor/supabase.js"></script>
+<script src="/js/sync.js"></script>
+<script src="/js/shell.js"></script>
+<script src="/js/new-ui.js"></script>
 <script>
 // ═══════════════════════════════════════════════════════
 //  Bootstrap — runs after all JS files are loaded
@@ -1818,7 +1818,7 @@ if ('serviceWorker' in navigator) {
         if (reg.scope.includes('/newui/') && reg.active?.scriptURL.includes('/newui/sw.js')) reg.unregister();
       });
     }).catch(() => {});
-    navigator.serviceWorker.register('../sw.js?v=BUILD_TIMESTAMP', { updateViaCache: 'none' }).catch(() => {});
+    navigator.serviceWorker.register('/sw.js?v=BUILD_TIMESTAMP', { updateViaCache: 'none' }).catch(() => {});
   };
   if ('requestIdleCallback' in window) requestIdleCallback(registerServiceWorker, { timeout: 2500 });
   else setTimeout(registerServiceWorker, 1200);
