@@ -269,8 +269,22 @@ select public.jalasai_apply_authenticated_full_access('public.garage_sync_heartb
 
 drop function if exists public.jalasai_apply_authenticated_full_access(regclass);
 
--- Enable realtime for heartbeat table so all devices get instant push notifications
-alter publication supabase_realtime add table public.garage_sync_heartbeat;
+-- Enable realtime for heartbeat table so all devices get instant push notifications.
+-- Supabase errors if a table is added to a publication twice, so keep this
+-- guarded for repeat-safe schema runs.
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_publication_tables
+    where pubname = 'supabase_realtime'
+      and schemaname = 'public'
+      and tablename = 'garage_sync_heartbeat'
+  ) then
+    alter publication supabase_realtime add table public.garage_sync_heartbeat;
+  end if;
+end;
+$$;
 
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values ('job-photos', 'job-photos', true, 6291456, array['image/jpeg', 'image/png', 'image/webp'])
