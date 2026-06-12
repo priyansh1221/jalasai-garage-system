@@ -776,6 +776,24 @@
     <div class="scan-status" id="scan-status">
       <div style="color:var(--mut);font-size:13px;">Camera stopped. Press "Start Camera" to scan.</div>
     </div>
+    <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:12px;">
+      <button class="btn btn-g" id="scan-inventory-add-btn" type="button" onclick="setScanInventoryMode('add')">Add Stock</button>
+      <button class="btn btn-g" id="scan-inventory-remove-btn" type="button" onclick="setScanInventoryMode('remove')">Remove Stock</button>
+    </div>
+    <div id="scan-inventory-card" style="display:none;background:var(--sur);border:1px solid var(--bor);border-radius:10px;padding:16px;margin-top:12px;">
+      <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap;">
+        <div>
+          <div id="scan-inventory-title" style="font-family:var(--fh);font-size:16px;font-weight:700;">Inventory scan</div>
+          <div id="scan-inventory-copy" style="font-size:12px;color:var(--mut);margin-top:2px;">Scan a part sticker to update stock only.</div>
+        </div>
+        <button class="btn btn-g btn-sm" type="button" onclick="clearScanInventoryMode()">Close</button>
+      </div>
+      <div class="frow" style="margin-top:12px;">
+        <label class="flbl">Count per scan</label>
+        <input class="finp" id="scan-inventory-qty" type="number" inputmode="numeric" min="1" step="1" value="1" style="width:120px;">
+      </div>
+      <div id="scan-inventory-feedback" style="font-size:12px;color:var(--mut);margin-top:10px;">Waiting for scan.</div>
+    </div>
     <div style="background:var(--sur);border:1px solid var(--bor);border-radius:10px;padding:16px;margin-top:12px;">
       <div style="font-family:var(--fh);font-size:14px;margin-bottom:10px;">Or type SKU / part name</div>
       <input class="sbox" id="manual-search" placeholder="Type SKU or part name…" oninput="manualSearch(this.value)" style="width:100%;">

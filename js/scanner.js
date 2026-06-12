@@ -12,6 +12,7 @@ let zxingControls = null;
 let scanFallbackTimer = null;
 let recentScannedPartIds = [];
 let activeScannerContext = 'page';
+let scanInventoryMode = '';
 
 const SCANNER_CONTEXTS = {
   page: {
@@ -88,6 +89,10 @@ function renderRecentScans(mode = activeScannerContext) {
 function handleContextPartPick(id) {
   const s = stock.find(x => x.id === id);
   if (!s) return;
+  if (activeScannerContext === 'page' && isScanInventoryModeActive()) {
+    applyInventoryScan(s, 'manual-pick');
+    return;
+  }
   getScannerContext().onMatch?.(s);
 }
 
@@ -297,6 +302,93 @@ function batchScanStockOut(s) {
   toast(`−1 ${s.name} → ${s.qty}`, 1400);
 }
 
+function isScanInventoryModeActive() {
+  return scanInventoryMode === 'add' || scanInventoryMode === 'remove';
+}
+
+function scanInventoryQty() {
+  const input = document.getElementById('scan-inventory-qty');
+  const value = Math.max(1, parseInt(input?.value || '1', 10) || 1);
+  if (input) input.value = String(value);
+  return value;
+}
+
+function setScanInventoryMode(mode) {
+  if (!['add', 'remove'].includes(mode)) return clearScanInventoryMode();
+  if (!requireCloudWriteAccess(mode === 'add' ? 'add stock by scan' : 'remove stock by scan')) return;
+  scanInventoryMode = mode;
+  const card = document.getElementById('scan-inventory-card');
+  const title = document.getElementById('scan-inventory-title');
+  const copy = document.getElementById('scan-inventory-copy');
+  const feedback = document.getElementById('scan-inventory-feedback');
+  const addBtn = document.getElementById('scan-inventory-add-btn');
+  const removeBtn = document.getElementById('scan-inventory-remove-btn');
+  if (card) card.style.display = '';
+  if (title) title.textContent = mode === 'add' ? 'Add Stock by Scan' : 'Remove Stock by Scan';
+  if (copy) copy.textContent = mode === 'add'
+    ? 'Each scan adds the count below to inventory only.'
+    : 'Each scan removes the count below from inventory only.';
+  if (feedback) feedback.textContent = 'Waiting for scan.';
+  if (addBtn) addBtn.className = mode === 'add' ? 'btn btn-p' : 'btn btn-g';
+  if (removeBtn) removeBtn.className = mode === 'remove' ? 'btn btn-p' : 'btn btn-g';
+  const jobSelect = document.getElementById('scan-job');
+  if (jobSelect) jobSelect.value = '';
+  const manual = document.getElementById('manual-search');
+  if (manual && manual.value) manualSearch(manual.value);
+  setScannerContext('page');
+}
+
+function clearScanInventoryMode() {
+  scanInventoryMode = '';
+  const card = document.getElementById('scan-inventory-card');
+  const addBtn = document.getElementById('scan-inventory-add-btn');
+  const removeBtn = document.getElementById('scan-inventory-remove-btn');
+  if (card) card.style.display = 'none';
+  if (addBtn) addBtn.className = 'btn btn-g';
+  if (removeBtn) removeBtn.className = 'btn btn-g';
+  const manual = document.getElementById('manual-search');
+  if (manual && manual.value) manualSearch(manual.value);
+  return false;
+}
+
+function applyInventoryScan(s, source = 'scan-page-inventory') {
+  if (!s || !isScanInventoryModeActive()) return false;
+  if (!requireCloudWriteAccess(scanInventoryMode === 'add' ? 'add stock by scan' : 'remove stock by scan')) return false;
+  const qty = scanInventoryQty();
+  const delta = scanInventoryMode === 'add' ? qty : -qty;
+  const previous = parseFloat(s.qty || 0) || 0;
+  const nextQty = Math.max(0, previous + delta);
+  const appliedDelta = nextQty - previous;
+  if (!appliedDelta) {
+    toast(`${s.name} already at 0`);
+    return true;
+  }
+  s.qty = nextQty;
+  s.updatedAt = nowISO();
+  if (appliedDelta < 0) {
+    const count = Math.abs(appliedDelta);
+    for (let i = 0; i < count; i++) {
+      partsLog.push({ part: s.name, sku: s.sku, time: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }), date: today() });
+    }
+  }
+  logAction('update', 'stock', s.id, {
+    qty: s.qty,
+    delta: appliedDelta,
+    source,
+    mode: scanInventoryMode === 'add' ? 'scan-add-stock' : 'scan-remove-stock',
+  });
+  saveAll({ domain: 'stock' });
+  renderStock?.();
+  renderPrintManager?.();
+  const feedback = document.getElementById('scan-inventory-feedback');
+  const sign = appliedDelta > 0 ? '+' : '';
+  const message = `${sign}${appliedDelta} ${s.name} → ${s.qty}`;
+  if (feedback) feedback.textContent = message;
+  toast(message, 1400);
+  rememberRecentScan(s.id);
+  return true;
+}
+
 function handleBatchScanMatch(s) {
   // Batch mode writes stock directly; without a cloud session fall back to
   // the normal interactive flow (which shows the sign-in prompt once).
@@ -326,6 +418,17 @@ function handleScanDecode(decoded) {
   const sku = extractScannedSku(decoded);
   const s = stock.find(x => x.sku.toUpperCase() === sku) ||
     stock.find(x => sku.includes(x.sku.toUpperCase()) || x.sku.toUpperCase().includes(sku));
+  if (s && activeScannerContext === 'page' && isScanInventoryModeActive()) {
+    const now = Date.now();
+    const sameSku = s.sku === lastBatchScanSku;
+    if (now - lastBatchScanAt >= (sameSku ? BATCH_SCAN_SAME_SKU_COOLDOWN_MS : BATCH_SCAN_ANY_COOLDOWN_MS)) {
+      lastBatchScanSku = s.sku;
+      lastBatchScanAt = now;
+      batchScanFeedback();
+      applyInventoryScan(s, 'scan-page-inventory');
+    }
+    return; // inventory mode keeps the camera running for scan-in / scan-out
+  }
   if (s && batchScanMode && handleBatchScanMatch(s)) return; // camera keeps running
   clearTimeout(scanFallbackTimer);
   stopScanner();
@@ -486,7 +589,7 @@ function manualSearch(v) {
           <div style="font-size:13px;font-weight:500;">${s.name}</div>
           <div style="font-size:11px;color:var(--mut);">${s.sku} | Qty: <b style="color:${stSt(s)==='ok'?'var(--acc)':'var(--dan)'}">${s.qty}</b>${s.location ? ` | 📦 ${s.location}` : ''}${s.fitmentModels?.length ? ` | Fits ${s.fitmentModels.slice(0, 2).join(', ')}` : ''}</div>
         </div>
-        <button class="btn btn-p btn-sm" onclick="handleContextPartPick('${s.id}')">Use</button>
+        <button class="btn btn-p btn-sm" onclick="handleContextPartPick('${s.id}')">${scanInventoryMode === 'add' ? 'Add' : scanInventoryMode === 'remove' ? 'Remove' : 'Use'}</button>
       </div>`).join('')
     : '<div style="color:var(--mut);font-size:12px;padding:8px 0;">No matches</div>';
 }
