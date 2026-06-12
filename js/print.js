@@ -33,9 +33,26 @@ function drawStickerQR(canvas, payload, size) {
   canvas.height = size;
   try {
     QRGen.draw(canvas, payload);
-    return true;
+    return stickerCanvasHasQRData(canvas);
   } catch (_) {
     return false;
+  }
+}
+
+function stickerCanvasHasQRData(canvas) {
+  try {
+    const ctx = canvas.getContext('2d');
+    const { width, height } = canvas;
+    const data = ctx.getImageData(0, 0, width, height).data;
+    let dark = 0;
+    const sampleEvery = 4;
+    for (let i = 0; i < data.length; i += sampleEvery * 4) {
+      if (data[i] < 80 && data[i + 1] < 80 && data[i + 2] < 80) dark++;
+    }
+    const samples = Math.ceil((width * height) / sampleEvery);
+    return dark / samples > 0.12;
+  } catch (_) {
+    return true;
   }
 }
 
@@ -47,8 +64,8 @@ function fallbackStickerQR(canvasId, payload, size) {
 function stickerNameClass(name, sizeKey) {
   const len = String(name || '').trim().length;
   if (sizeKey === 'a4-40') {
-    if (len > 30) return 'name-xxs';
-    if (len > 20) return 'name-xs';
+    if (len > 44) return 'name-xxs';
+    if (len > 32) return 'name-xs';
   }
   if (len > 38) return 'name-xs';
   return '';

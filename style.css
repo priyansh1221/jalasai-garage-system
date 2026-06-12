@@ -925,14 +925,14 @@ nav {
 .sheet-sticker {
   width: 29.7mm !important;
   height: 52.5mm !important;
-  border: 0.3mm dashed #c8c8c8;
+  border: 0;
   border-radius: 0;
-  padding: 1.2mm 0.8mm 0.6mm;
+  padding: 0.8mm 0.8mm 0.6mm;
   overflow: hidden;
   display: flex;
   flex-direction: column;   /* QR on top · text below */
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   background: #fff;
 }
 .sheet-sticker .stk-qr-col {
@@ -942,26 +942,27 @@ nav {
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-bottom: 0.8mm;
+  margin: 0 0 1.1mm;
 }
 .a4-qr-img, .a4-qr-canvas {
   display: block !important;
   width: 22mm !important;
   height: 22mm !important;
+  margin: 0 !important;
   background: #fff;
   image-rendering: pixelated;
 }
 .sheet-sticker .stk-text-col {
   width: 100%;
   text-align: center;
-  line-height: 1.2;
+  line-height: 1.08;
 }
-.sheet-sticker .stk-bike { font-size: 5.2px; line-height: 1.2; margin-bottom: 0; color: #e65c00; font-weight: 700; }
-.sheet-sticker .stk-name { font-size: 6px;   line-height: 1.15; margin-bottom: 0; font-weight: 700; }
-.sheet-sticker .stk-name.name-xs  { font-size: 5.2px; }
-.sheet-sticker .stk-name.name-xxs { font-size: 4.5px; }
-.sheet-sticker .stk-sku  { font-size: 4.8px; line-height: 1.2; color: #666; font-family: monospace; }
-.sheet-sticker .stk-qty  { font-size: 5px;   line-height: 1.3; color: #333; font-weight: 600; }
+.sheet-sticker .stk-bike { font-size: 6px; line-height: 1.1; margin-bottom: 0.3mm; color: #e65c00; font-weight: 700; }
+.sheet-sticker .stk-name { font-size: 9.5px; line-height: 1.03; margin-bottom: 0.5mm; font-weight: 800; overflow-wrap: anywhere; }
+.sheet-sticker .stk-name.name-xs  { font-size: 8.4px; }
+.sheet-sticker .stk-name.name-xxs { font-size: 7.2px; }
+.sheet-sticker .stk-sku  { display: none; }
+.sheet-sticker .stk-qty  { font-size: 6px; line-height: 1.2; color: #333; font-weight: 700; }
 .sheet-sticker .stk-location { font-size: 4.5px; line-height: 1.2; color: #777; }
 .a4-sheet {
   width: 297mm;
@@ -979,7 +980,6 @@ nav {
 .label-empty {
   width: 29.7mm;
   height: 52.5mm;
-  border: 0.3mm dashed #ececec;
   background: #fafafa;
 }
 
@@ -1075,9 +1075,9 @@ nav {
     margin: 0 !important;
   }
   .sticker { break-inside: avoid; page-break-inside: avoid; border: 1.5px solid #ccc; }
-  .sheet-sticker { border: 0.3mm dashed #c8c8c8 !important; flex-direction: column !important; }
+  .sheet-sticker { border: 0 !important; flex-direction: column !important; }
   .a4-sheet { box-shadow: none !important; margin: 0 !important; width: 297mm !important; min-height: 210mm !important; }
-  .label-empty { display: block !important; background: #fff !important; }
+  .label-empty { display: block !important; border: 0 !important; background: #fff !important; }
   .a4-qr-img, .a4-qr-canvas { width: 22mm !important; height: 22mm !important; }
 }
 

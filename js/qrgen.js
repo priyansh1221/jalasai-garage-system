@@ -187,9 +187,7 @@ const QRGen = (() => {
   };
 
   QRCodeModel.getRSBlocks = function (tv, ecl) {
-    const t = QRRSBlock.getRSBlocks(tv, ecl), l = [];
-    for (let i = 0; i < t.length; i += 3) { const c = t[i], tc = t[i + 1], dc = t[i + 2]; for (let j = 0; j < c; j++) l.push(new QRRSBlock(tc, dc)); }
-    return l;
+    return QRRSBlock.getRSBlocks(tv, ecl);
   };
 
   // ─── QRRSBlock ───────────────────────────────────────────
