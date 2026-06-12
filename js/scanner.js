@@ -374,11 +374,19 @@ function scanJobOptionLabel(j) {
   return `${j.id} — ${customer}${vehicle ? ` (${vehicle})` : ''}`;
 }
 
+function scannerLinkableJobs() {
+  return jobs.filter(j => (
+    typeof isActiveWorkshopJob === 'function'
+      ? isActiveWorkshopJob(j)
+      : isLiveJob(j) && j.status !== 'done'
+  ));
+}
+
 function populateScanJobs() {
   const sel = document.getElementById('scan-job');
   if (!sel) return;
   sel.innerHTML = '<option value="">Link to job (optional)</option>' +
-    jobs.filter(j => isLiveJob(j) && j.status !== 'done')
+    scannerLinkableJobs()
       .map(j => `<option value="${j.id}">${scanJobOptionLabel(j)}</option>`).join('');
   setScannerContext('page');
 }
@@ -405,7 +413,7 @@ function showScanResult(s) {
       <div class="frow"><label class="flbl">Link to job</label>
         <select class="fsel" id="sr-job">
           <option value="">No job</option>
-          ${jobs.filter(j=>isLiveJob(j) && j.status!=='done').map(j=>`<option value="${j.id}"${j.id===jobSel?' selected':''}>${scanJobOptionLabel(j)}</option>`).join('')}
+          ${scannerLinkableJobs().map(j=>`<option value="${j.id}"${j.id===jobSel?' selected':''}>${scanJobOptionLabel(j)}</option>`).join('')}
         </select>
       </div>
       <div class="frow"><label class="flbl">Saved price</label>
