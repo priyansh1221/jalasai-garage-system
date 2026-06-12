@@ -322,8 +322,15 @@ async function printStickerSheet() {
     const s = document.getElementById('sticker-page-style');
     if (s) s.remove();
     window.removeEventListener('afterprint', cleanup);
+    window.removeEventListener('focus', cleanup);
+    document.removeEventListener('visibilitychange', cleanupOnVisible);
+  };
+  const cleanupOnVisible = () => {
+    if (!document.hidden) cleanup();
   };
   window.addEventListener('afterprint', cleanup);
+  window.addEventListener('focus', cleanup);
+  document.addEventListener('visibilitychange', cleanupOnVisible);
   window.print();
   setTimeout(cleanup, 2000);
 }

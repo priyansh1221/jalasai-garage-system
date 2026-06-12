@@ -1018,6 +1018,58 @@ nav {
 /* ─── GS modal ────────────────────────────────────────── */
 .gs-form { background: var(--sur2); border-radius: 8px; padding: 14px; margin-bottom: 12px; }
 
+body.print-stickers {
+  background: #fff !important;
+  color: #000 !important;
+}
+body.print-stickers nav,
+body.print-stickers .no-print,
+body.print-stickers .gs-bar,
+body.print-stickers .mobile-bottom-nav,
+body.print-stickers .sidebar-toggle,
+body.print-stickers .sidebar-scrim {
+  display: none !important;
+}
+body.print-stickers .page {
+  display: none !important;
+  padding: 0 !important;
+}
+body.print-stickers #page-print {
+  display: block !important;
+  max-width: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+body.print-stickers #page-print > .board-hdr,
+body.print-stickers #page-print > div:nth-of-type(2),
+body.print-stickers .print-selection-panel,
+body.print-stickers .print-preview-head {
+  display: none !important;
+}
+body.print-stickers .print-manager,
+body.print-stickers .print-preview-panel {
+  display: block !important;
+  border: 0 !important;
+  background: transparent !important;
+}
+body.print-stickers #print-sheet-wrap {
+  padding: 0 !important;
+  overflow: visible !important;
+  background: #fff !important;
+  min-height: auto !important;
+}
+body.print-stickers .a4-sheet {
+  box-shadow: none !important;
+  margin: 0 !important;
+  width: 297mm !important;
+  min-height: 210mm !important;
+}
+body.print-stickers .label-empty {
+  display: block !important;
+  border: 0 !important;
+  background: #fff !important;
+}
+
 /* ─── Print media — invoice printing (portrait) ───────── */
 @media print {
   @page { size: A4 portrait; margin: 10mm; }
