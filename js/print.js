@@ -22,14 +22,26 @@ function qrImageUrl(text, size) {
   return `https://api.qrserver.com/v1/create-qr-code/?size=${size}x${size}&ecc=M&data=${encodeURIComponent(text)}`;
 }
 
-function fallbackStickerQR(canvasId, payload, size) {
-  const canvas = document.getElementById(canvasId);
-  if (!canvas) return;
+// Phase 4 (2026-06-12): sticker QR codes are now drawn with the bundled,
+// offline `QRGen` encoder as the PRIMARY renderer. The shop prints labels at
+// the counter on mobile data that often drops, and the old primary path hit
+// api.qrserver.com — which broke printing offline and leaked every SKU to a
+// third party. The network image is kept only as an optional enhancement.
+function drawStickerQR(canvas, payload, size) {
+  if (!canvas) return false;
   canvas.width = size;
   canvas.height = size;
   try {
     QRGen.draw(canvas, payload);
-  } catch (_) {}
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
+function fallbackStickerQR(canvasId, payload, size) {
+  const canvas = document.getElementById(canvasId);
+  drawStickerQR(canvas, payload, size);
 }
 
 function stickerNameClass(name, sizeKey) {
@@ -207,6 +219,10 @@ async function ensurePrintQRCodesReady() {
 function drawLabelQRCodeFromAppSource(canvas, payload) {
   if (!canvas) return Promise.resolve();
   const px = canvas.width || 200;
+  // Local-first: draw with the offline encoder. This always works without a
+  // network round-trip, so label sheets print instantly and offline.
+  if (drawStickerQR(canvas, payload, px)) return Promise.resolve();
+  // Only if the local encoder somehow failed, try the network QR image.
   return new Promise(resolve => {
     const img = new Image();
     img.crossOrigin = 'anonymous';
@@ -218,15 +234,10 @@ function drawLabelQRCodeFromAppSource(canvas, payload) {
         ctx.fillStyle = '#fff';
         ctx.fillRect(0, 0, px, px);
         ctx.drawImage(img, 0, 0, px, px);
-      } catch (_) {
-        fallbackStickerQR(canvas.id, payload, px);
-      }
+      } catch (_) {}
       resolve();
     };
-    img.onerror = () => {
-      fallbackStickerQR(canvas.id, payload, px);
-      resolve();
-    };
+    img.onerror = () => resolve();
     img.src = qrImageUrl(payload, px);
   });
 }
@@ -333,11 +344,11 @@ function openInvoice(id, options = {}) {
   document.getElementById('invoice-content').innerHTML = `
     <div class="inv-header">
       <div class="inv-brandwrap">
-        <img class="inv-logo" src="${BRAND_LOGO_SRC}" alt="Jalasai Auto Parts">
+        <img class="inv-logo" src="${BRAND_LOGO_SRC}" alt="${getGarageProfile().name}">
         <div>
-          <div class="inv-brand">Jalasai Auto Parts</div>
-          <div class="inv-addr">Bhimrad, Surat, Gujarat - 395007</div>
-          <div class="inv-addr">Mo. 9687272157</div>
+          <div class="inv-brand">${getGarageProfile().name}</div>
+          <div class="inv-addr">${getGarageProfile().addressLine}</div>
+          <div class="inv-addr">Mo. ${getGarageProfile().phone}</div>
         </div>
       </div>
       <div style="text-align:right;">
@@ -403,7 +414,7 @@ function openInvoice(id, options = {}) {
     </div>
     <div class="inv-divider"></div>
     <div style="font-size:10px;color:var(--mut);text-align:center;margin-top:8px;line-height:1.6;">
-      Thank you for choosing Jalasai Auto Parts<br>
+      Thank you for choosing ${getGarageProfile().name}<br>
       No warranty on used/third-party parts · Disputes accepted within 7 days
     </div>`;
 

@@ -56,7 +56,7 @@ Vanilla JS | Local-first architecture | Supabase cloud sync | PWA-ready | Real w
 - Static deployment (no framework build pipeline)
 - Supabase Auth + Postgres + Storage
 - Cloudflare Pages runtime config via `/config.js` Worker
-- Google Apps Script helpers for backup/sync operations
+- GitHub Actions nightly Supabase backup to a private repository (optional)
 
 ## Documentation Map
 
@@ -65,6 +65,7 @@ Vanilla JS | Local-first architecture | Supabase cloud sync | PWA-ready | Real w
 - Release changes: [CHANGELOG.md](CHANGELOG.md)
 - Incident log: [docs/INCIDENTS.md](docs/INCIDENTS.md)
 - Latest cloud incident: [docs/SUPABASE_PROJECT_UNHEALTHY_INCIDENT_2026_06_07.md](docs/SUPABASE_PROJECT_UNHEALTHY_INCIDENT_2026_06_07.md)
+- 2026-06-12 cleanup and sync hardening: [docs/CLEANUP_AND_HARDENING_2026_06_12.md](docs/CLEANUP_AND_HARDENING_2026_06_12.md)
 - Deployment setup: [DEPLOYMENT.md](DEPLOYMENT.md)
 - Build and operations: [OPERATIONS.md](OPERATIONS.md)
 - Implementation details: [IMPLEMENTATION.md](IMPLEMENTATION.md)

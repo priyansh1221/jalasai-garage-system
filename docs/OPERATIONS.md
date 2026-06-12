@@ -221,14 +221,16 @@ When adding or scanning a stock part into a job:
 
 Current cloud design uses shadow tables as the primary live source:
 
-- primary runtime sync: 15 mirrored shadow tables (`garage_customers`, `garage_jobs`, etc.), with 14 tables pulled back into app state
-- legacy backup path: `garage_state` JSON blob, kept as an optional manual or Apps Script backup target
+- primary runtime sync: 10 mirrored shadow tables (`garage_customers`, `garage_jobs`, `garage_job_payments`, `garage_stock_items`, `garage_expenses`, `garage_income_entries`, `garage_parts_log`, `garage_audit_log`, `garage_stock_movements`, `garage_mechanics`), with 9 pulled back into app state (job payments are derived)
+- the legacy `garage_state` blob and the supplier-import tables were removed from the app on 2026-06-12 (`docs/CLEANUP_AND_HARDENING_2026_06_12.md`)
 
 How sync works:
 - normal push writes only rows changed around the pending local edit to shadow tables
 - manual/full mirror paths remain available for intentional backup or recovery operations
 - automatic pull refreshes operational tables first; manual `Sync Now` can still perform a full pull
 - removed records are soft-deleted, never hard-deleted
+- explicit user deletes now push tombstone rows to cloud so other devices apply the delete instead of resurrecting the record (2026-06-12)
+- the reconnect/visibility sweep widens its window to cover the device's offline gap (up to 7 days) so deletes made while away are applied
 
 Background sync behavior:
 - background loop runs every 5 minutes
@@ -236,7 +238,7 @@ Background sync behavior:
 - normal online two-device sync is local-first: save immediately, batch upload briefly, send a heartbeat, then let the other device pull the operational tables
 - manual `Sync Now` downloads latest cloud data first, then pushes only if local pending changes remain
 - any device that has not pulled for more than 7 days performs pull-first recovery before uploading
-- when a device has no pending local edits, cloud pull replaces the local business cache instead of merging stale rows back in
+- when a device has no pending local edits, a FULL cloud pull replaces the local business cache; delta/critical-only/partially-failed pulls always merge instead (guard added 2026-06-12)
 
 Realtime sync between devices:
 - all devices subscribe to `garage_sync_heartbeat` via Supabase Realtime on sign-in
@@ -246,23 +248,12 @@ Realtime sync between devices:
 - effective end-to-end sync latency between devices: ~5 seconds
 - requires one-time SQL run to add `garage_sync_heartbeat` table and enable realtime publication
 
-### Weekly blob backup
-- the current app runtime does not auto-write the legacy blob
-- Admin exposes a manual `Copy Data to garage_state` action when a legacy snapshot is needed
-- Apps Script can still run `writeSundayBlobFromTables()` at 6 PM IST as an external fallback if that path is kept active
-- sync diagnostics show `Legacy Blob Backup`
-
-### Daily Drive backup
-- Apps Script runs `backupShadowTablesToDrive()` every day at 10 PM IST
-- reads from all 14 shadow tables and saves a timestamped JSON to Google Drive
-- keeps the last 30 daily backups; older files are trashed automatically
-
-### Apps Script setup (one-time)
-In `apps-script/JalaSaiDriveBackup.gs`:
-1. Set `BACKUP_CONFIG.SUPABASE_SERVICE_ROLE_KEY` (from Supabase project settings → API)
-2. Set `BACKUP_CONFIG.DRIVE_FOLDER_ID` (Google Drive folder ID for backups)
-3. Run `setupDailyBackupTrigger()` — sets daily Drive backup at 10 PM IST
-4. Run `setupSundayBlobTrigger()` — sets Sunday 6 PM IST blob backup
+### Backups (2026-06-12 model)
+- Admin → Backup card: one-tap full JSON download of this device's data (keep a weekly copy outside the shop)
+- Cloud Sync modal: `Download Backup` / `Restore Backup` for the same JSON format
+- Nightly automated backup: GitHub Action `.github/workflows/nightly-backup.yml` runs `scripts/supabase-backup.mjs` at 03:00 IST, dumping every live table and pushing to a PRIVATE backup repository
+- The workflow skips gracefully (stays green) until these repo secrets are set: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE`, `BACKUP_REPO` (e.g. `priyansh1221/jalasai-backups`, must be private), `BACKUP_REPO_TOKEN` (fine-grained PAT, contents:write on the backup repo)
+- Never store dumps in the public app repo or as public-repo workflow artifacts
 5. Run `testBackupNow()` to verify Drive access works
 6. Run `testBlobWriteNow()` to verify blob write works
 

@@ -24,6 +24,7 @@ const APP_ASSETS = [
   './js/scanner.js',
   './js/print.js',
   './js/sync.js',
+  './js/shell.js',
   './js/new-ui.js',
   './js/vendor/supabase.js',
   './newui/',

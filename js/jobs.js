@@ -1872,7 +1872,7 @@ function sendBill(id) {
   const due = jobDue(j);
   const advance = jobAdvance(j);
   const discount = jobDiscountAmount(j);
-  const msg = `Namaskar ${j.cust} ji 🙏\n\nAapki ${j.veh} (${j.vno||''}) ki service complete ho gayi!\n\nKaam: ${j.prob}\nLabour: ${fmtMoney(j.lab||0)}\nParts: ${fmtMoney(j.prt||0)}${discount > 0 ? `\nDiscount: -${fmtMoney(discount)}` : ''}\n─────────────\nKul: ${fmtMoney(tot)}${due > 0 ? `\nBaaki: ${fmtMoney(due)}` : advance > 0 ? `\nAdvance Balance: ${fmtMoney(advance)}` : '\nPaid: Full ✓'}\n\nJalasai Autoparts, Surat\nThank you! 🙏`;
+  const msg = `Namaskar ${j.cust} ji 🙏\n\nAapki ${j.veh} (${j.vno||''}) ki service complete ho gayi!\n\nKaam: ${j.prob}\nLabour: ${fmtMoney(j.lab||0)}\nParts: ${fmtMoney(j.prt||0)}${discount > 0 ? `\nDiscount: -${fmtMoney(discount)}` : ''}\n─────────────\nKul: ${fmtMoney(tot)}${due > 0 ? `\nBaaki: ${fmtMoney(due)}` : advance > 0 ? `\nAdvance Balance: ${fmtMoney(advance)}` : '\nPaid: Full ✓'}\n\n${getGarageProfile().shortName}, ${getGarageProfile().city}\nThank you! 🙏`;
   if (!j.phone) { toast('Customer phone not available'); return; }
   window.open('https://wa.me/91' + j.phone + '?text=' + encodeURIComponent(msg));
   closeM('m-detail');

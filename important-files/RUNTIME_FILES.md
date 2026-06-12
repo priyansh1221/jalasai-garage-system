@@ -25,7 +25,9 @@ These files directly power the running JalaSai website:
 - `js/print.js`
 - `js/new-ui.js`
 - `js/vendor/supabase.js`
+- `js/vendor/lz-string.min.js`
 - `js/sync.js`
+- `js/shell.js` (shared inline-shell extraction, 2026-06-12 — invoice/photo/done-modal helpers used by BOTH UIs)
 
 Everything else in the workspace is support, docs, imports, tools, or deployment material.
 

@@ -17,7 +17,7 @@ Vanilla JS | Local-first architecture | Supabase cloud sync | PWA-ready | Real w
 
 - UI layer: single-page interface with workflow-first forms for Jobs, Invoices, Stock, Customers, and Reports
 - Data layer: browser local state for offline resilience and fast interaction
-- Sync layer: Supabase-authenticated cloud sync with the original `garage_state` blob plus a shadow table dataset for gradual migration
+- Sync layer: Supabase-authenticated table-wise cloud sync (shadow tables are the only cloud source of truth)
 - Storage layer: structured records for operations plus photo references
 - Tooling layer: lightweight scripts for catalog preparation, imports, and backup support
 
@@ -79,7 +79,7 @@ Current app behavior:
 - `Sync Now` pulls latest cloud data first, then pushes only if this device still has pending local changes
 - devices that have not pulled for more than 7 days refresh from cloud before upload; startup renders local data first when available and only blocks empty devices for first cloud hydration
 - if there are no pending local edits, a pull replaces the local business cache so stale records are removed automatically
-- legacy `garage_state` blob backup is not auto-written by the app runtime; the Admin screen exposes a manual copy action and Apps Script can still maintain an external backup path
+- backups: Admin exposes a one-tap full JSON download; an optional GitHub Action dumps all Supabase tables nightly to a private repository
 - sync table reads avoid tombstoned rows where possible, and empty-local-device safety pulls before pushing
 - old/new UI switching keeps local data backed up first, then lets cloud sync continue in the background
 
@@ -88,7 +88,6 @@ Current app behavior:
 - Vanilla HTML/CSS/JS
 - Static deployment (no framework build pipeline)
 - Supabase Auth + Postgres + Storage
-- Google Apps Script helpers for backup/sync operations
 
 ## Documentation Map
 

@@ -291,7 +291,10 @@ function showPage(p, options = {}) {
 
   const renders = {
     home:      () => { if (typeof renderHomeDashboard === 'function') renderHomeDashboard(); },
-    admin:     () => { if (typeof renderCloudBackupStatus === 'function') renderCloudBackupStatus(); },
+    admin:     () => {
+      if (typeof renderSyncDiagnostics === 'function') renderSyncDiagnostics();
+      if (typeof hydrateGarageProfileForm === 'function') hydrateGarageProfileForm();
+    },
     jobs:      renderJobs,
     stock:     renderStock,
     customers: renderCustomers,

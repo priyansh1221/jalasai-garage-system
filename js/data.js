@@ -29,65 +29,6 @@ function yesterday() {
   return businessDate(-1);
 }
 
-function textLooksLikeSample(value) {
-  const text = String(value || '').trim().toLowerCase();
-  if (!text) return false;
-  return (
-    text.includes('sample')
-    || text.includes('demo')
-    || text.includes('dummy')
-    || text.includes('test customer')
-    || text.includes('test mechanic')
-    || text.includes('lorem ipsum')
-  );
-}
-
-function recordLooksLikeSample(record, fields = []) {
-  if (!record || typeof record !== 'object') return false;
-  if (record.isSample === true) return true;
-  if (String(record.importSource || '').toLowerCase() === 'sample') return true;
-  return fields.some(field => textLooksLikeSample(record[field]));
-}
-
-// ─── Default seeds ───────────────────────────────────────
-const SEED_MECHANICS = [];
-
-const SEED_CUSTOMERS = [];
-
-const SEED_JOBS = [];
-
-const SEED_STOCK = [];
-
-const DEMO_STOCK_SKUS = new Set([
-  'OLA-BRA-PAD-FRT',
-  'OLA-BRA-PAD-REAR',
-  'OLA-ELE-THR-G1',
-  'OLA-ELE-THR-G2',
-  'OLA-TIR-110-70',
-  'OLA-ELE-BRG-BIG',
-  'ACT-BRA-CBL-FRT',
-  'ACT-ELE-CDI-STD',
-  'ACT-FLT-AIR-STD',
-  'ACT-ENG-CAR-ASM',
-  'ACT-LGT-HDL-ASM',
-  'SPL-ENG-CLT-PLT',
-  'SPL-BRA-CBL-STD',
-  'SPL-ELE-COIL-IGN',
-  'JUP-BRA-PAD-FRT',
-  'GEN-OIL-CASTROL',
-  'GEN-OIL-MOTUL',
-  'ACT-DRV-BLT-STD',
-  'ATH-ELE-CTR-STD',
-  'GEN-FLT-OIL-5W30',
-]);
-
-const DEMO_JOB_IDS = new Set(['J001', 'J002', 'J003', 'J004', 'J005', 'J006', 'J007', 'J008']);
-const DEMO_CUSTOMER_IDS = new Set(['c1', 'c2', 'c3', 'c4', 'c5']);
-const DEMO_MECHANIC_IDS = new Set(['m1', 'm2', 'm3', 'm4', 'm5']);
-const DEMO_EXPENSE_IDS = new Set(['e1', 'e2', 'e3', 'e4', 'e5']);
-
-const SEED_EXPENSES = [];
-
 // ─── Runtime state ───────────────────────────────────────
 const CLOUD_DEFAULTS = window.JALASAI_CLOUD_CONFIG || {};
 
@@ -99,17 +40,61 @@ let expenses   = [];
 let incomeEntries = [];
 let partsLog   = [];
 let auditLog   = [];
-let reviewItems = [];
-let importBatches = [];
-let purchaseEntries = [];
 let stockMovements = [];
-let supplierCatalogMap = [];
-let invoiceImportReviews = [];
 let jobCtr     = 1;
 let invoiceCtr = 1;   // auto-increments when a job is marked done
 let gsUrl      = '';
 let cloudKey   = '';
 let cloudEmail = '';
+
+// ─── Garage profile (Phase 5, 2026-06-12) ───────────────
+// Shop identity used on printed invoices, WhatsApp messages, and the closing
+// summary. Defaults match the previously hardcoded strings, so behavior is
+// unchanged until the owner edits the profile on the Admin page.
+const GARAGE_PROFILE_DEFAULTS = Object.freeze({
+  name: 'Jalasai Auto Parts',
+  shortName: 'Jalasai Autoparts',
+  addressLine: 'Bhimrad, Surat, Gujarat - 395007',
+  city: 'Surat',
+  phone: '9687272157',
+});
+let garageProfile = { ...GARAGE_PROFILE_DEFAULTS };
+
+function getGarageProfile() {
+  return garageProfile;
+}
+
+function normalizeGarageProfile(raw) {
+  const item = raw && typeof raw === 'object' ? raw : {};
+  return {
+    name: String(item.name || '').trim() || GARAGE_PROFILE_DEFAULTS.name,
+    shortName: String(item.shortName || '').trim() || GARAGE_PROFILE_DEFAULTS.shortName,
+    addressLine: String(item.addressLine || '').trim() || GARAGE_PROFILE_DEFAULTS.addressLine,
+    city: String(item.city || '').trim() || GARAGE_PROFILE_DEFAULTS.city,
+    phone: String(item.phone || '').trim() || GARAGE_PROFILE_DEFAULTS.phone,
+  };
+}
+
+function hydrateGarageProfileForm() {
+  const fields = { 'gp-name': 'name', 'gp-short': 'shortName', 'gp-address': 'addressLine', 'gp-city': 'city', 'gp-phone': 'phone' };
+  Object.entries(fields).forEach(([id, key]) => {
+    const el = document.getElementById(id);
+    if (el) el.value = garageProfile[key] || '';
+  });
+}
+
+function saveGarageProfileForm() {
+  if (typeof requireAdminAccess === 'function' && !requireAdminAccess('edit garage profile')) return;
+  garageProfile = normalizeGarageProfile({
+    name: document.getElementById('gp-name')?.value,
+    shortName: document.getElementById('gp-short')?.value,
+    addressLine: document.getElementById('gp-address')?.value,
+    city: document.getElementById('gp-city')?.value,
+    phone: document.getElementById('gp-phone')?.value,
+  });
+  saveAll({ domain: 'settings', skipSync: true });
+  toast('Garage profile saved on this device');
+}
 const DEFAULT_SYNC_META = {
   updatedAt: '',
   lastPulledAt: '',
@@ -126,12 +111,6 @@ const DEFAULT_SYNC_META = {
   shadowLastMirrorAt: '',
   shadowLastMirrorSummary: '',
   shadowLastMirrorError: '',
-  shadowValidationStartedAt: '',
-  shadowValidationUntil: '',
-  shadowLastValidationAt: '',
-  shadowLastValidationOk: null,
-  shadowLastValidationSummary: '',
-  lastBlobBackupAt: '',
 };
 let syncMeta   = { ...DEFAULT_SYNC_META };
 let printFilter = { q: '', cat: '', bike: '', status: '' };
@@ -260,12 +239,7 @@ const SK = {
   incomeEntries: 'js_incomeentries',
   partsLog:   'js_partslog',
   auditLog:   'js_auditlog',
-  reviewItems: 'js_reviewitems',
-  importBatches: 'js_importbatches',
-  purchaseEntries: 'js_purchaseentries',
   stockMovements: 'js_stockmovements',
-  supplierCatalogMap: 'js_suppliercatalogmap',
-  invoiceImportReviews: 'js_invoiceimportreviews',
   jobCtr:     'js_jobctr',
   invoiceCtr: 'js_invoicectr',
   gsUrl:      'js_gsurl',
@@ -274,6 +248,7 @@ const SK = {
   syncMeta:   'js_syncmeta',
   lastPullAt: 'jalasai_last_pull_at',
   followupStartDate: 'js_followup_start_date',
+  garageProfile: 'js_garageprofile',
   localBackupLatest: 'js_local_backup_latest',
   bootCleanupVersion: 'js_boot_cleanup_version',
 };
@@ -287,12 +262,12 @@ const LOCAL_SIGN_OUT_STORAGE_KEYS = Object.freeze([
   SK.incomeEntries,
   SK.partsLog,
   SK.auditLog,
-  SK.reviewItems,
-  SK.importBatches,
-  SK.purchaseEntries,
+  'js_reviewitems',
+  'js_importbatches',
+  'js_purchaseentries',
   SK.stockMovements,
-  SK.supplierCatalogMap,
-  SK.invoiceImportReviews,
+  'js_suppliercatalogmap',
+  'js_invoiceimportreviews',
   SK.jobCtr,
   SK.invoiceCtr,
   SK.cloudEmail,
@@ -325,7 +300,6 @@ const SAVE_DOMAIN_KEYS = Object.freeze({
   payments: ['jobs', 'customers', 'auditLog'],
   payment: ['jobs', 'customers', 'auditLog'],
   stock: ['stock', 'partsLog', 'stockMovements', 'auditLog'],
-  catalog: ['stock', 'reviewItems', 'importBatches', 'purchaseEntries', 'stockMovements', 'supplierCatalogMap', 'invoiceImportReviews', 'auditLog'],
   customers: ['customers', 'auditLog', 'followupStartDate'],
   customer: ['customers', 'auditLog', 'followupStartDate'],
   reminders: ['customers', 'auditLog'],
@@ -338,7 +312,7 @@ const SAVE_DOMAIN_KEYS = Object.freeze({
   logs: ['auditLog'],
   audit: ['auditLog'],
   sync: ['syncMeta'],
-  settings: ['gsUrl', 'cloudKey', 'cloudEmail', 'syncMeta', 'followupStartDate'],
+  settings: ['gsUrl', 'cloudKey', 'cloudEmail', 'syncMeta', 'followupStartDate', 'garageProfile'],
 });
 
 const SAVE_KEY_WRITERS = {
@@ -350,12 +324,7 @@ const SAVE_KEY_WRITERS = {
   incomeEntries: () => setLocalStorageSafe(SK.incomeEntries, encodeLocalStorageJson(incomeEntries)),
   partsLog: () => setLocalStorageSafe(SK.partsLog, encodeLocalStorageJson(partsLog)),
   auditLog: () => setLocalStorageSafe(SK.auditLog, encodeLocalStorageJson(auditLog)),
-  reviewItems: () => setLocalStorageSafe(SK.reviewItems, encodeLocalStorageJson(reviewItems)),
-  importBatches: () => setLocalStorageSafe(SK.importBatches, encodeLocalStorageJson(importBatches)),
-  purchaseEntries: () => setLocalStorageSafe(SK.purchaseEntries, encodeLocalStorageJson(purchaseEntries)),
   stockMovements: () => setLocalStorageSafe(SK.stockMovements, encodeLocalStorageJson(stockMovements)),
-  supplierCatalogMap: () => setLocalStorageSafe(SK.supplierCatalogMap, encodeLocalStorageJson(supplierCatalogMap)),
-  invoiceImportReviews: () => setLocalStorageSafe(SK.invoiceImportReviews, encodeLocalStorageJson(invoiceImportReviews)),
   jobCtr: () => setLocalStorageSafe(SK.jobCtr, jobCtr),
   invoiceCtr: () => setLocalStorageSafe(SK.invoiceCtr, invoiceCtr),
   gsUrl: () => setLocalStorageSafe(SK.gsUrl, gsUrl),
@@ -363,6 +332,7 @@ const SAVE_KEY_WRITERS = {
   cloudEmail: () => setLocalStorageSafe(SK.cloudEmail, cloudEmail),
   syncMeta: () => setLocalStorageSafe(SK.syncMeta, JSON.stringify(syncMeta)),
   followupStartDate: () => setLocalStorageSafe(SK.followupStartDate, followupStartDate || today()),
+  garageProfile: () => setLocalStorageSafe(SK.garageProfile, JSON.stringify(garageProfile)),
 };
 
 function saveDomainKeySet(domain) {
@@ -551,24 +521,22 @@ function loadAll() {
       return raw ? parseLocalStorageJson(raw) : (seed || fallback || []);
     } catch { return seed || fallback || []; }
   };
-  jobs       = load(SK.jobs,      SEED_JOBS).map(normalizeJob);
-  stock      = load(SK.stock,     SEED_STOCK).map(normalizeStockItem);
-  customers  = load(SK.customers, SEED_CUSTOMERS).map(normalizeCustomer);
-  mechanics  = load(SK.mechanics, SEED_MECHANICS).map(normalizeMechanic);
+  jobs       = load(SK.jobs,      []).map(normalizeJob);
+  stock      = load(SK.stock,     []).map(normalizeStockItem);
+  customers  = load(SK.customers, []).map(normalizeCustomer);
+  mechanics  = load(SK.mechanics, []).map(normalizeMechanic);
   jobs       = jobs.map(normalizeJob);
-  expenses   = load(SK.expenses,  SEED_EXPENSES).map(normalizeExpense);
+  expenses   = load(SK.expenses,  []).map(normalizeExpense);
   incomeEntries = load(SK.incomeEntries, []).map(normalizeIncomeEntry);
   incomeEntries = incomeEntries.map(normalizeIncomeEntry);
   partsLog   = load(SK.partsLog,  []);
   auditLog   = load(SK.auditLog,  []);
-  reviewItems = load(SK.reviewItems, []);
-  importBatches = load(SK.importBatches, []);
-  purchaseEntries = load(SK.purchaseEntries, []).map(normalizePurchaseEntry);
   stockMovements = load(SK.stockMovements, []).map(normalizeStockMovement);
-  supplierCatalogMap = load(SK.supplierCatalogMap, []).map(normalizeSupplierCatalogMap);
-  invoiceImportReviews = load(SK.invoiceImportReviews, []).map(normalizeInvoiceImportReview);
   syncMeta   = { ...DEFAULT_SYNC_META, ...load(SK.syncMeta, DEFAULT_SYNC_META) };
   followupStartDate = localStorage.getItem(SK.followupStartDate) || today();
+  try {
+    garageProfile = normalizeGarageProfile(JSON.parse(localStorage.getItem(SK.garageProfile) || 'null'));
+  } catch (_) { garageProfile = { ...GARAGE_PROFILE_DEFAULTS }; }
   jobCtr     = parseInt(localStorage.getItem(SK.jobCtr)     || '9');
   invoiceCtr = parseInt(localStorage.getItem(SK.invoiceCtr) || '1');
   const projectGsUrl = String(CLOUD_DEFAULTS.projectUrl || '').trim();
@@ -611,12 +579,7 @@ function clearLocalDeviceDataAfterSignOut() {
   incomeEntries = [];
   partsLog = [];
   auditLog = [];
-  reviewItems = [];
-  importBatches = [];
-  purchaseEntries = [];
   stockMovements = [];
-  supplierCatalogMap = [];
-  invoiceImportReviews = [];
   jobCtr = 9;
   invoiceCtr = 1;
   followupStartDate = today();
@@ -665,15 +628,11 @@ function runDataMaintenanceCleanup(options = {}) {
       jobs = jobs.map(normalizeJob);
       incomeEntries = incomeEntries.map(normalizeIncomeEntry);
     }
-    const purgedSeededSamples = purgeSeededSampleData();
-    const purgedDemoStock = purgeDemoStockData();
     const purgedVerificationJobs = purgeTemporaryVerificationJobs();
     const tidied = tidyCustomerRecords();
     const tidiedCustomers = !!(tidied && (tidied.tombstoned || tidied.healed));
     const changed = !!(
-      purgedSeededSamples
-      || purgedDemoStock
-      || purgedVerificationJobs
+      purgedVerificationJobs
       || recoveredMechanics.length
       || tidiedCustomers
     );
@@ -1433,24 +1392,6 @@ function recoverMechanicsFromReferences() {
   return recovered;
 }
 
-function normalizePurchaseEntry(entry) {
-  const item = { ...(entry || {}) };
-  item.qty = parseFloat(item.qty || 0) || 0;
-  item.purchaseRate = parseFloat(item.purchaseRate || 0) || 0;
-  item.mrp = parseFloat(item.mrp || 0) || 0;
-  item.amount = parseFloat(item.amount || 0) || 0;
-  item.confidence = Math.max(0, Math.min(1, parseFloat(item.confidence || 0) || 0));
-  item.fitments = uniqStrings(item.fitments);
-  item.status = item.status || 'pending-review';
-  item.matchMethod = item.matchMethod || '';
-  item.suggestedStockId = item.suggestedStockId || '';
-  item.mappedStockId = item.mappedStockId || '';
-  item.mappedSku = item.mappedSku || '';
-  item.createdAt = item.createdAt || nowISO();
-  item.updatedAt = item.updatedAt || item.createdAt;
-  return item;
-}
-
 function normalizeStockMovement(entry) {
   const item = { ...(entry || {}) };
   item.qty = parseFloat(item.qty || 0) || 0;
@@ -1460,102 +1401,6 @@ function normalizeStockMovement(entry) {
   item.createdAt = item.createdAt || nowISO();
   item.updatedAt = item.updatedAt || item.createdAt;
   return item;
-}
-
-function normalizeSupplierCatalogMap(entry) {
-  const item = { ...(entry || {}) };
-  item.supplier = String(item.supplier || '').trim();
-  item.supplierPartNo = String(item.supplierPartNo || item.partNo || '').trim();
-  item.rawDescription = String(item.rawDescription || item.description || '').trim();
-  item.normalizedDescription = String(item.normalizedDescription || '').trim();
-  item.mappedStockId = item.mappedStockId || '';
-  item.mappedSku = item.mappedSku || '';
-  item.confidence = Math.max(0, Math.min(1, parseFloat(item.confidence || 0) || 0));
-  item.reviewStatus = item.reviewStatus || 'pending';
-  item.notes = String(item.notes || '').trim();
-  item.lastSeenAt = item.lastSeenAt || '';
-  item.createdAt = item.createdAt || item.lastSeenAt || nowISO();
-  item.updatedAt = item.updatedAt || item.lastSeenAt || item.createdAt;
-  return item;
-}
-
-function normalizeInvoiceImportReview(entry) {
-  const item = { ...(entry || {}) };
-  item.status = item.status || 'pending';
-  item.confidence = Math.max(0, Math.min(1, parseFloat(item.confidence || 0) || 0));
-  item.suggestedStockId = item.suggestedStockId || '';
-  item.suggestedSku = item.suggestedSku || '';
-  item.purchaseEntryId = item.purchaseEntryId || '';
-  item.notes = String(item.notes || '').trim();
-  item.createdAt = item.createdAt || nowISO();
-  item.updatedAt = item.updatedAt || item.createdAt;
-  return item;
-}
-
-function isDemoStockItem(item) {
-  const sku = String(item?.sku || '').trim().toUpperCase();
-  return !!sku && DEMO_STOCK_SKUS.has(sku);
-}
-
-function purgeDemoStockData() {
-  const removedIds = new Set(stock.filter(isDemoStockItem).map(item => item.id));
-  if (!removedIds.size) return false;
-
-  stock = stock.filter(item => !removedIds.has(item.id));
-  stockMovements = stockMovements.filter(item => !removedIds.has(item.stockId));
-  supplierCatalogMap = supplierCatalogMap.filter(item => !removedIds.has(item.mappedStockId));
-
-  purchaseEntries = purchaseEntries.map(item => {
-    if (!removedIds.has(item.suggestedStockId) && !removedIds.has(item.mappedStockId)) return item;
-    const next = { ...item, suggestedStockId: '', suggestedSku: '', mappedStockId: '', mappedSku: '' };
-    if (next.status === 'matched' || next.status === 'mapped') next.status = 'pending-review';
-    if (next.matchMethod === 'supplier-part-no' || next.matchMethod === 'description-exact' || next.matchMethod === 'description-fuzzy') {
-      next.matchMethod = '';
-    }
-    return next;
-  });
-
-  invoiceImportReviews = invoiceImportReviews.map(item => {
-    if (!removedIds.has(item.suggestedStockId)) return item;
-    const next = { ...item, suggestedStockId: '', suggestedSku: '' };
-    if (next.status === 'accepted') next.status = 'pending';
-    return next;
-  });
-
-  reviewItems = reviewItems.map(item => {
-    if (!removedIds.has(item.suggestedStockId) && !removedIds.has(item.mappedStockId)) return item;
-    return { ...item, suggestedStockId: '', suggestedSku: '', mappedStockId: '', mappedSku: '' };
-  });
-  return true;
-}
-
-function purgeSeededSampleData() {
-  const demoJobIds = new Set(jobs
-    .filter(item => DEMO_JOB_IDS.has(item.id) || recordLooksLikeSample(item, ['cust', 'veh', 'vno', 'prob', 'notes']))
-    .map(item => item.id));
-  const demoCustomerIds = new Set(customers
-    .filter(item => DEMO_CUSTOMER_IDS.has(item.id) || recordLooksLikeSample(item, ['name', 'phone', 'address', 'notes']))
-    .map(item => item.id));
-  const demoMechanicIds = new Set(mechanics
-    .filter(item => DEMO_MECHANIC_IDS.has(item.id) || recordLooksLikeSample(item, ['name', 'phone', 'specialty']))
-    .map(item => item.id));
-  const demoExpenseIds = new Set(expenses
-    .filter(item => DEMO_EXPENSE_IDS.has(item.id) || recordLooksLikeSample(item, ['desc', 'paidTo', 'cat']))
-    .map(item => item.id));
-  const hadDemoData = demoJobIds.size || demoCustomerIds.size || demoMechanicIds.size || demoExpenseIds.size;
-  if (!hadDemoData) return false;
-
-  jobs = jobs.filter(item => !demoJobIds.has(item.id));
-  customers = customers.filter(item => !demoCustomerIds.has(item.id));
-  mechanics = mechanics.filter(item => !demoMechanicIds.has(item.id));
-  expenses = expenses.filter(item => !demoExpenseIds.has(item.id));
-
-  auditLog = auditLog.filter(entry => {
-    const entityId = String(entry.entityId || '');
-    return !demoJobIds.has(entityId) && !demoCustomerIds.has(entityId) && !demoMechanicIds.has(entityId) && !demoExpenseIds.has(entityId);
-  });
-
-  return true;
 }
 
 function tidyCustomerRecords() {

@@ -1,6 +1,8 @@
 # JalaSai Project Architecture and Function Reference
 
-Last updated: 2026-06-07
+Last updated: 2026-06-12
+
+> **2026-06-12 update:** the supplier catalog / agent-JSON / invoice-import pipeline, the legacy `garage_state` blob paths, the sync validation machinery, demo/seed purge code, and `apps-script/` were removed; the duplicated inline shell helpers now live in shared `js/shell.js`; sync gained tombstone propagation, a fixed delta cursor, replaceLocal guards, and payments-union merge; new features: batch scan, Set Count recount, Book Check closing line, Garage Profile, nightly backup workflow, tenant_id groundwork. Sections below describing removed functions are retained for history but no longer apply — see `docs/CLEANUP_AND_HARDENING_2026_06_12.md` for the authoritative delta.
 
 This document explains how the JalaSai Garage System is structured, how it works at runtime, and what every named project-owned function does.
 

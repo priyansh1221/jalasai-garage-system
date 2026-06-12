@@ -1,6 +1,18 @@
 # JalaSai Changelog
 
-Last updated: 2026-06-07
+Last updated: 2026-06-12
+
+## 2026-06-12
+
+### Major cleanup, sync hardening, and shared shell runtime
+
+- Removed the supplier catalog / agent-JSON / invoice-import review pipeline, the legacy `garage_state` blob paths, dead sync-validation machinery, demo/seed purge code, and the Google Apps Script integrations (full details: `docs/CLEANUP_AND_HARDENING_2026_06_12.md`; pre-change tag `pre-cleanup-2026-06-12`).
+- Sync hardening: fixed the never-advancing delta-pull cursor, guarded `replaceLocal` so partial/delta pulls can never truncate local data, made explicit deletes propagate to cloud as tombstone rows, widened the reconnect sweep to cover offline gaps, and added payments-union merging so concurrent payments are never lost.
+- Extracted the 50 byte-identical inline shell functions (including `confirmDone`) from both `index.html` shells into shared `js/shell.js`; only the two intentionally diverged functions stay per shell.
+- Sticker QR codes now render with the bundled offline `QRGen` encoder first (no third-party QR API dependency for printing).
+- New stock workflow tools: batch scan mode (camera stays running for scan-in +1 / scan-out −1), Set Count shelf reconciliation with audited `recount` movements, and a Book Check line in the closing summary for matching the physical invoice book.
+- New Garage Profile setting (Admin) feeding invoices, WhatsApp messages, and the closing summary.
+- Added nightly Supabase backup GitHub Action (pushes to a private backup repo; skips until secrets configured) and additive `tenant_id` groundwork plus report views in `supabase/schema.sql` (app write flag off by default).
 
 ## 2026-06-07
 

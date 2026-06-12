@@ -265,13 +265,70 @@ function runJsQRLoop(video) {
   }, 350);
 }
 
+// ─── Batch scan mode (Phase 4, 2026-06-12) ──────────────
+// The shop's daily stock workflow is scan-in / scan-out only. Without batch
+// mode every successful scan stops the camera, so counting 10 parts means 10
+// restarts. With batch mode ON the camera keeps running: in the Receive Stock
+// modal each known sticker adds +1; on the Scan page each known sticker uses
+// −1 (no job/price dialog). A repeat-guard ignores the same sticker for a few
+// seconds so one label held in view doesn't count multiple times.
+let batchScanMode = false;
+let lastBatchScanSku = '';
+let lastBatchScanAt = 0;
+const BATCH_SCAN_SAME_SKU_COOLDOWN_MS = 2500;
+const BATCH_SCAN_ANY_COOLDOWN_MS = 700;
+
+function setBatchScanMode(checked) {
+  batchScanMode = !!checked;
+  document.querySelectorAll('.batch-scan-toggle').forEach(el => { el.checked = batchScanMode; });
+  toast(batchScanMode ? 'Batch scan ON — camera stays running' : 'Batch scan OFF', 1600);
+}
+
+function batchScanFeedback() {
+  try { navigator.vibrate?.(60); } catch (_) {}
+}
+
+function batchScanStockOut(s) {
+  s.qty = Math.max(0, s.qty - 1);
+  s.updatedAt = nowISO();
+  partsLog.push({ part: s.name, sku: s.sku, time: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }), date: today() });
+  logAction('update', 'stock', s.id, { qty: s.qty, delta: -1, source: 'batch-scan-out' });
+  saveAll({ domain: 'stock' });
+  toast(`−1 ${s.name} → ${s.qty}`, 1400);
+}
+
+function handleBatchScanMatch(s) {
+  // Batch mode writes stock directly; without a cloud session fall back to
+  // the normal interactive flow (which shows the sign-in prompt once).
+  if (typeof cloudSessionActive !== 'undefined' && !cloudSessionActive) return false;
+  const now = Date.now();
+  const sameSku = s.sku === lastBatchScanSku;
+  if (now - lastBatchScanAt < (sameSku ? BATCH_SCAN_SAME_SKU_COOLDOWN_MS : BATCH_SCAN_ANY_COOLDOWN_MS)) return true;
+  lastBatchScanSku = s.sku;
+  lastBatchScanAt = now;
+  batchScanFeedback();
+  rememberRecentScan(s.id);
+  renderRecentScans(activeScannerContext);
+  if (activeScannerContext === 'stock') {
+    receivePartQty(s.id, 1);
+    if (typeof renderStockReceiveFound === 'function') renderStockReceiveFound(s);
+    return true;
+  }
+  if (activeScannerContext === 'page') {
+    batchScanStockOut(s);
+    return true;
+  }
+  return false; // job context keeps the interactive flow
+}
+
 function handleScanDecode(decoded) {
   if (!scannerRunning) return;
-  clearTimeout(scanFallbackTimer);
-  stopScanner();
   const sku = extractScannedSku(decoded);
   const s = stock.find(x => x.sku.toUpperCase() === sku) ||
     stock.find(x => sku.includes(x.sku.toUpperCase()) || x.sku.toUpperCase().includes(sku));
+  if (s && batchScanMode && handleBatchScanMatch(s)) return; // camera keeps running
+  clearTimeout(scanFallbackTimer);
+  stopScanner();
   if (!s) {
     getScannerContext().onMissing?.(sku || decoded);
     return;

@@ -2,11 +2,8 @@
 //  Cloud backend sync — Supabase + local cache fallback
 // ═══════════════════════════════════════════════════════
 
-const CLOUD_TABLE = 'garage_state';
-const CLOUD_ROW_ID = 'main';
 const CLOUD_PHOTO_BUCKET = 'job-photos';
 const CLOUD_SYNC_DISABLED = false;
-const LEGACY_BLOB_SYNC_DISABLED = true;
 const SHADOW_SYNC_WINDOW_MS = 2 * 24 * 60 * 60 * 1000;
 const SHADOW_BATCH_SIZE = 1000;
 const STALE_DEVICE_PULL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -22,11 +19,31 @@ const REALTIME_RECONNECT_DELAYS_MS = Object.freeze([2000, 4000, 8000, 30000]);
 const RECENT_CLOUD_REFRESH_WINDOW_MS = 2 * 60 * 1000;
 const VISIBILITY_GAP_FILL_MS = RECENT_CLOUD_REFRESH_WINDOW_MS;
 const RECONNECT_GAP_FILL_MS = RECENT_CLOUD_REFRESH_WINDOW_MS;
+// Cap how far back a reconnect sweep reaches. A device that was offline for a
+// while must fetch every change since it last pulled — including tombstones,
+// which a normal live pull (deleted_at is null) can never see — so deletes made
+// elsewhere are not resurrected. Bounded so a long-idle device stays cheap.
+const MAX_GAP_FILL_MS = 7 * 24 * 60 * 60 * 1000;
+
+// Window for the recent-changes sweep: long enough to cover the gap since this
+// device last pulled, but never below the steady-state window and never above
+// the cap. This is what lets the delete-aware sweep close offline delete gaps.
+function gapFillWindowMs(minWindowMs = RECENT_CLOUD_REFRESH_WINDOW_MS) {
+  const sinceLastPull = syncAgeMs(syncMeta.lastPulledAt);
+  if (!Number.isFinite(sinceLastPull)) return MAX_GAP_FILL_MS;
+  return Math.min(MAX_GAP_FILL_MS, Math.max(minWindowMs, sinceLastPull + 30 * 1000));
+}
 const IO_SAVER_SYNC = true;
 const IO_SAVER_CHANGED_SLOP_MS = 5 * 60 * 1000;
 // Emergency guard: a stale device can have an older local payload that is
 // missing valid cloud rows. Do not infer cloud deletes from absence.
 const SHADOW_INFER_DELETES = false;
+// Multi-tenant groundwork (Phase 5, 2026-06-12). Leave FALSE until the
+// tenant_id ALTER TABLE block in supabase/schema.sql has been run once on
+// the live project — pushing the column before it exists would fail every
+// sync. After running the SQL, flip to true so rows carry tenant_id.
+const JALASAI_SEND_TENANT_ID = false;
+const JALASAI_TENANT_ID = 'jalasai';
 const SHADOW_SYNC_TABLES = Object.freeze([
   { key: 'customers', table: 'garage_customers', buildRows: buildCustomerShadowRows },
   { key: 'mechanics', table: 'garage_mechanics', buildRows: buildMechanicShadowRows },
@@ -37,12 +54,7 @@ const SHADOW_SYNC_TABLES = Object.freeze([
   { key: 'incomeEntries', table: 'garage_income_entries', buildRows: buildIncomeEntryShadowRows },
   { key: 'partsLog', table: 'garage_parts_log', buildRows: buildPartsLogShadowRows },
   { key: 'auditLog', table: 'garage_audit_log', buildRows: buildAuditLogShadowRows },
-  { key: 'reviewItems', table: 'garage_review_items', buildRows: buildReviewItemShadowRows },
-  { key: 'importBatches', table: 'garage_import_batches', buildRows: buildImportBatchShadowRows },
-  { key: 'purchaseEntries', table: 'garage_purchase_entries', buildRows: buildPurchaseEntryShadowRows },
   { key: 'stockMovements', table: 'garage_stock_movements', buildRows: buildStockMovementShadowRows },
-  { key: 'supplierCatalogMap', table: 'garage_supplier_catalog_map', buildRows: buildSupplierCatalogMapShadowRows },
-  { key: 'invoiceImportReviews', table: 'garage_invoice_import_reviews', buildRows: buildInvoiceImportReviewShadowRows },
 ]);
 
 // Pull business-critical tables first so invoices are not blocked by slower
@@ -73,7 +85,6 @@ const SYNC_DOMAIN_TABLE_KEYS = Object.freeze({
   payments: ['jobs', 'jobPayments', 'customers', 'auditLog'],
   payment: ['jobs', 'jobPayments', 'customers', 'auditLog'],
   stock: ['stock', 'partsLog', 'stockMovements', 'auditLog'],
-  catalog: ['stock', 'reviewItems', 'importBatches', 'purchaseEntries', 'stockMovements', 'supplierCatalogMap', 'invoiceImportReviews', 'auditLog'],
   customers: ['customers', 'auditLog'],
   customer: ['customers', 'auditLog'],
   reminders: ['customers', 'auditLog'],
@@ -308,7 +319,6 @@ function updateGSStatus(msg) {
 }
 
 function renderSyncDiagnostics() {
-  renderCloudBackupStatus();
   const box = document.getElementById('sync-diagnostics');
   if (!box) return;
   if (CLOUD_SYNC_DISABLED) {
@@ -319,9 +329,6 @@ function renderSyncDiagnostics() {
       </div>`;
     return;
   }
-  const validationSummary = syncMeta.shadowLastValidationSummary
-    ? `${syncMeta.shadowLastValidationOk === false ? 'Issue' : syncMeta.shadowLastValidationOk === true ? 'OK' : 'Status'} · ${syncMeta.shadowLastValidationSummary}${syncMeta.shadowLastValidationAt ? ' · ' + fmtDateTime(syncMeta.shadowLastValidationAt) : ''}`
-    : (shadowValidationWindowActive() ? 'Waiting for first validation run' : 'No validation run yet');
   const rows = [
     ['Device ID', syncMeta.deviceId || '—'],
     ['Local Updated', syncMeta.updatedAt ? fmtDateTime(syncMeta.updatedAt) : '—'],
@@ -336,8 +343,6 @@ function renderSyncDiagnostics() {
       : syncMeta.shadowLastMirrorSummary
         ? `${syncMeta.shadowLastMirrorSummary}${syncMeta.shadowLastMirrorAt ? ' · ' + fmtDateTime(syncMeta.shadowLastMirrorAt) : ''}`
         : 'Not synced yet'],
-    ['Last Validation', validationSummary],
-    ['Legacy Blob Backup', LEGACY_BLOB_SYNC_DISABLED ? 'Disabled · using table-wise sync only' : (syncMeta.lastBlobBackupAt ? `Last written ${fmtDateTime(syncMeta.lastBlobBackupAt)}` : 'Not written yet · Auto every Sunday 6 PM IST')],
     ['Cloud Session', cloudSessionActive ? (cloudEmail || 'Signed in') : 'Not signed in'],
   ].filter(Boolean);
   box.innerHTML = rows.map(([label, value]) => `
@@ -346,15 +351,6 @@ function renderSyncDiagnostics() {
       <span style="text-align:right;max-width:60%;word-break:break-word;">${value}</span>
     </div>
   `).join('');
-}
-
-function renderCloudBackupStatus() {
-  const el = document.getElementById('cloud-backup-last');
-  if (!el) return;
-  const last = syncMeta?.lastBlobBackupAt || '';
-  el.textContent = last
-    ? `Last backup: ${fmtDateTime(last)}`
-    : 'Last backup: Not copied yet';
 }
 
 function syncErrMsg(err, fallback) {
@@ -418,7 +414,7 @@ function canUseCloudConfig() {
 function hasAnyRecords(data) {
   if (!data || typeof data !== 'object') return false;
   return ['jobs', 'stock', 'customers', 'mechanics', 'expenses', 'incomeEntries', 'partsLog']
-    .concat(['auditLog', 'purchaseEntries', 'stockMovements', 'supplierCatalogMap', 'invoiceImportReviews'])
+    .concat(['auditLog', 'stockMovements'])
     .some(key => Array.isArray(data[key]) && data[key].length);
 }
 
@@ -464,12 +460,7 @@ function buildSyncPayload() {
     incomeEntries,
     partsLog,
     auditLog,
-    reviewItems,
-    importBatches,
-    purchaseEntries,
     stockMovements,
-    supplierCatalogMap,
-    invoiceImportReviews,
     meta: {
       jobCtr,
       invoiceCtr,
@@ -655,13 +646,59 @@ function mergeEventLists(remoteList, localList, keyFn) {
   return [...map.values()].sort((a, b) => recordStamp(b) - recordStamp(a));
 }
 
+// Phase 2 fix: two devices can each record a different payment on the same
+// job while offline. Whole-record last-write-wins would keep only one device's
+// payments[] array and silently drop the other payment. This unions every
+// payment entry seen for a job (keyed by payment id, then by amount+timestamp
+// for legacy entries without ids) across both remote and local copies.
+function buildJobPaymentUnionIndex(...lists) {
+  const index = new Map();
+  lists.forEach(list => {
+    (list || []).forEach(job => {
+      const jobId = String(job?.id || '').trim();
+      if (!jobId || !Array.isArray(job.payments) || !job.payments.length) return;
+      let bucket = index.get(jobId);
+      if (!bucket) { bucket = new Map(); index.set(jobId, bucket); }
+      job.payments.forEach(entry => {
+        if (!entry) return;
+        const key = String(entry.id || '').trim()
+          || `${entry.amount || 0}|${entry.method || ''}|${entry.at || entry.timestamp || ''}|${entry.source || ''}`;
+        if (!bucket.has(key)) bucket.set(key, entry);
+      });
+    });
+  });
+  return index;
+}
+
+function applyJobPaymentUnion(jobsList, paymentIndex) {
+  return (jobsList || []).map(job => {
+    const jobId = String(job?.id || '').trim();
+    const bucket = jobId ? paymentIndex.get(jobId) : null;
+    if (!bucket || !bucket.size) return job;
+    const merged = [...bucket.values()].sort(
+      (a, b) => Date.parse(a.at || a.timestamp || 0) - Date.parse(b.at || b.timestamp || 0)
+    );
+    // Only widen, never shrink — if the winning record already had every
+    // entry, leave it untouched so we don't disturb its other fields.
+    if (merged.length <= (Array.isArray(job.payments) ? job.payments.length : 0)) return job;
+    const next = { ...job, payments: merged };
+    // Keep the legacy single `payment` total consistent with the union.
+    next.payment = merged.reduce((sum, entry) => sum + (parseFloat(entry.amount || 0) || 0), 0);
+    return next;
+  });
+}
+
 function mergedSyncPayload(remoteData, localData, options = {}) {
   const localStamp = snapshotStamp(localData);
   const remoteStamp = snapshotStamp(remoteData);
   const localNewerSnapshot = localStamp >= remoteStamp;
   const preferLocal = options.preferLocal ?? localNewerSnapshot;
+  const jobPaymentIndex = buildJobPaymentUnionIndex(remoteData.jobs, localData.jobs);
   const payload = {
-    jobs: mergeByKey(remoteData.jobs, localData.jobs, item => item.id, normalizeJob, { preferLocal, localNewerSnapshot }),
+    jobs: applyJobPaymentUnion(
+      mergeByKey(remoteData.jobs, localData.jobs, item => item.id, normalizeJob, { preferLocal, localNewerSnapshot }),
+      jobPaymentIndex
+    ).map(normalizeJob),
     stock: mergeByKey(remoteData.stock, localData.stock, item => item.id || item.sku, normalizeStockItem, { preferLocal, localNewerSnapshot }),
     customers: mergeByKey(remoteData.customers, localData.customers, item => item.id || item.phone || item.name, normalizeCustomer, { preferLocal, localNewerSnapshot }),
     mechanics: mergeByKey(remoteData.mechanics, localData.mechanics, item => item.id || item.phone || item.name, normalizeMechanic, { preferLocal, localNewerSnapshot }),
@@ -669,12 +706,7 @@ function mergedSyncPayload(remoteData, localData, options = {}) {
     incomeEntries: mergeByKey(remoteData.incomeEntries, localData.incomeEntries, item => item.id, normalizeIncomeEntry, { preferLocal, localNewerSnapshot }),
     partsLog: mergeEventLists(remoteData.partsLog, localData.partsLog, item => `${item.date || ''}|${item.time || ''}|${item.sku || ''}|${item.part || ''}`),
     auditLog: mergeEventLists(remoteData.auditLog, localData.auditLog, item => item.id || `${item.at || ''}|${item.entity || ''}|${item.entityId || ''}|${item.action || ''}`),
-    reviewItems: mergeEventLists(remoteData.reviewItems, localData.reviewItems, item => item.id || JSON.stringify(item)),
-    importBatches: mergeByKey(remoteData.importBatches, localData.importBatches, item => item.id || item.batchId || JSON.stringify(item), item => item, { preferLocal, localNewerSnapshot }),
-    purchaseEntries: mergeByKey(remoteData.purchaseEntries, localData.purchaseEntries, item => item.id, normalizePurchaseEntry, { preferLocal, localNewerSnapshot }),
     stockMovements: mergeByKey(remoteData.stockMovements, localData.stockMovements, item => item.id || `${item.stockId || ''}|${item.createdAt || ''}|${item.type || ''}|${item.qty || ''}`, normalizeStockMovement, { preferLocal, localNewerSnapshot }),
-    supplierCatalogMap: mergeByKey(remoteData.supplierCatalogMap, localData.supplierCatalogMap, item => item.id || `${item.supplier || ''}|${item.supplierPartNo || ''}|${item.mappedStockId || ''}`, normalizeSupplierCatalogMap, { preferLocal, localNewerSnapshot }),
-    invoiceImportReviews: mergeByKey(remoteData.invoiceImportReviews, localData.invoiceImportReviews, item => item.id || item.purchaseEntryId || JSON.stringify(item), normalizeInvoiceImportReview, { preferLocal, localNewerSnapshot }),
     meta: {
       jobCtr: Math.max(parseInt(remoteData?.meta?.jobCtr || 1, 10) || 1, parseInt(localData?.meta?.jobCtr || 1, 10) || 1),
       invoiceCtr: Math.max(parseInt(remoteData?.meta?.invoiceCtr || 1, 10) || 1, parseInt(localData?.meta?.invoiceCtr || 1, 10) || 1),
@@ -685,27 +717,6 @@ function mergedSyncPayload(remoteData, localData, options = {}) {
     },
   };
   return payload;
-}
-
-function shadowValidationWindowActive(nowStamp = Date.now()) {
-  const untilStamp = Date.parse(syncMeta.shadowValidationUntil || 0) || 0;
-  return !!untilStamp && nowStamp <= untilStamp;
-}
-
-function ensureShadowValidationWindow() {
-  const startedStamp = Date.parse(syncMeta.shadowValidationStartedAt || 0) || 0;
-  const untilStamp = Date.parse(syncMeta.shadowValidationUntil || 0) || 0;
-  if (startedStamp && untilStamp && untilStamp > startedStamp) {
-    return {
-      startedAt: syncMeta.shadowValidationStartedAt,
-      until: syncMeta.shadowValidationUntil,
-    };
-  }
-  const startedAt = nowISO();
-  const until = new Date(Date.parse(startedAt) + SHADOW_SYNC_WINDOW_MS).toISOString();
-  syncMeta.shadowValidationStartedAt = startedAt;
-  syncMeta.shadowValidationUntil = until;
-  return { startedAt, until };
 }
 
 function shadowStableValue(value) {
@@ -788,6 +799,7 @@ function shadowRecordUpdatedAt(record) {
 function shadowBaseRow(id, record, session) {
   return {
     id,
+    ...(JALASAI_SEND_TENANT_ID ? { tenant_id: JALASAI_TENANT_ID } : {}),
     record_data: record || {},
     source_hash: shadowHashString(shadowStableStringify(record || {})),
     source_updated_at: shadowRecordUpdatedAt(record),
@@ -810,6 +822,37 @@ function shadowDeleteRow(id, session) {
     device_id: syncMeta.deviceId || '',
     deleted_at: nowISO(),
   };
+}
+
+// Phase 2 fix: explicit user deletes used to be dropped silently — the row
+// builders skip tombstoned records, and SHADOW_INFER_DELETES is off, so a
+// delete never reached the cloud and resurrected on the next pull. This emits
+// a real tombstone row for each locally-deleted record so the delete syncs.
+// The deletion time is kept as source_updated_at so the IO-saver delta window
+// pushes only recent tombstones, not the entire delete history every sync.
+function shadowTombstoneRow(id, record, session) {
+  const deletedAt = shadowTimestamp(record?.deletedAt || record?.deleted_at) || nowISO();
+  return {
+    id,
+    ...(JALASAI_SEND_TENANT_ID ? { tenant_id: JALASAI_TENANT_ID } : {}),
+    source_hash: '',
+    source_updated_at: deletedAt,
+    mirrored_at: nowISO(),
+    mirrored_by: session?.user?.id || null,
+    mirrored_by_email: session?.user?.email || cloudEmail || '',
+    device_id: syncMeta.deviceId || '',
+    deleted_at: deletedAt,
+  };
+}
+
+function appendShadowTombstones(rows, rawList, idFn, session) {
+  normaliseArray(rawList).forEach(raw => {
+    if (!raw || !String(raw.deletedAt || raw.deleted_at || '').trim()) return;
+    const id = String(idFn(raw) || '').trim();
+    if (!id) return;
+    rows.push(shadowTombstoneRow(id, raw, session));
+  });
+  return rows;
 }
 
 function shadowMechanicLookup(list = []) {
@@ -906,7 +949,7 @@ function isCustomerShapedRaw(raw) {
 function buildCustomerShadowRows(payload, session, options = {}) {
   const skipDerivedBalances = !!options.skipDerivedBalances;
   const jobsList = skipDerivedBalances ? [] : shadowNormalizedJobs(payload);
-  return normaliseArray(payload?.customers)
+  const rows = normaliseArray(payload?.customers)
     .filter(raw => raw && !String(raw.deletedAt || '').trim() && String(raw.name || '').trim() && isCustomerShapedRaw(raw))
     .map(raw => {
       const item = normalizeCustomer(raw);
@@ -925,26 +968,35 @@ function buildCustomerShadowRows(payload, session, options = {}) {
         balance_amount: balance.amount,
       };
     });
+  return appendShadowTombstones(
+    rows,
+    normaliseArray(payload?.customers).filter(isCustomerShapedRaw),
+    raw => raw.id || raw.phone || raw.name,
+    session
+  );
 }
 
 function buildMechanicShadowRows(payload, session) {
-  return normaliseArray(payload?.mechanics).map(raw => {
-    const item = { ...(raw || {}) };
-    const id = String(item.id || item.phone || item.name || shadowSyntheticId('mech', item)).trim();
-    return {
-      ...shadowBaseRow(id, item, session),
-      name: String(item.name || '').trim(),
-      phone: String(item.phone || '').trim(),
-      specialty: String(item.specialty || '').trim(),
-      color: String(item.color || '').trim(),
-      active: item.active !== false,
-    };
-  });
+  const rows = normaliseArray(payload?.mechanics)
+    .filter(raw => !String(raw?.deletedAt || raw?.deleted_at || '').trim())
+    .map(raw => {
+      const item = { ...(raw || {}) };
+      const id = String(item.id || item.phone || item.name || shadowSyntheticId('mech', item)).trim();
+      return {
+        ...shadowBaseRow(id, item, session),
+        name: String(item.name || '').trim(),
+        phone: String(item.phone || '').trim(),
+        specialty: String(item.specialty || '').trim(),
+        color: String(item.color || '').trim(),
+        active: item.active !== false,
+      };
+    });
+  return appendShadowTombstones(rows, payload?.mechanics, raw => raw.id || raw.phone || raw.name, session);
 }
 
 function buildJobShadowRows(payload, session) {
   const mechanicLookup = shadowMechanicLookup(payload?.mechanics);
-  return shadowNormalizedJobs(payload).map(item => {
+  const rows = shadowNormalizedJobs(payload).map(item => {
     const mechIds = shadowJobMechanicIds(item);
     const mechNames = shadowJobMechanicNames(item, mechanicLookup);
     return {
@@ -968,6 +1020,7 @@ function buildJobShadowRows(payload, session) {
       remarks: String(item.notes || '').trim(),
     };
   });
+  return appendShadowTombstones(rows, payload?.jobs, raw => raw.id, session);
 }
 
 function buildJobPaymentShadowRows(payload, session) {
@@ -993,7 +1046,9 @@ function buildJobPaymentShadowRows(payload, session) {
 }
 
 function buildStockItemShadowRows(payload, session) {
-  return normaliseArray(payload?.stock).map(raw => {
+  const rows = normaliseArray(payload?.stock)
+    .filter(raw => !String(raw?.deletedAt || raw?.deleted_at || '').trim())
+    .map(raw => {
     const item = normalizeStockItem(raw);
     return {
       ...shadowBaseRow(String(item.id || item.sku || shadowSyntheticId('stock', item)), item, session),
@@ -1014,10 +1069,11 @@ function buildStockItemShadowRows(payload, session) {
       notes: String(item.notes || '').trim(),
     };
   });
+  return appendShadowTombstones(rows, payload?.stock, raw => raw.id || raw.sku, session);
 }
 
 function buildExpenseShadowRows(payload, session) {
-  return normaliseArray(payload?.expenses).map(raw => {
+  const rows = normaliseArray(payload?.expenses).map(raw => {
     const item = normalizeExpense(raw);
     if (!isLiveExpense(item)) return null;
     return {
@@ -1029,10 +1085,11 @@ function buildExpenseShadowRows(payload, session) {
       amount: shadowNumber(item.amount),
     };
   }).filter(Boolean);
+  return appendShadowTombstones(rows, payload?.expenses, raw => raw.id, session);
 }
 
 function buildIncomeEntryShadowRows(payload, session) {
-  return shadowNormalizedIncomeEntries(payload).map(item => ({
+  const rows = shadowNormalizedIncomeEntries(payload).map(item => ({
     ...shadowBaseRow(String(item.id || shadowSyntheticId('inc', item)), item, session),
     entry_date: shadowDate(item.date || item.timestamp),
     income_kind: String(item.kind || '').trim(),
@@ -1044,6 +1101,7 @@ function buildIncomeEntryShadowRows(payload, session) {
     mechanic_id: String(item.mechId || '').trim(),
     mechanic_name: String(item.mechName || '').trim(),
   }));
+  return appendShadowTombstones(rows, payload?.incomeEntries, raw => raw.id, session);
 }
 
 function buildPartsLogShadowRows(payload, session) {
@@ -1072,49 +1130,6 @@ function buildAuditLogShadowRows(payload, session) {
   }));
 }
 
-function buildReviewItemShadowRows(payload, session) {
-  return normaliseArray(payload?.reviewItems).map(item => ({
-    ...shadowBaseRow(String(item.id || shadowSyntheticId('review', item)), item, session),
-    status: shadowExtractText(item, ['status', 'reviewStatus']) || 'pending',
-    label: shadowExtractText(item, ['name', 'title', 'partName', 'rawDescription', 'normalizedPartName']),
-    supplier: shadowExtractText(item, ['supplier', 'supplierName']),
-    part_no: shadowExtractText(item, ['supplierPartNo', 'partNo']),
-    description: shadowExtractText(item, ['rawDescription', 'description', 'notes']),
-    reference_id: shadowExtractText(item, ['purchaseEntryId', 'sourceId', 'mappedStockId', 'suggestedStockId']),
-  }));
-}
-
-function buildImportBatchShadowRows(payload, session) {
-  return normaliseArray(payload?.importBatches).map(item => ({
-    ...shadowBaseRow(String(item.id || item.batchId || shadowSyntheticId('batch', item)), item, session),
-    status: shadowExtractText(item, ['status']) || 'saved',
-    source_name: shadowExtractText(item, ['source', 'sourceLabel', 'supplier', 'supplierName']),
-    file_name: shadowExtractText(item, ['fileName', 'file', 'invoiceLabel']),
-    batch_name: shadowExtractText(item, ['name', 'batchId', 'invoiceLabel']),
-    started_at: shadowTimestamp(item.createdAt || item.updatedAt || item.at) || null,
-  }));
-}
-
-function buildPurchaseEntryShadowRows(payload, session) {
-  return normaliseArray(payload?.purchaseEntries).map(raw => {
-    const item = normalizePurchaseEntry(raw);
-    return {
-      ...shadowBaseRow(String(item.id || shadowSyntheticId('purchase', item)), item, session),
-      supplier: shadowExtractText(item, ['supplier', 'supplierName']),
-      invoice_no: shadowExtractText(item, ['invoiceNo', 'invoiceNumber']),
-      supplier_part_no: shadowExtractText(item, ['supplierPartNo', 'partNo']),
-      part_name: shadowExtractText(item, ['partName', 'normalizedPartName', 'rawDescription', 'description']),
-      qty: shadowNumber(item.qty),
-      purchase_rate: shadowNumber(item.purchaseRate),
-      mrp: shadowNumber(item.mrp),
-      amount: shadowNumber(item.amount),
-      status: shadowExtractText(item, ['status']) || 'pending-review',
-      mapped_stock_id: shadowExtractText(item, ['mappedStockId']),
-      mapped_sku: shadowExtractText(item, ['mappedSku']),
-    };
-  });
-}
-
 function buildStockMovementShadowRows(payload, session) {
   return normaliseArray(payload?.stockMovements).map(raw => {
     const item = normalizeStockMovement(raw);
@@ -1134,36 +1149,6 @@ function buildStockMovementShadowRows(payload, session) {
   });
 }
 
-function buildSupplierCatalogMapShadowRows(payload, session) {
-  return normaliseArray(payload?.supplierCatalogMap).map(raw => {
-    const item = normalizeSupplierCatalogMap(raw);
-    return {
-      ...shadowBaseRow(String(item.id || shadowSyntheticId('supmap', item)), item, session),
-      supplier: String(item.supplier || '').trim(),
-      supplier_part_no: String(item.supplierPartNo || '').trim(),
-      mapped_stock_id: String(item.mappedStockId || '').trim(),
-      mapped_sku: String(item.mappedSku || '').trim(),
-      review_status: String(item.reviewStatus || '').trim(),
-      confidence: shadowNumber(item.confidence),
-      description: String(item.rawDescription || item.notes || '').trim(),
-    };
-  });
-}
-
-function buildInvoiceImportReviewShadowRows(payload, session) {
-  return normaliseArray(payload?.invoiceImportReviews).map(raw => {
-    const item = normalizeInvoiceImportReview(raw);
-    return {
-      ...shadowBaseRow(String(item.id || shadowSyntheticId('invreview', item)), item, session),
-      status: String(item.status || '').trim(),
-      purchase_entry_id: String(item.purchaseEntryId || '').trim(),
-      suggested_stock_id: String(item.suggestedStockId || '').trim(),
-      suggested_sku: String(item.suggestedSku || '').trim(),
-      confidence: shadowNumber(item.confidence),
-      notes: String(item.notes || '').trim(),
-    };
-  });
-}
 
 async function fetchShadowRemoteMeta(client, table) {
   const rows = new Map();
@@ -1217,98 +1202,6 @@ function dedupeShadowRows(rows = []) {
   return { rows: [...map.values()], duplicates };
 }
 
-function validateShadowTableRows(expectedRows, actualMeta) {
-  const expectedMap = new Map(expectedRows.map(row => [String(row.id), row]));
-  let missing = 0;
-  let hashMismatch = 0;
-  let unexpectedActive = 0;
-  const samples = [];
-
-  expectedMap.forEach((row, id) => {
-    const actual = actualMeta.get(id);
-    if (!actual || actual.deletedAt) {
-      missing += 1;
-      if (samples.length < 5) samples.push({ type: 'missing', id });
-      return;
-    }
-    if (String(actual.sourceHash || '') !== String(row.source_hash || '')) {
-      hashMismatch += 1;
-      if (samples.length < 5) samples.push({ type: 'hash', id });
-    }
-  });
-
-  actualMeta.forEach((actual, id) => {
-    if (actual.deletedAt) return;
-    if (!expectedMap.has(id)) {
-      unexpectedActive += 1;
-      if (samples.length < 5) samples.push({ type: 'unexpected', id });
-    }
-  });
-
-  const actualActive = [...actualMeta.values()].filter(item => !item.deletedAt).length;
-  return {
-    expectedActive: expectedRows.length,
-    actualActive,
-    missing,
-    hashMismatch,
-    unexpectedActive,
-    mismatchCount: missing + hashMismatch + unexpectedActive,
-    samples,
-  };
-}
-
-function summarizeShadowValidation(results) {
-  const expectedCounts = {};
-  const actualCounts = {};
-  const mismatchCounts = {};
-  const mismatchSamples = [];
-  let ok = true;
-
-  results.forEach(result => {
-    if (!result.validation) return;
-    expectedCounts[result.table] = result.validation.expectedActive;
-    actualCounts[result.table] = result.validation.actualActive;
-    mismatchCounts[result.table] = result.validation.mismatchCount;
-    if (result.validation.mismatchCount) ok = false;
-    result.validation.samples.forEach(sample => {
-      if (mismatchSamples.length < 12) mismatchSamples.push({ table: result.table, ...sample });
-    });
-  });
-
-  const totalMismatches = Object.values(mismatchCounts).reduce((sum, count) => sum + (count || 0), 0);
-  return {
-    ok,
-    expectedCounts,
-    actualCounts,
-    mismatchCounts,
-    mismatchSamples,
-    summary: ok
-      ? `${Object.keys(expectedCounts).length} tables matched the current payload`
-      : `${totalMismatches} table mismatches found during validation`,
-  };
-}
-
-async function logShadowValidationRun(client, payload, session, validation) {
-  const row = {
-    id: shadowSyntheticId('validation', syncMeta.deviceId, payload?.meta?.updatedAt, nowISO()),
-    run_at: nowISO(),
-    ok: !!validation.ok,
-    summary: validation.summary || '',
-    expected_counts: validation.expectedCounts || {},
-    actual_counts: validation.actualCounts || {},
-    mismatch_counts: validation.mismatchCounts || {},
-    mismatch_samples: validation.mismatchSamples || [],
-    validation_started_at: shadowTimestamp(syncMeta.shadowValidationStartedAt) || null,
-    validation_until: shadowTimestamp(syncMeta.shadowValidationUntil) || null,
-    payload_updated_at: shadowTimestamp(payload?.meta?.updatedAt) || null,
-    created_by: session?.user?.id || null,
-    created_by_email: session?.user?.email || cloudEmail || '',
-    device_id: syncMeta.deviceId || '',
-  };
-  const { error } = await client.from('garage_sync_validation_runs').upsert(row, { onConflict: 'id' });
-  if (error) throw error;
-}
-
 function shadowMirrorErrorMessage(err) {
   const raw = String(err?.message || err?.details || err?.hint || err || '').trim();
   if (/does not exist|relation .* does not exist|column .* does not exist/i.test(raw)) {
@@ -1321,8 +1214,6 @@ function shadowMirrorErrorMessage(err) {
 }
 
 async function mirrorPayloadToShadowTables(client, payload, session, options = {}) {
-  ensureShadowValidationWindow();
-  const validationActive = !IO_SAVER_SYNC && shadowValidationWindowActive();
   const tableKeyFilter = Array.isArray(options.tableKeys) && options.tableKeys.length && !options.fullMirror
     ? new Set(options.tableKeys)
     : null;
@@ -1367,10 +1258,6 @@ async function mirrorPayloadToShadowTables(client, payload, session, options = {
       deleted: deletes.length,
       deduped: deduped.duplicates,
     };
-    if (validationActive) {
-      const actualMeta = await fetchShadowRemoteMeta(client, config.table);
-      result.validation = validateShadowTableRows(expectedRows, actualMeta);
-    }
     results.push(result);
   }
 
@@ -1389,20 +1276,11 @@ async function mirrorPayloadToShadowTables(client, payload, session, options = {
   syncMeta.shadowLastMirrorSummary = summary;
   syncMeta.shadowLastMirrorError = '';
 
-  let validation = null;
-  if (validationActive) {
-    validation = summarizeShadowValidation(results);
-    syncMeta.shadowLastValidationAt = nowISO();
-    syncMeta.shadowLastValidationOk = validation.ok;
-    syncMeta.shadowLastValidationSummary = validation.summary;
-    await logShadowValidationRun(client, payload, session, validation);
-  }
-
-  return { ok: true, summary, validationActive, validation, results };
+  return { ok: true, summary, results };
 }
 
 function buildMergeSummary(remoteData, localData, merged) {
-  const keys = ['jobs', 'stock', 'customers', 'expenses', 'incomeEntries', 'purchaseEntries', 'invoiceImportReviews'];
+  const keys = ['jobs', 'stock', 'customers', 'expenses', 'incomeEntries'];
   const changed = keys
     .map(key => {
       const remoteCount = Array.isArray(remoteData?.[key]) ? remoteData[key].length : 0;
@@ -1432,12 +1310,7 @@ function applyRemoteSnapshot(data, remoteUpdatedAt = '', options = {}) {
   incomeEntries = normaliseArray(merged.incomeEntries).map(normalizeIncomeEntry);
   partsLog  = normaliseArray(merged.partsLog);
   auditLog  = normaliseArray(merged.auditLog);
-  reviewItems = normaliseArray(merged.reviewItems);
-  importBatches = normaliseArray(merged.importBatches);
-  purchaseEntries = normaliseArray(merged.purchaseEntries).map(normalizePurchaseEntry);
   stockMovements = normaliseArray(merged.stockMovements).map(normalizeStockMovement);
-  supplierCatalogMap = normaliseArray(merged.supplierCatalogMap).map(normalizeSupplierCatalogMap);
-  invoiceImportReviews = normaliseArray(merged.invoiceImportReviews).map(normalizeInvoiceImportReview);
 
   let purgedAnySampleData = false;
   let repairedMechanicRefs = false;
@@ -1450,15 +1323,9 @@ function applyRemoteSnapshot(data, remoteUpdatedAt = '', options = {}) {
       jobs = jobs.map(normalizeJob);
       incomeEntries = incomeEntries.map(normalizeIncomeEntry);
     }
-
-    // If remote still contains old demo/sample records, purge them immediately
-    // and mark local data for a clean push back to cloud.
-    const purgedSeededSamples = typeof purgeSeededSampleData === 'function' ? purgeSeededSampleData() : false;
-    const purgedDemoStock = typeof purgeDemoStockData === 'function' ? purgeDemoStockData() : false;
     const tidiedCustomers = typeof tidyCustomerRecords === 'function'
       ? tidyCustomerRecords()
       : { tombstoned: 0, healed: 0 };
-    purgedAnySampleData = !!(purgedSeededSamples || purgedDemoStock);
     repairedMechanicRefs = recoveredMechanics.length > 0;
     repairedCustomerLinks = !!(tidiedCustomers && (tidiedCustomers.tombstoned || tidiedCustomers.healed));
   }
@@ -1884,7 +1751,7 @@ function startRealtimeSync(client) {
       if (status === 'SUBSCRIBED') {
         console.log('[realtime] connected — instant multi-device sync active');
         realtimeOnline();
-        refreshRecentCloudChanges(RECONNECT_GAP_FILL_MS, { quiet: true });
+        refreshRecentCloudChanges(gapFillWindowMs(), { quiet: true });
       } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
         console.warn('[realtime] channel lost, fallback polling active (5m)');
         realtimePaused('Sync paused');
@@ -1996,23 +1863,6 @@ async function syncGS() {
     return;
   }
   await syncLatestThenPush({ quiet: false, reason: 'manual' });
-}
-
-// ─── Table-primary helpers ────────────────────────────────
-
-// Legacy whole-system blob backup. Disabled while table-wise sync is the source of truth.
-function shouldWriteWeeklyBlob() {
-  if (LEGACY_BLOB_SYNC_DISABLED) return false;
-  if (CLOUD_SYNC_DISABLED) return false;
-  const now = Date.now();
-  const istMs = now + (5.5 * 60 * 60 * 1000);          // UTC+5:30
-  const ist   = new Date(istMs);
-  if (ist.getUTCDay() !== 0) return false;              // must be Sunday
-  const h = ist.getUTCHours();
-  if (h < 17 || h >= 20) return false;                 // 5:50 PM – 7:59 PM IST
-  const lastBlob = Date.parse(syncMeta.lastBlobBackupAt || 0) || 0;
-  const sevenDays = 7 * 24 * 60 * 60 * 1000;
-  return !lastBlob || (now - lastBlob) >= sevenDays;
 }
 
 // Read all 14 shadow tables and reconstruct a payload compatible with applyRemoteSnapshot
@@ -2133,102 +1983,18 @@ async function pullFromShadowTables(client, options = {}) {
     ...(payload.mechanics || []),
     ...(payload.auditLog || []),
     ...(payload.partsLog || []),
-    ...(payload.reviewItems || []),
-    ...(payload.importBatches || []),
-    ...(payload.purchaseEntries || []),
     ...(payload.stockMovements || []),
-    ...(payload.supplierCatalogMap || []),
-    ...(payload.invoiceImportReviews || []),
   ];
-  const newCursor = extractMaxUpdatedAt(allPulledRows);
-  if (newCursor) setLastPullAt(newCursor);
+  // Phase 2 fix: the cursor must advance by the newest server-side
+  // source_updated_at actually observed during this pull, not by a value
+  // dug out of reconstructed record_data (which dropped that column and
+  // left the delta cursor permanently stuck → every pull was a full pull).
+  if (newestRemoteUpdatedAt) setLastPullAt(newestRemoteUpdatedAt);
+  else {
+    const newCursor = extractMaxUpdatedAt(allPulledRows);
+    if (newCursor) setLastPullAt(newCursor);
+  }
   return payload;
-}
-
-// Write the current payload to garage_state as a backup blob (Sunday or manual)
-async function writeGarageStateBlob(client, payload, session) {
-  const savedAt = nowISO();
-  const { error } = await client
-    .from(CLOUD_TABLE)
-    .upsert({
-      id: CLOUD_ROW_ID,
-      payload,
-      updated_at: savedAt,
-      updated_by: session?.user?.id || null,
-      updated_by_email: session?.user?.email || cloudEmail || '',
-    }, { onConflict: 'id' });
-  if (error) throw error;
-  syncMeta.lastBlobBackupAt = savedAt;
-  localStorage.setItem(SK.syncMeta, JSON.stringify(syncMeta));
-  renderSyncDiagnostics();
-  return savedAt;
-}
-
-async function copyTableSyncToGarageStateBackup() {
-  if (!requireAdminAccess('copy data to garage_state backup')) return false;
-  if (CLOUD_SYNC_DISABLED) {
-    updateGSStatus('Cloud sync is disabled, so garage_state backup cannot be written.');
-    toast('Cloud sync is disabled', 3200);
-    return false;
-  }
-  if (!canUseCloudConfig()) {
-    openGS();
-    updateGSStatus('Connect cloud before writing garage_state backup.');
-    return false;
-  }
-  if (cloudSyncBusy) {
-    toast('Cloud sync is already running. Try backup again in a moment.', 3200);
-    return false;
-  }
-
-  const client = ensureCloudClient();
-  const session = await ensureCloudSession();
-  if (!session) {
-    openGS();
-    updateGSStatus('Sign in before writing garage_state backup.');
-    return false;
-  }
-
-  try {
-    updateGSStatus('Preparing table-wise cloud backup...');
-
-    if (syncMeta.pendingSync) {
-      updateGSStatus('Syncing pending local changes to cloud tables before backup...');
-      const pushed = await pushGS({ quiet: true });
-      if (pushed !== true) {
-        updateGSStatus('Backup stopped because pending local changes could not sync to cloud tables.');
-        toast('Backup stopped: table sync did not finish', 4200);
-        return false;
-      }
-    }
-
-    updateGSStatus('Reading table-wise cloud dataset...');
-    const tablePayload = await pullFromShadowTables(client);
-    if (!hasAnyRecords(tablePayload)) {
-      updateGSStatus('Backup stopped because cloud tables are empty.');
-      toast('Cloud tables are empty. Nothing copied to garage_state.', 4200);
-      return false;
-    }
-
-    tablePayload.meta = {
-      ...(tablePayload.meta || {}),
-      backupSource: 'table-wise-sync',
-      backupCreatedAt: nowISO(),
-      backupCreatedBy: session?.user?.email || cloudEmail || '',
-    };
-
-    updateGSStatus('Copying table-wise dataset to garage_state backup...');
-    const savedAt = await writeGarageStateBlob(client, tablePayload, session);
-    updateGSStatus(`garage_state backup updated from table-wise sync at ${fmtDateTime(savedAt)}.`);
-    toast('garage_state backup updated');
-    return true;
-  } catch (err) {
-    console.warn('garage_state backup failed', err);
-    const msg = syncErrMsg(err, 'garage_state backup failed');
-    updateGSStatus(msg);
-    toast(msg, 4200);
-    return false;
-  }
 }
 
 async function pullGS(options = {}) {
@@ -2271,32 +2037,15 @@ async function pullGS(options = {}) {
       console.warn('Table-wise pull failed', tableErr);
     }
 
-    // Legacy blob fallback is disabled. The table-wise dataset is the source of truth.
-    if (tablePullError && LEGACY_BLOB_SYNC_DISABLED) {
+    // The table-wise dataset is the only cloud source of truth.
+    if (tablePullError) {
       throw tablePullError;
     }
 
-    if ((!remoteData || !hasAnyRecords(remoteData)) && LEGACY_BLOB_SYNC_DISABLED) {
+    if (!remoteData || !hasAnyRecords(remoteData)) {
       updateGSStatus('Cloud table sync is connected, but no table data is stored yet.');
       if (!options.quiet) toast('Cloud tables are empty right now');
       return 'empty';
-    }
-
-    // Fallback: blob — legacy path, kept only if explicitly re-enabled.
-    if (!remoteData || !hasAnyRecords(remoteData)) {
-      const { data, error } = await client
-        .from(CLOUD_TABLE)
-        .select('payload, updated_at')
-        .eq('id', CLOUD_ROW_ID)
-        .maybeSingle();
-      if (error) throw error;
-      if (!data || !data.payload || !hasAnyRecords(data.payload)) {
-        updateGSStatus('Cloud is connected, but no business data is stored yet.');
-        if (!options.quiet) toast('Cloud is empty right now');
-        return 'empty';
-      }
-      remoteData  = data.payload;
-      remoteStamp = Date.parse(remoteData?.meta?.updatedAt || data.updated_at || 0) || 0;
     }
 
     const localStamp = Date.parse(syncMeta.updatedAt || 0) || 0;
@@ -2309,8 +2058,17 @@ async function pullGS(options = {}) {
       return 'local-newer';
     }
 
+    // Phase 2 guard: `replaceLocal` throws away the local payload and trusts
+    // remote as the complete dataset. That is only safe on a FULL pull of ALL
+    // tables that returned with no per-table fallbacks. A delta pull (`since`),
+    // a criticalOnly pull (subset of tables), or any partial table failure
+    // returns an incomplete view — replacing local with it would delete data.
+    const partialPull = Array.isArray(remoteData?.meta?.partialPullFailures)
+      && remoteData.meta.partialPullFailures.length > 0;
+    const safeToReplaceLocal = isFullPull && !options.criticalOnly && !partialPull;
+    const requestedReplaceLocal = options.replaceLocal ?? !syncMeta.pendingSync;
     applyRemoteSnapshot(remoteData, remoteData?.meta?.updatedAt || nowISO(), {
-      replaceLocal: options.replaceLocal ?? !syncMeta.pendingSync,
+      replaceLocal: requestedReplaceLocal && safeToReplaceLocal,
     });
     updateGSStatus('Pulled latest data from cloud.');
     if (!options.quiet) {
@@ -2421,19 +2179,6 @@ async function pushGS(options = {}) {
       throw shadowErr;
     }
 
-    // Legacy weekly blob backup is disabled when table-wise sync is the only source of truth.
-    let blobBackedUp = false;
-    if (!LEGACY_BLOB_SYNC_DISABLED && (options.forceBlobBackup || shouldWriteWeeklyBlob())) {
-      try {
-        updateGSStatus('Writing weekly blob backup to garage_state...');
-        await writeGarageStateBlob(client, localPayload, session);
-        blobBackedUp = true;
-      } catch (blobErr) {
-        console.warn('Weekly blob backup failed', blobErr);
-        // Non-fatal: shadow tables are the source of truth
-      }
-    }
-
     const pushedAt = nowISO();
     const newerLocalChange = (Date.parse(syncMeta.updatedAt || 0) || 0) > (Date.parse(localPayload.meta.updatedAt || 0) || 0);
     syncMeta.lastPushedAt = pushedAt;
@@ -2465,22 +2210,14 @@ async function pushGS(options = {}) {
       }
     }
 
-    const blobNote = blobBackedUp ? ' Weekly blob backup written.' : '';
     const syncStatus = shadowResult?.summary
-      ? `Synced to cloud tables. ${shadowResult.summary}.${blobNote}`
+      ? `Synced to cloud tables. ${shadowResult.summary}.`
       : syncMeta.shadowLastMirrorError
         ? `Table sync error: ${syncMeta.shadowLastMirrorError}`
-        : `Synced to cloud tables.${blobNote}`;
+        : 'Synced to cloud tables.';
     updateGSStatus(syncStatus);
 
-    if (!options.quiet) {
-      const toastMsg = [
-        'Synced to cloud',
-        shadowResult?.validation?.summary || '',
-        blobBackedUp ? 'Blob backup written' : '',
-      ].filter(Boolean).join('. ');
-      toast(toastMsg || 'Synced to cloud');
-    }
+    if (!options.quiet) toast('Synced to cloud');
     return true;
   } catch (err) {
     console.warn('Cloud push failed', err);
@@ -2556,7 +2293,7 @@ async function initGSSync() {
       startRealtimeSync(cloudClient);
       if (localDataReady && !syncMeta.pendingSync) {
         setTimeout(() => {
-          refreshRecentCloudChanges(VISIBILITY_GAP_FILL_MS, { quiet: true });
+          refreshRecentCloudChanges(gapFillWindowMs(), { quiet: true });
           checkAndPullIfStale(cloudClient);
         }, 350);
       }
@@ -2582,7 +2319,7 @@ async function initGSSync() {
   if (typeof addOnceListener === 'function') {
     addOnceListener(document, 'visibilitychange', 'syncVisibility', async () => {
       if (!document.hidden && cloudSessionActive && !cloudSyncBusy) {
-        await refreshRecentCloudChanges(VISIBILITY_GAP_FILL_MS, { quiet: true });
+        await refreshRecentCloudChanges(gapFillWindowMs(), { quiet: true });
         checkAndPullIfStale(cloudClient);
       }
     });
@@ -2602,7 +2339,7 @@ async function initGSSync() {
       window.__syncListenersBound = true;
       document.addEventListener('visibilitychange', async () => {
         if (!document.hidden && cloudSessionActive && !cloudSyncBusy) {
-          await refreshRecentCloudChanges(VISIBILITY_GAP_FILL_MS, { quiet: true });
+          await refreshRecentCloudChanges(gapFillWindowMs(), { quiet: true });
           checkAndPullIfStale(cloudClient);
         }
       });
@@ -2665,62 +2402,6 @@ function restoreBackup(input) {
       toast('Backup restored');
     } catch (err) {
       toast(syncErrMsg(err, 'Backup restore failed'), 4200);
-    } finally {
-      input.value = '';
-    }
-  };
-  reader.readAsText(file);
-}
-
-function importLegacyBundle(input) {
-  const file = input.files && input.files[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = () => {
-    try {
-      const bundle = JSON.parse(reader.result);
-      if (!bundle || typeof bundle !== 'object') throw new Error('Invalid legacy bundle');
-      customers = normaliseArray(bundle.customers).map(normalizeCustomer);
-      mechanics = normaliseArray(bundle.mechanics).map(normalizeMechanic);
-      jobs = normaliseArray(bundle.jobs).map(normalizeJob);
-      expenses = normaliseArray(bundle.expenses).map(normalizeExpense);
-      incomeEntries = normaliseArray(bundle.incomeEntries).map(normalizeIncomeEntry);
-      reviewItems = normaliseArray(bundle.reviewItems);
-      importBatches = normaliseArray(bundle.importBatches);
-      if (Object.prototype.hasOwnProperty.call(bundle, 'stock')) {
-        stock = normaliseArray(bundle.stock).map(normalizeStockItem);
-      }
-      purchaseEntries = Object.prototype.hasOwnProperty.call(bundle, 'purchaseEntries')
-        ? normaliseArray(bundle.purchaseEntries).map(normalizePurchaseEntry)
-        : purchaseEntries;
-      stockMovements = Object.prototype.hasOwnProperty.call(bundle, 'stockMovements')
-        ? normaliseArray(bundle.stockMovements).map(normalizeStockMovement)
-        : stockMovements;
-      supplierCatalogMap = Object.prototype.hasOwnProperty.call(bundle, 'supplierCatalogMap')
-        ? normaliseArray(bundle.supplierCatalogMap).map(normalizeSupplierCatalogMap)
-        : supplierCatalogMap;
-      invoiceImportReviews = Object.prototype.hasOwnProperty.call(bundle, 'invoiceImportReviews')
-        ? normaliseArray(bundle.invoiceImportReviews).map(normalizeInvoiceImportReview)
-        : invoiceImportReviews;
-      partsLog = normaliseArray(bundle.partsLog);
-      const meta = bundle.meta || {};
-      jobCtr = parseInt(meta.jobCtr || jobCtr || '1', 10) || 1;
-      invoiceCtr = parseInt(meta.invoiceCtr || invoiceCtr || '1', 10) || 1;
-      if (!Array.isArray(auditLog)) auditLog = [];
-      logAction('import', 'legacy-bundle', file.name, {
-        customers: customers.length,
-        jobs: jobs.length,
-        expenses: expenses.length,
-        incomeEntries: incomeEntries.length,
-        reviewItems: reviewItems.length,
-      });
-      clearLastPullAt();
-      saveAll();
-      renderCurrentPage();
-      if (typeof pushGS === 'function') pushGS();
-      toast('Legacy data imported. Trial operational data replaced.');
-    } catch (err) {
-      toast(syncErrMsg(err, 'Legacy import failed'), 4200);
     } finally {
       input.value = '';
     }

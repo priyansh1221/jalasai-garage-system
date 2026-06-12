@@ -1,0 +1,65 @@
+# Nightly Supabase backup → private backup repository.
+#
+# This repo is PUBLIC, so the dump is never stored here or as an artifact.
+# It is pushed to a separate PRIVATE repo instead.
+#
+# One-time setup (repo Settings → Secrets and variables → Actions):
+#   SUPABASE_URL           https://<project>.supabase.co
+#   SUPABASE_SERVICE_ROLE  service-role key from Supabase dashboard
+#   BACKUP_REPO            e.g. priyansh1221/jalasai-backups (must be PRIVATE)
+#   BACKUP_REPO_TOKEN      fine-grained PAT with contents:write on BACKUP_REPO
+#
+# Until the secrets are set, every run skips gracefully and stays green.
+
+name: Nightly Supabase Backup
+
+on:
+  schedule:
+    - cron: '30 21 * * *'   # 03:00 IST daily
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout app repo (for backup script)
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Dump Supabase tables
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE: ${{ secrets.SUPABASE_SERVICE_ROLE }}
+        run: node scripts/supabase-backup.mjs
+
+      - name: Push dump to private backup repo
+        env:
+          BACKUP_REPO: ${{ secrets.BACKUP_REPO }}
+          BACKUP_REPO_TOKEN: ${{ secrets.BACKUP_REPO_TOKEN }}
+        run: |
+          if [ -z "$BACKUP_REPO" ] || [ -z "$BACKUP_REPO_TOKEN" ]; then
+            echo "::notice::BACKUP_REPO / BACKUP_REPO_TOKEN not set — dump not pushed."
+            exit 0
+          fi
+          if [ ! -d backup-out ] || [ -z "$(ls -A backup-out 2>/dev/null)" ]; then
+            echo "::notice::No dump produced — nothing to push."
+            exit 0
+          fi
+          STAMP=$(date -u +%F)
+          git clone --depth 1 "https://x-access-token:${BACKUP_REPO_TOKEN}@github.com/${BACKUP_REPO}.git" backup-repo
+          mkdir -p "backup-repo/${STAMP}"
+          cp backup-out/*.json "backup-repo/${STAMP}/"
+          cp backup-out/manifest.json "backup-repo/latest-manifest.json" 2>/dev/null || true
+          cd backup-repo
+          git config user.name "jalasai-backup-bot"
+          git config user.email "backup-bot@users.noreply.github.com"
+          git add -A
+          git commit -m "Nightly backup ${STAMP}" || { echo "Nothing changed"; exit 0; }
+          git push

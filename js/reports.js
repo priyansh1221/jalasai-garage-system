@@ -415,12 +415,6 @@ function latestMovementDateForItem(item) {
   partsLog.forEach(entry => {
     if (sku && entry.sku === sku && entry.date) dates.push(String(entry.date).slice(0, 10));
   });
-  purchaseEntries.forEach(entry => {
-    if ((entry.mappedStockId && entry.mappedStockId === item.id) || (sku && entry.mappedSku === sku)) {
-      const date = String(entry.createdAt || entry.date || '').slice(0, 10);
-      if (date) dates.push(date);
-    }
-  });
   return dates.sort().pop() || '';
 }
 
@@ -1165,8 +1159,29 @@ function sendClosingSummary() {
   const doneCount = invoices.length;
   const low = stock.filter(s => stSt(s) !== 'ok').map(s => s.name).join(', ');
   const header = singleDay ? fmtDate(span.start) : label;
-  const msg = `🔧 JALASAI CLOSING SUMMARY — ${header}\n\nBikes Added: ${jobsAdded.length}\nInvoices: ${invoices.length}\nDone Jobs: ${doneCount}\nRevenue: ${fmtMoney(totalRevenue)}\nCash: ${fmtMoney(cashRevenue)}\nUPI: ${fmtMoney(upiRevenue)}\nExpenses: ${fmtMoney(totalExpense)}\nNet: ${fmtMoney(totalRevenue - totalExpense)}${low ? `\n\n⚠ Reorder:\n${low}` : '\n\n✓ Stock OK'}`;
+  const ledgerLine = invoiceLedgerCheckLine(invoices);
+  const msg = `🔧 ${getGarageProfile().shortName.toUpperCase()} CLOSING SUMMARY — ${header}\n\nBikes Added: ${jobsAdded.length}\nInvoices: ${invoices.length}\nDone Jobs: ${doneCount}${ledgerLine}\nRevenue: ${fmtMoney(totalRevenue)}\nCash: ${fmtMoney(cashRevenue)}\nUPI: ${fmtMoney(upiRevenue)}\nExpenses: ${fmtMoney(totalExpense)}\nNet: ${fmtMoney(totalRevenue - totalExpense)}${low ? `\n\n⚠ Reorder:\n${low}` : '\n\n✓ Stock OK'}`;
   window.open('https://wa.me/?text=' + encodeURIComponent(msg));
+}
+
+// Ledger check against the physical invoice book: the book is the source of
+// truth, so the summary shows the first and last invoice numbers entered in
+// the app for the period. If that range or count doesn't match the book,
+// an invoice was missed or double-entered in the app.
+function invoiceLedgerCheckLine(invoices = []) {
+  const numbers = invoices
+    .map(j => {
+      const simple = typeof simpleInvoiceNumber === 'function' ? simpleInvoiceNumber(j.invoiceNo || '') : '';
+      return simple ? parseInt(simple, 10) : NaN;
+    })
+    .filter(n => Number.isFinite(n) && n > 0)
+    .sort((a, b) => a - b);
+  if (!numbers.length) return '';
+  const first = numbers[0];
+  const last = numbers[numbers.length - 1];
+  const expectedCount = last - first + 1;
+  const gapNote = numbers.length < expectedCount ? ` · ${expectedCount - numbers.length} missing in range` : '';
+  return `\nBook Check: #${first} – #${last} (${numbers.length} entered${gapNote})`;
 }
 
 function aiDraftClosingSummary() {

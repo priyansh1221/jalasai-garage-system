@@ -139,15 +139,15 @@ function buildDueReminderMessage(c, dueJobs) {
   const lines = dueJobs.slice(0, 5).map(j =>
     `• ${j.id} · ${j.veh} · Due ${fmtMoney(jobDue(j))}`
   );
-  return `Namaskar ${c.name} ji 🙏\n\nJalasai Autoparts se friendly reminder.\nAapke account me ${fmtMoney(totalDue)} due baki hai.\n\n${lines.join('\n')}${dueJobs.length > 5 ? `\n• +${dueJobs.length - 5} more jobs` : ''}\n\nPayment ho jane par kindly confirm kar dena.\nMo. 9687272157\nJalasai Autoparts`;
+  return `Namaskar ${c.name} ji 🙏\n\n${getGarageProfile().shortName} se friendly reminder.\nAapke account me ${fmtMoney(totalDue)} due baki hai.\n\n${lines.join('\n')}${dueJobs.length > 5 ? `\n• +${dueJobs.length - 5} more jobs` : ''}\n\nPayment ho jane par kindly confirm kar dena.\nMo. ${getGarageProfile().phone}\n${getGarageProfile().shortName}`;
 }
 
 function buildFeedbackReminderMessage(c, job, followup) {
-  return `Namaskar ${c.name} ji 🙏\n\nAapki ${job.veh || 'vehicle'} service ko 1 week ho gaya.\nJalasai Autoparts ki service kaisi lagi, please batayiye.\n\nAapka feedback hamare liye important hai.\n${job.prob ? `Kaam: ${job.prob}\n` : ''}\nInvoice: ${job.invoiceNo || job.id}\nService Date: ${fmtDate(followup.lastServiceDate)}\n\nDhanyavaad 🙏\nJalasai Autoparts`;
+  return `Namaskar ${c.name} ji 🙏\n\nAapki ${job.veh || 'vehicle'} service ko 1 week ho gaya.\n${getGarageProfile().shortName} ki service kaisi lagi, please batayiye.\n\nAapka feedback hamare liye important hai.\n${job.prob ? `Kaam: ${job.prob}\n` : ''}\nInvoice: ${job.invoiceNo || job.id}\nService Date: ${fmtDate(followup.lastServiceDate)}\n\nDhanyavaad 🙏\n${getGarageProfile().shortName}`;
 }
 
 function buildServiceReminderMessage(c, job, followup) {
-  return `Namaskar ${c.name} ji 🙏\n\nAapki ${job.veh || 'vehicle'} ki last service ko 75 din ho gaye hain.\nAgar vehicle ko checkup, service, oil change, brake, ya general inspection chahiye ho to Jalasai Autoparts par aa jaiye.\n\nLast Service: ${fmtDate(followup.lastServiceDate)}\nInvoice: ${job.invoiceNo || job.id}\n${job.veh ? `Vehicle: ${job.veh}\n` : ''}\nAppointment ke liye message kar sakte hain.\n\nJalasai Autoparts`;
+  return `Namaskar ${c.name} ji 🙏\n\nAapki ${job.veh || 'vehicle'} ki last service ko 75 din ho gaye hain.\nAgar vehicle ko checkup, service, oil change, brake, ya general inspection chahiye ho to ${getGarageProfile().shortName} par aa jaiye.\n\nLast Service: ${fmtDate(followup.lastServiceDate)}\nInvoice: ${job.invoiceNo || job.id}\n${job.veh ? `Vehicle: ${job.veh}\n` : ''}\nAppointment ke liye message kar sakte hain.\n\n${getGarageProfile().shortName}`;
 }
 
 function openCustomerWhatsApp(c, msg) {
