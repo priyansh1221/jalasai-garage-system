@@ -365,12 +365,21 @@ function stopScanner() {
 
 function resumeScanner() { startScanner(); }
 
+function scanJobOptionLabel(j) {
+  const customer = (typeof jobIdentityName === 'function' ? jobIdentityName(j) : '')
+    || j?.cust
+    || j?.customerName
+    || 'Customer';
+  const vehicle = String(j?.veh || j?.vehicle || j?.bike || '').trim();
+  return `${j.id} — ${customer}${vehicle ? ` (${vehicle})` : ''}`;
+}
+
 function populateScanJobs() {
   const sel = document.getElementById('scan-job');
   if (!sel) return;
   sel.innerHTML = '<option value="">Link to job (optional)</option>' +
     jobs.filter(j => isLiveJob(j) && j.status !== 'done')
-      .map(j => `<option value="${j.id}">${j.id} — ${j.cust} (${j.veh})</option>`).join('');
+      .map(j => `<option value="${j.id}">${scanJobOptionLabel(j)}</option>`).join('');
   setScannerContext('page');
 }
 
@@ -396,7 +405,7 @@ function showScanResult(s) {
       <div class="frow"><label class="flbl">Link to job</label>
         <select class="fsel" id="sr-job">
           <option value="">No job</option>
-          ${jobs.filter(j=>isLiveJob(j) && j.status!=='done').map(j=>`<option value="${j.id}"${j.id===jobSel?' selected':''}>${j.id} — ${j.cust}</option>`).join('')}
+          ${jobs.filter(j=>isLiveJob(j) && j.status!=='done').map(j=>`<option value="${j.id}"${j.id===jobSel?' selected':''}>${scanJobOptionLabel(j)}</option>`).join('')}
         </select>
       </div>
       <div class="frow"><label class="flbl">Saved price</label>
