@@ -29,8 +29,9 @@ Core design decisions:
 
 ### Operational Extensions
 
-- Apps Script sync and backup helpers in `apps-script/`
-- Catalog and import support scripts in `tools/`
+- Shared shell runtime for both UIs in `js/shell.js`
+- Nightly Supabase backup workflow in `.github/workflows/nightly-backup.yml` + `scripts/supabase-backup.mjs`
+- Catalog preparation scripts in `tools/` (offline tooling only)
 
 ## Key Implemented Workflows
 
@@ -64,11 +65,11 @@ Invoice logic includes:
 
 Stock handling evolved toward safer intake:
 
-- searchable stock by part/SKU/fitment
-- catalog review before import
-- duplicate warnings during confirmation
-- pause/resume review states
-- immediate stock application after confirm
+- searchable stock by part/SKU/fitment with typo tolerance
+- QR sticker print (offline QRGen encoder) and scan in/out loop
+- batch scan mode for rapid counter scanning
+- Set Count shelf reconciliation with audited recount movements
+- duplicate SKU warnings on add/edit
 
 ### 4. Customer Lifecycle Tracking
 

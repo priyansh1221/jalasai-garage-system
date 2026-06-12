@@ -36,13 +36,13 @@ Core design decisions:
 Current sync safety model:
 - shadow tables (`garage_customers`, `garage_jobs`, etc.) are the live source of truth
 - push writes only changed rows to shadow tables (hash-based incremental upsert)
-- pull reads all active `record_data` rows from shadow tables; falls back to `garage_state` blob if tables are empty or unreachable
+- pull reads all active `record_data` rows from shadow tables; shadow tables are the ONLY cloud path (the `garage_state` blob was removed 2026-06-12)
 - removed rows are soft-deleted in shadow tables, never hard-deleted
-- `garage_state` remains a legacy backup path, but automatic blob writes are disabled in the app runtime
-- Admin exposes a manual `Copy Data to garage_state` action when a legacy backup snapshot is needed
-- Apps Script can still write the blob externally if that backup path is retained operationally
-- daily Drive backup reads from shadow tables at 10 PM IST via Apps Script; keeps last 30 days
-- `SHADOW_PULL_TABLES` in sync.js lists the 14 pullable tables (excludes derived `jobPayments`)
+- explicit user deletes push tombstone rows so other devices apply the delete instead of resurrecting the record (2026-06-12)
+- the delta-pull cursor advances from the real `source_updated_at` seen during a pull; delta/critical-only/partially-failed pulls always merge and never replace the local cache (2026-06-12 guards)
+- payments arrays are unioned across both copies of a job during merge so concurrent payments are never lost
+- backups: Admin one-tap JSON download plus the optional nightly GitHub Action (`.github/workflows/nightly-backup.yml`)
+- `SHADOW_PULL_TABLES` in sync.js lists the 9 pullable tables (excludes derived `jobPayments`)
 
 Background sync behavior:
 - background loop interval is 5 minutes
@@ -78,8 +78,9 @@ Render performance model:
 
 ### Operational Extensions
 
-- Apps Script sync and backup helpers in `apps-script/`
-- Catalog and import support scripts in `tools/`
+- Shared shell runtime for both UIs in `js/shell.js` (extracted 2026-06-12)
+- Nightly Supabase backup workflow in `.github/workflows/nightly-backup.yml` + `scripts/supabase-backup.mjs`
+- Catalog preparation scripts in `tools/` (offline tooling only)
 
 ## Key Implemented Workflows
 
@@ -112,16 +113,16 @@ Invoice logic includes:
 - discount support
 - due reduction through payment, discount, or both
 
-### 3. Stock and Catalog Intake
+### 3. Stock Intake and Scan Loop
 
-Stock handling evolved toward safer intake:
+Stock handling is a scan-first reference system (the in-app import pipeline was removed 2026-06-12):
 
-- searchable stock by part/SKU/fitment
+- searchable stock by part/SKU/fitment with typo tolerance
 - stock photo reference for visual identification
-- catalog review before import
-- duplicate warnings during confirmation
-- pause/resume review states
-- immediate stock application after confirm
+- QR sticker printing with the bundled offline `QRGen` encoder (network QR API is fallback only)
+- scan-in via Receive Stock (+1/+5/custom), scan-out via the Scan page
+- batch scan mode keeps the camera running for rapid +1/−1 counting
+- Set Count shelf reconciliation resets a bin to the real count with an audited `recount` movement
 - saved-price or manual-price choice while adding/scanning parts into jobs
 - manual entered price updates the stock selling price immediately
 

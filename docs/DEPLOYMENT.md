@@ -21,9 +21,9 @@ Required pieces:
 
 1. Create a Supabase project.
 2. Run [supabase/schema.sql](/Users/priyansh/Projects/JalaSai/supabase/schema.sql).
-   This now creates both:
-   - the old `garage_state` row/table path
-   - the new shadow dataset tables used for gradual migration and validation
+   This creates the live shadow dataset tables, indexes, RLS policies, storage bucket,
+   report views, and the additive `tenant_id` columns (2026-06-12 model — the legacy
+   `garage_state` blob and import-pipeline tables are no longer created).
 3. Create owner/staff users in Supabase Auth.
 4. Configure Cloudflare Pages runtime variables for the deployment you are shipping.
    Production reads `/config.js` from a Pages Worker, which injects values from Cloudflare without committing them to git.
@@ -59,7 +59,6 @@ Do not deploy these support folders with the website:
 - [workspace-data](/Users/priyansh/Projects/JalaSai/workspace-data)
 - [tools](/Users/priyansh/Projects/JalaSai/tools)
 - [catalog](/Users/priyansh/Projects/JalaSai/catalog)
-- [apps-script](/Users/priyansh/Projects/JalaSai/apps-script)
 - [supabase](/Users/priyansh/Projects/JalaSai/supabase)
 - [important-files](/Users/priyansh/Projects/JalaSai/important-files)
 
@@ -163,8 +162,6 @@ Behavior:
 ## Kept Project Files
 
 Still intentionally kept:
-- [apps-script/JalaSaiSync.gs](/Users/priyansh/Projects/JalaSai/apps-script/JalaSaiSync.gs)
-- [apps-script/JalaSaiDriveBackup.gs](/Users/priyansh/Projects/JalaSai/apps-script/JalaSaiDriveBackup.gs)
 - [tools/import_legacy_data.py](/Users/priyansh/Projects/JalaSai/tools/import_legacy_data.py)
 - [tools/build_final_catalog.py](/Users/priyansh/Projects/JalaSai/tools/build_final_catalog.py)
 - [tools/build_parts_seed_v2.py](/Users/priyansh/Projects/JalaSai/tools/build_parts_seed_v2.py)

@@ -253,27 +253,14 @@ Examples:
 - `lamp`
 - `ASKBS0212`
 
-### Catalog import
-Use `Stock -> Import Catalog CSV`.
+### Stock in / out (2026-06-12 workflow)
+Stock is reference data; the physical invoice book stays the billing source of truth.
 
-Flow:
-1. load catalog CSV
-2. review one by one
-3. edit row if needed
-4. enter sell price
-5. confirm or decline
-6. pause with `Stop & Continue Later`
-7. resume with `Continue Catalog Review`
-
-Important behavior:
-- confirmed parts load into stock immediately
-- you can search them right away
-- duplicate warning appears when likely
-- you can choose update existing vs create new
-- `Previous` lets you go back
-
-### Stock from AI invoice JSON
-Use `Stock -> Import Agent JSON` for supplier invoice parsing workflow.
+- `Stock -> Receive Stock`: scan a bin sticker, then `+1` / `+5` / `Custom Qty`
+- `Scan` page: scan a sticker to deduct stock (with optional job link and price override)
+- **Batch scan** checkbox (next to Start Camera): camera stays running — each known sticker adds +1 in Receive Stock, or deducts −1 on the Scan page; the same sticker is ignored for 2.5 s so one label is not counted twice
+- **Set Count** (Receive Stock card): type the actual shelf count for a scanned part; quantity is reset and an audited `recount` movement is logged — run a shelf walk monthly to manage drift
+- The catalog CSV / agent JSON import pipeline was removed on 2026-06-12 (`docs/CLEANUP_AND_HARDENING_2026_06_12.md`); parts are added via `+ Add Part` or scan-to-create
 
 ## QR Labels
 
@@ -341,10 +328,10 @@ Incident reference:
 Major implemented work up to now:
 - added Supabase multi-device sync with admin email support
 - removed demo trial stock and migration-cleaned old demo records
-- added supplier invoice AI import direction and later simplified it to direct `Import Agent JSON`
+- added supplier invoice AI import direction and later simplified it to direct `Import Agent JSON` (entire import pipeline removed 2026-06-12)
 - simplified Add Part form and moved invoice-only fields under `More details`
 - improved stock search to include fitment, supplier part no., and typo matching
-- added catalog import review flow with confirm/decline, pause/resume, previous, instant stock load, duplicate warning, and row editing
+- added catalog import review flow with confirm/decline, pause/resume, previous, instant stock load, duplicate warning, and row editing (removed 2026-06-12)
 - restored simpler navigation with `Invoices` after `Jobs` and moved `Print QR` under `Admin`
 - added quick invoice fast-entry flow with photo support
 - added `Save as Job Card` inside Quick Invoice

@@ -10,7 +10,7 @@ Security posture applied:
 
 - No production API keys committed
 - Cloud defaults in `js/cloud-config.js` kept empty
-- Apps Script config uses placeholders only
+- Backup automation secrets live only in GitHub Actions secrets (never in the repo)
 - Local/sensitive artifacts excluded through `.gitignore`
 
 ## Required Private Handling
@@ -27,7 +27,7 @@ Keep the following private and never commit real values:
 
 1. Search the repository for secrets.
 2. Verify `js/cloud-config.js` contains placeholders only.
-3. Verify Apps Script files contain placeholders only.
+3. Verify no backup dumps or service-role keys are staged (backups go to the private backup repo via Actions secrets).
 4. Confirm no private spreadsheets or exports are staged.
 5. Rotate any key that was previously exposed.
 

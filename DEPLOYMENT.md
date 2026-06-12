@@ -79,8 +79,6 @@ Behavior:
 ## Kept Project Files
 
 Still intentionally kept:
-- [apps-script/JalaSaiSync.gs](/Users/priyansh/Projects/JalaSai/apps-script/JalaSaiSync.gs)
-- [apps-script/JalaSaiDriveBackup.gs](/Users/priyansh/Projects/JalaSai/apps-script/JalaSaiDriveBackup.gs)
 - [tools/import_legacy_data.py](/Users/priyansh/Projects/JalaSai/tools/import_legacy_data.py)
 - [tools/build_final_catalog.py](/Users/priyansh/Projects/JalaSai/tools/build_final_catalog.py)
 - [tools/build_parts_seed_v2.py](/Users/priyansh/Projects/JalaSai/tools/build_parts_seed_v2.py)
