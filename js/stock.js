@@ -408,6 +408,8 @@ function openAddPart() {
   const more = document.getElementById('p-more-details');
   if (more) more.open = false;
   autoSKU();
+  clearPartDupSuggestions();
+  bindPartDupSuggestionFocus();
   openM('m-part');
 }
 
@@ -452,6 +454,8 @@ function editPart(id) {
       || s.previousSellPrice
     );
   }
+  clearPartDupSuggestions();
+  bindPartDupSuggestionFocus();
   openM('m-part');
 }
 
@@ -460,6 +464,109 @@ function autoSKU() {
   const cat  = document.getElementById('p-cat').value;
   const sub  = (document.getElementById('p-sub').value || '').trim().toUpperCase().replace(/\s+/g, '-') || 'STD';
   document.getElementById('p-sku').value = `${bike}-${cat}-${sub}`;
+}
+
+// ─── Duplicate-part suggestions (Add / Edit Part modal) ──
+// While typing a new part's name, fuzzy-match against live stock
+// part names and offer "Add Qty" / "Open" on the existing part
+// instead of creating a duplicate.
+function findSimilarStockParts(query, { excludeId = null, limit = 4 } = {}) {
+  const queryTokens = stockSearchTokens(query).filter(t => t.length >= 2);
+  if (!queryTokens.length) return [];
+  const stateStock = window.appState?.stock || stock;
+  const scored = [];
+  (Array.isArray(stateStock) ? stateStock : []).forEach(item => {
+    if (!isLiveStockItem(item) || item.id === excludeId) return;
+    const candidateTokens = stockSearchTokens(item.name);
+    if (!candidateTokens.length) return;
+    let total = 0;
+    let strong = 0;
+    queryTokens.forEach(qt => {
+      const s = bestStockTokenScore(qt, candidateTokens);
+      total += s;
+      if (s >= 0.84) strong += 1;
+    });
+    const score = total / queryTokens.length;
+    if (score >= 0.6 && strong) scored.push({ item, score });
+  });
+  return scored
+    .sort((a, b) => b.score - a.score || String(a.item.name || '').localeCompare(String(b.item.name || '')))
+    .slice(0, limit)
+    .map(x => x.item);
+}
+
+function partDupSuggestionRow(s) {
+  const st = stSt(s);
+  return `
+    <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;padding:6px 0;border-top:1px solid var(--bor);flex-wrap:wrap;">
+      <div style="min-width:0;">
+        <div style="font-weight:500;font-size:13px;">${escapeAttr(s.name)}</div>
+        <div style="font-size:11px;color:var(--mut);margin-top:2px;">
+          <span class="sku-tag">${escapeAttr(s.sku)}</span>
+          · Qty <b style="color:var(--acc)">${s.qty}</b>${s.location ? ` · 📦 ${escapeAttr(s.location)}` : ''}
+          · <span class="sst ${st}">${stLbl(st)}</span>
+        </div>
+      </div>
+      <div style="display:flex;gap:4px;">
+        <button class="btn btn-g btn-sm" type="button" onclick="receiveDuplicatePartQty('${s.id}')">Add Qty</button>
+        <button class="btn btn-g btn-sm" type="button" onclick="editPart('${s.id}')">Open</button>
+      </div>
+    </div>`;
+}
+
+function renderPartDupSuggestions() {
+  const box = document.getElementById('p-dup-suggest');
+  if (!box) return;
+  const name = (document.getElementById('p-name')?.value || '').trim();
+  if (name.length < 2) { box.innerHTML = ''; return; }
+  const matches = findSimilarStockParts(name, { excludeId: editPartId });
+  if (!matches.length) { box.innerHTML = ''; return; }
+  box.innerHTML = `
+    <div style="background:var(--sur2);border:1px solid var(--bor);border-radius:10px;padding:8px 12px;margin:-4px 0 12px;">
+      <div style="font-size:12px;color:var(--warn);font-weight:600;">⚠ Similar part${matches.length > 1 ? 's' : ''} already in stock — add quantity instead of creating a duplicate?</div>
+      ${matches.map(partDupSuggestionRow).join('')}
+    </div>`;
+}
+
+function clearPartDupSuggestions() {
+  const box = document.getElementById('p-dup-suggest');
+  if (box) box.innerHTML = '';
+}
+
+// Suggestions only make sense while the name field is active —
+// hide them when the user moves on to another field, bring them
+// back when they return to the name.
+function bindPartDupSuggestionFocus() {
+  const modal = document.getElementById('m-part');
+  if (!modal || modal.dataset.dupSuggestBound) return;
+  modal.dataset.dupSuggestBound = 'true';
+  modal.addEventListener('focusin', (e) => {
+    const target = e.target;
+    if (!(target instanceof Element)) return;
+    if (target.id === 'p-name') { schedulePartDupSuggestions(); return; }
+    if (target.closest('#p-dup-suggest')) return;
+    clearPartDupSuggestions();
+  });
+}
+
+function schedulePartDupSuggestions() {
+  if (typeof debouncePerf === 'function') {
+    debouncePerf('part-dup-suggest', renderPartDupSuggestions, 200);
+  } else {
+    renderPartDupSuggestions();
+  }
+}
+
+function receiveDuplicatePartQty(id) {
+  if (!requireCloudWriteAccess('receive stock')) return;
+  const s = stock.find(x => x.id === id && isLiveStockItem(x));
+  if (!s) return;
+  const q = prompt(`Add quantity to "${s.name}" (current: ${s.qty})`, '1');
+  if (q === null) return;
+  const add = parseInt(q, 10);
+  if (!Number.isFinite(add) || add <= 0) { toast('Enter a valid quantity'); return; }
+  receivePartQty(id, add);
+  closeM('m-part');
 }
 
 // Shelf reconciliation (Phase 4, 2026-06-12): negative/drifted stock is
@@ -622,6 +729,15 @@ function savePart() {
     markPartForRecentPrint?.(editPartId);
     toast('Part updated');
   } else {
+    // Last-line duplicate guard: exact SKU or same normalized name
+    // already live in stock → confirm before creating a second entry.
+    const skuKey = String(obj.sku || '').trim().toUpperCase();
+    const nameKey = normalizeStockSearchText(name);
+    const dup = stock.find(x => isLiveStockItem(x) && (
+      (skuKey && String(x.sku || '').trim().toUpperCase() === skuKey)
+      || (nameKey && normalizeStockSearchText(x.name) === nameKey)
+    ));
+    if (dup && !confirm(`"${dup.name}" (SKU ${dup.sku}, qty ${dup.qty}) already exists in stock.\n\nCreate a separate new part anyway?\n\nTip: use "Add Qty" in the suggestion box to restock the existing part instead.`)) return;
     const part = {
       id: nextId('s'),
       previousBuyPrice: 0,

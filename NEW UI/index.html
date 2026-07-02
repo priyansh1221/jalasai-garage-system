@@ -1234,8 +1234,9 @@
       </div>
     <input type="hidden" id="edit-part-id">
     <div class="frow"><label class="flbl">Part Name *</label>
-      <input class="finp" id="p-name" placeholder="e.g. Brake Pad Front">
+      <input class="finp" id="p-name" placeholder="e.g. Brake Pad Front" oninput="schedulePartDupSuggestions()">
     </div>
+    <div id="p-dup-suggest"></div>
     <div class="frow"><label class="flbl">Fits Models</label>
       <input class="finp" id="p-fit" placeholder="e.g. Activa 3G, Activa 4G, Activa 5G">
     </div>
