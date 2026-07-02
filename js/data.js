@@ -111,6 +111,7 @@ const DEFAULT_SYNC_META = {
   shadowLastMirrorAt: '',
   shadowLastMirrorSummary: '',
   shadowLastMirrorError: '',
+  shadowLastFullMirrorAt: '',
 };
 let syncMeta   = { ...DEFAULT_SYNC_META };
 let printFilter = { q: '', cat: '', bike: '', status: '' };

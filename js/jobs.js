@@ -420,13 +420,16 @@ function renderMechanicChoiceChips(containerId, hiddenInputId, selectedValue = '
   const selectedIds = parseMechanicIds(selectedValue ?? input.value ?? '');
   input.value = mechanicValueString(selectedIds);
   const options = mechanicChoices();
+  const addMechanicChip = options.length <= 1 && typeof openAddMech === 'function'
+    ? `<button type="button" class="btn btn-sm btn-g" onclick="openAddMech()">+ Add Mechanic</button>`
+    : '';
   box.innerHTML = options.map(opt => {
     const active = opt.value ? selectedIds.includes(String(opt.value)) : !selectedIds.length;
     const handler = opt.value
       ? `toggleMechanicChipValue('${hiddenInputId}','${containerId}','${escapeAttr(String(opt.value))}')`
       : `toggleMechanicChipValue('${hiddenInputId}','${containerId}','')`;
     return `<button type="button" class="btn btn-sm ${active ? 'btn-p' : 'btn-g'}" onclick="${handler}">${opt.label}</button>`;
-  }).join('');
+  }).join('') + addMechanicChip;
 }
 
 function renderQuickInvoicePaymentChips(selected = document.getElementById('qi-pay-method')?.value || getStoredPaymentMethod()) {

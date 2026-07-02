@@ -202,4 +202,9 @@ function saveMech() {
     toast('Mechanic added: ' + name);
   }
   closeM('m-mech'); saveAll({ domain: 'mechanic' }); renderMechanics();
+  // Refresh mechanic chips in any open entry form (job card / quick
+  // invoice / income) so a just-added mechanic is selectable right away.
+  renderJobMechanicChips?.();
+  renderQuickInvoiceMechanicChips?.();
+  renderIncomeMechanicChips?.();
 }

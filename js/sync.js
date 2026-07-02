@@ -34,6 +34,12 @@ function gapFillWindowMs(minWindowMs = RECENT_CLOUD_REFRESH_WINDOW_MS) {
   return Math.min(MAX_GAP_FILL_MS, Math.max(minWindowMs, sinceLastPull + 30 * 1000));
 }
 const IO_SAVER_SYNC = true;
+// IO-saver pushes only rows changed in the recent sync window, so records
+// created before the shadow tables existed (old mechanics, customers, stock)
+// never reached the cloud and fresh browsers pulled an incomplete dataset.
+// A hash-diffed full mirror on the first sync per device (refreshed weekly)
+// heals those gaps without giving up the delta-push savings.
+const FULL_MIRROR_REFRESH_MS = 7 * 24 * 60 * 60 * 1000;
 const IO_SAVER_CHANGED_SLOP_MS = 5 * 60 * 1000;
 // Emergency guard: a stale device can have an older local payload that is
 // missing valid cloud rows. Do not infer cloud deletes from absence.
@@ -1179,7 +1185,10 @@ async function upsertShadowRows(client, table, rows) {
   if (!rows.length) return;
   for (let i = 0; i < rows.length; i += SHADOW_BATCH_SIZE) {
     const batch = rows.slice(i, i + SHADOW_BATCH_SIZE);
-    const { error } = await client.from(table).upsert(batch, { onConflict: 'id' });
+    // defaultToNull:false — tombstone/delete rows omit table-specific columns
+    // (e.g. garage_jobs.customer_id NOT NULL); without it, a batch mixing live
+    // and tombstone rows sends NULL for the missing keys and the push fails.
+    const { error } = await client.from(table).upsert(batch, { onConflict: 'id', defaultToNull: false });
     if (error) throw error;
   }
 }
@@ -2155,10 +2164,12 @@ async function pushGS(options = {}) {
       return false;
     }
 
+    const runFullMirror = !!options.fullMirror
+      || syncAgeMs(syncMeta.shadowLastFullMirrorAt) > FULL_MIRROR_REFRESH_MS;
     let shadowResult = null;
     try {
       shadowResult = await mirrorPayloadToShadowTables(client, localPayload, session, {
-        fullMirror: !!options.fullMirror,
+        fullMirror: runFullMirror,
         tableKeys: options.tableKeys,
       });
       // Beat the heartbeat: tell all other devices data changed.
@@ -2182,6 +2193,7 @@ async function pushGS(options = {}) {
 
     const pushedAt = nowISO();
     const newerLocalChange = (Date.parse(syncMeta.updatedAt || 0) || 0) > (Date.parse(localPayload.meta.updatedAt || 0) || 0);
+    if (runFullMirror) syncMeta.shadowLastFullMirrorAt = pushedAt;
     syncMeta.lastPushedAt = pushedAt;
     syncMeta.lastCloudUploadAt = pushedAt;
     syncMeta.lastRemoteUpdatedAt = pushedAt;
