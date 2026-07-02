@@ -1092,6 +1092,8 @@ function updateSharedSyncOverlay(message = '') {
 }
 
 function switchUiMode(path) {
+  const targetLabel = path === 'newui/' || path.endsWith('/newui/') ? 'New UI' : 'Old UI';
+  if (!confirm(`Switch to the ${targetLabel}?`)) return;
   try {
     if (typeof persistLocalBackupSnapshot === 'function') persistLocalBackupSnapshot();
     else if (typeof saveAll === 'function') saveAll({ preserveUpdatedAt: true, skipSync: true });
