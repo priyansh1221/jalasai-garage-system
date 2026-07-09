@@ -12,6 +12,7 @@ const AUTOMATIC_PULL_COOLDOWN_MS = 5 * 60 * 1000;
 const AUTO_PUSH_DELAY_MS = 8000;
 const AUTO_PUSH_BUSY_RETRY_MS = 60000;
 const REALTIME_PULL_DEBOUNCE_MS = 12000;
+const REALTIME_EVENT_BATCH_MS = 400;
 const BACKGROUND_SYNC_INTERVAL_MS = 5 * 60 * 1000;
 const RECENT_REFRESH_CHUNK_SIZE = 10;
 const OPTIMISTIC_SYNC_FAILURE_TOAST_COOLDOWN_MS = 60 * 1000;
@@ -50,17 +51,20 @@ const SHADOW_INFER_DELETES = false;
 // sync. After running the SQL, flip to true so rows carry tenant_id.
 const JALASAI_SEND_TENANT_ID = false;
 const JALASAI_TENANT_ID = 'jalasai';
+// `primary` names the payload array a table's rows are built from, so
+// IO-saver pushes can drop out-of-window records BEFORE the expensive
+// row build/hash instead of after (jobPayments derives from jobs).
 const SHADOW_SYNC_TABLES = Object.freeze([
-  { key: 'customers', table: 'garage_customers', buildRows: buildCustomerShadowRows },
-  { key: 'mechanics', table: 'garage_mechanics', buildRows: buildMechanicShadowRows },
-  { key: 'jobs', table: 'garage_jobs', buildRows: buildJobShadowRows },
-  { key: 'jobPayments', table: 'garage_job_payments', buildRows: buildJobPaymentShadowRows },
-  { key: 'stock', table: 'garage_stock_items', buildRows: buildStockItemShadowRows },
-  { key: 'expenses', table: 'garage_expenses', buildRows: buildExpenseShadowRows },
-  { key: 'incomeEntries', table: 'garage_income_entries', buildRows: buildIncomeEntryShadowRows },
-  { key: 'partsLog', table: 'garage_parts_log', buildRows: buildPartsLogShadowRows },
-  { key: 'auditLog', table: 'garage_audit_log', buildRows: buildAuditLogShadowRows },
-  { key: 'stockMovements', table: 'garage_stock_movements', buildRows: buildStockMovementShadowRows },
+  { key: 'customers', table: 'garage_customers', buildRows: buildCustomerShadowRows, primary: 'customers' },
+  { key: 'mechanics', table: 'garage_mechanics', buildRows: buildMechanicShadowRows, primary: 'mechanics' },
+  { key: 'jobs', table: 'garage_jobs', buildRows: buildJobShadowRows, primary: 'jobs' },
+  { key: 'jobPayments', table: 'garage_job_payments', buildRows: buildJobPaymentShadowRows, primary: 'jobs' },
+  { key: 'stock', table: 'garage_stock_items', buildRows: buildStockItemShadowRows, primary: 'stock' },
+  { key: 'expenses', table: 'garage_expenses', buildRows: buildExpenseShadowRows, primary: 'expenses' },
+  { key: 'incomeEntries', table: 'garage_income_entries', buildRows: buildIncomeEntryShadowRows, primary: 'incomeEntries' },
+  { key: 'partsLog', table: 'garage_parts_log', buildRows: buildPartsLogShadowRows, primary: 'partsLog' },
+  { key: 'auditLog', table: 'garage_audit_log', buildRows: buildAuditLogShadowRows, primary: 'auditLog' },
+  { key: 'stockMovements', table: 'garage_stock_movements', buildRows: buildStockMovementShadowRows, primary: 'stockMovements' },
 ]);
 
 // Pull business-critical tables first so invoices are not blocked by slower
@@ -538,6 +542,39 @@ function ioSaverRowsForPush(rows = [], options = {}) {
   return rows.filter(row => shadowRowStamp(row) >= cutoff);
 }
 
+function ioSaverPushCutoffMs(options = {}) {
+  if (!IO_SAVER_SYNC || options.fullMirror) return 0;
+  const since = Date.parse(syncMeta.pendingSince || 0) || Date.parse(syncMeta.updatedAt || 0) || 0;
+  return since ? since - IO_SAVER_CHANGED_SLOP_MS : 0;
+}
+
+// Record-level twin of the shadowRowStamp() filter in ioSaverRowsForPush,
+// applied to source records BEFORE the expensive shadow-row build/hash.
+// Must stay in lockstep with shadowTombstoneRow/shadowRecordUpdatedAt:
+// tombstones stamp with deletedAt, live records with the recordStamp chain,
+// and a record with no parseable stamp mirrors the nowISO() fallback (kept).
+function ioSaverRecordIsRecent(record, cutoff) {
+  if (!record || typeof record !== 'object') return true;
+  const deletedRaw = String(record.deletedAt || record.deleted_at || '').trim();
+  if (deletedRaw) {
+    const deletedStamp = Date.parse(shadowTimestamp(deletedRaw) || '') || 0;
+    return !deletedStamp || deletedStamp >= cutoff;
+  }
+  // shadowRecordUpdatedAt is what stamps the built row (nowISO() fallback for
+  // records without any date field), so a record it would stamp "now" is kept.
+  const stamp = Date.parse(shadowRecordUpdatedAt(record)) || 0;
+  if (!stamp || stamp >= cutoff) return true;
+  // Payment entries become their own garage_job_payments rows stamped with
+  // the entry time — keep the parent job when any entry is inside the window.
+  if (Array.isArray(record.payments) && record.payments.length) {
+    return record.payments.some(entry => {
+      const entryStamp = Date.parse(shadowRecordUpdatedAt(entry)) || 0;
+      return !entryStamp || entryStamp >= cutoff;
+    });
+  }
+  return false;
+}
+
 function shouldPullBeforePush(options = {}) {
   if (options.skipPreflightPull) return false;
   if (options.forcePullFirst) return true;
@@ -732,6 +769,10 @@ function shadowStableValue(value) {
     return Object.keys(value).sort().reduce((acc, key) => {
       const next = value[key];
       if (typeof next === 'undefined') return acc;
+      // '_'-prefixed keys are derived runtime data (e.g. _searchText),
+      // recomputed by the normalize* functions on every load — keep them
+      // out of record_data and the change hash.
+      if (key.charCodeAt(0) === 95) return acc;
       acc[key] = shadowStableValue(next);
       return acc;
     }, {});
@@ -804,11 +845,14 @@ function shadowRecordUpdatedAt(record) {
 }
 
 function shadowBaseRow(id, record, session) {
+  // One stable pass serves both the stored record_data and the change hash,
+  // so derived '_' keys never reach the cloud and aren't hashed.
+  const stableRecord = shadowStableValue(record || {});
   return {
     id,
     ...(JALASAI_SEND_TENANT_ID ? { tenant_id: JALASAI_TENANT_ID } : {}),
-    record_data: record || {},
-    source_hash: shadowHashString(shadowStableStringify(record || {})),
+    record_data: stableRecord,
+    source_hash: shadowHashString(JSON.stringify(stableRecord)),
     source_updated_at: shadowRecordUpdatedAt(record),
     mirrored_at: nowISO(),
     mirrored_by: session?.user?.id || null,
@@ -884,9 +928,17 @@ function shadowJobMechanicNames(job, mechanicLookup) {
   return uniqStrings(names);
 }
 
+// Memoized per payload object: the jobs, jobPayments, and customers builders
+// all normalize the same jobs array during one mirror pass — do it once.
+const shadowNormalizedJobsCache = new WeakMap();
+
 function shadowNormalizedJobs(payload) {
+  const cacheable = payload && typeof payload === 'object';
+  if (cacheable && shadowNormalizedJobsCache.has(payload)) {
+    return shadowNormalizedJobsCache.get(payload);
+  }
   const mechanicLookup = shadowMechanicLookup(payload?.mechanics);
-  return normaliseArray(payload?.jobs).map(job => {
+  const normalized = normaliseArray(payload?.jobs).map(job => {
     const item = normalizeJob(job);
     if (!isLiveJob(item)) return null;
     const mechIds = shadowJobMechanicIds(item);
@@ -896,6 +948,8 @@ function shadowNormalizedJobs(payload) {
     item.mech = mechNames.join(', ');
     return item;
   }).filter(Boolean);
+  if (cacheable) shadowNormalizedJobsCache.set(payload, normalized);
+  return normalized;
 }
 
 function shadowNormalizedIncomeEntries(payload) {
@@ -919,12 +973,64 @@ function shadowNormalizedIncomeEntries(payload) {
   }).filter(Boolean);
 }
 
-function shadowCustomerBalance(customer, jobsList) {
-  const net = jobsList
-    .filter(job => typeof customerMatchesJob === 'function'
-      ? customerMatchesJob(customer, job, { allowNameFallback: true })
-      : String(job?.custId || '').trim() === String(customer?.id || '').trim())
-    .reduce((sum, job) => sum + jobNetBalance(job), 0);
+// Decomposition of customerMatchesJob(customer, job, {allowNameFallback:true})
+// into per-job buckets so the full-mirror balance pass is O(customers + jobs)
+// instead of a pairwise customers × jobs scan:
+//   - a job WITH custId only ever matches the customer with that id;
+//   - a job WITHOUT custId matches by equal phone key, else by strong name key
+//     (a job matching both is counted once — same as the pairwise filter);
+//   - customerJobIdentityConflict is still checked per candidate pair.
+function buildShadowBalanceJobIndex(jobsList) {
+  if (typeof customerMatchesJob !== 'function'
+    || typeof customerPhoneKey !== 'function'
+    || typeof strongCustomerNameKey !== 'function'
+    || typeof jobIdentityName !== 'function'
+    || typeof customerJobIdentityConflict !== 'function') return null;
+  const byCustId = new Map();
+  const noCustIdByPhone = new Map();
+  const noCustIdByName = new Map();
+  const add = (map, key, job) => {
+    if (!key) return;
+    const bucket = map.get(key);
+    if (bucket) bucket.push(job);
+    else map.set(key, [job]);
+  };
+  (jobsList || []).forEach(job => {
+    if (!isLiveJob(job)) return;
+    const custId = String(job.custId || '').trim();
+    if (custId) { add(byCustId, custId, job); return; }
+    add(noCustIdByPhone, customerPhoneKey(job.phone || ''), job);
+    add(noCustIdByName, strongCustomerNameKey(jobIdentityName(job)), job);
+  });
+  return { byCustId, noCustIdByPhone, noCustIdByName };
+}
+
+function shadowCustomerBalance(customer, jobsList, jobIndex = null) {
+  if (!jobIndex) {
+    const net = (jobsList || [])
+      .filter(job => typeof customerMatchesJob === 'function'
+        ? customerMatchesJob(customer, job, { allowNameFallback: true })
+        : String(job?.custId || '').trim() === String(customer?.id || '').trim())
+      .reduce((sum, job) => sum + jobNetBalance(job), 0);
+    return { state: resolveBalanceState(net), amount: Math.abs(net) };
+  }
+  let net = 0;
+  if (isLiveCustomer(customer)) {
+    const candidates = [];
+    const custId = String(customer?.id || '').trim();
+    if (custId && jobIndex.byCustId.has(custId)) candidates.push(...jobIndex.byCustId.get(custId));
+    const phoneKey = customerPhoneKey(customer?.phone || '');
+    if (phoneKey && jobIndex.noCustIdByPhone.has(phoneKey)) candidates.push(...jobIndex.noCustIdByPhone.get(phoneKey));
+    const nameKey = strongCustomerNameKey(customer?.name || '');
+    if (nameKey && jobIndex.noCustIdByName.has(nameKey)) candidates.push(...jobIndex.noCustIdByName.get(nameKey));
+    const seen = new Set();
+    candidates.forEach(job => {
+      if (seen.has(job)) return;
+      seen.add(job);
+      if (customerJobIdentityConflict(customer, job)) return;
+      net += jobNetBalance(job);
+    });
+  }
   return { state: resolveBalanceState(net), amount: Math.abs(net) };
 }
 
@@ -956,13 +1062,14 @@ function isCustomerShapedRaw(raw) {
 function buildCustomerShadowRows(payload, session, options = {}) {
   const skipDerivedBalances = !!options.skipDerivedBalances;
   const jobsList = skipDerivedBalances ? [] : shadowNormalizedJobs(payload);
+  const balanceJobIndex = skipDerivedBalances ? null : buildShadowBalanceJobIndex(jobsList);
   const rows = normaliseArray(payload?.customers)
     .filter(raw => raw && !String(raw.deletedAt || '').trim() && String(raw.name || '').trim() && isCustomerShapedRaw(raw))
     .map(raw => {
       const item = normalizeCustomer(raw);
       const balance = skipDerivedBalances
         ? { state: 'clear', amount: 0 }
-        : shadowCustomerBalance(item, jobsList);
+        : shadowCustomerBalance(item, jobsList, balanceJobIndex);
       const id = String(item.id || item.phone || item.name || shadowSyntheticId('cust', item)).trim();
       return {
         ...shadowBaseRow(id, item, session),
@@ -1232,9 +1339,28 @@ async function mirrorPayloadToShadowTables(client, payload, session, options = {
     : SHADOW_SYNC_TABLES;
   const results = [];
 
+  // IO-saver: narrow each table's source array to the recent window before
+  // building rows, so a routine save no longer normalizes + hashes the whole
+  // dataset. ioSaverRowsForPush stays as the exact row-level filter; scoped
+  // payloads are shared per primary array so jobs/jobPayments reuse one
+  // normalize pass. The remote-diff full mirror always sees the full payload.
+  const ioSaverCutoff = ioSaverPushCutoffMs(options);
+  const scopedPayloads = new Map();
+  const payloadForConfig = (config) => {
+    if (!ioSaverCutoff || !config.primary) return payload;
+    if (!scopedPayloads.has(config.primary)) {
+      const rows = normaliseArray(payload?.[config.primary]);
+      const recent = rows.filter(record => ioSaverRecordIsRecent(record, ioSaverCutoff));
+      scopedPayloads.set(config.primary, recent.length === rows.length
+        ? payload
+        : { ...payload, [config.primary]: recent });
+    }
+    return scopedPayloads.get(config.primary);
+  };
+
   for (const config of tablesToMirror) {
     await yieldRecentRefreshChunk();
-    const builtRows = config.buildRows(payload, session, {
+    const builtRows = config.buildRows(payloadForConfig(config), session, {
       skipDerivedBalances: !!tableKeyFilter && IO_SAVER_SYNC,
     });
     const deduped = dedupeShadowRows(builtRows);
@@ -1560,6 +1686,24 @@ function queueAutoSync(options = {}) {
   }, AUTO_PUSH_DELAY_MS);
 }
 
+// One-shot background run of the healing full mirror, deferred out of the
+// save-triggered push window. Failures are not retried in a loop here — the
+// next push that finds the mirror still due reschedules it.
+let deferredFullMirrorTimer = null;
+const DEFERRED_FULL_MIRROR_DELAY_MS = 25000;
+
+function scheduleDeferredFullMirror(delayMs = DEFERRED_FULL_MIRROR_DELAY_MS) {
+  if (deferredFullMirrorTimer) return;
+  deferredFullMirrorTimer = setTimeout(async () => {
+    deferredFullMirrorTimer = null;
+    if (CLOUD_SYNC_DISABLED || !canUseCloudConfig() || !cloudSessionActive) return;
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
+    if (syncAgeMs(syncMeta.shadowLastFullMirrorAt) <= FULL_MIRROR_REFRESH_MS) return;
+    const result = await pushGS({ quiet: true, fullMirror: true });
+    if (result === 'busy') scheduleDeferredFullMirror(AUTO_PUSH_BUSY_RETRY_MS);
+  }, delayMs);
+}
+
 function startBackgroundSyncLoop() {
   clearInterval(cloudBackgroundTimer);
   // Background tick: keep local backup fresh and use the lightweight
@@ -1747,13 +1891,44 @@ function startRealtimeSync(client) {
       if (!fromDevice || fromDevice === syncMeta.deviceId) return; // ignore own push
       scheduleRealtimePull();
     });
+  // Another device's push arrives as one realtime event per row. Applying
+  // them one-by-one meant a localStorage write + forced page render per row
+  // while staff were typing. Batch the burst: apply all rows, then do one
+  // save and one render.
+  let pendingRealtimeEvents = [];
+  let realtimeFlushTimer = null;
+  const flushRealtimeEvents = () => {
+    realtimeFlushTimer = null;
+    const batch = pendingRealtimeEvents;
+    pendingRealtimeEvents = [];
+    if (!batch.length) return;
+    let needsPull = false;
+    const changedKeys = new Set();
+    const changedPages = new Set();
+    batch.forEach(({ config, payload }) => {
+      if (!handleRealtimeShadowChange(config, payload, { deferSideEffects: true })) {
+        needsPull = true;
+        return;
+      }
+      const row = payload.new || payload.old || {};
+      if (row.device_id && row.device_id === syncMeta.deviceId) return; // own echo: applied nothing
+      changedKeys.add(config.key);
+      (config.pages || []).forEach(page => changedPages.add(page));
+    });
+    if (changedKeys.size) {
+      saveAll({ preserveUpdatedAt: true, skipSync: true, domains: [...changedKeys] });
+      refreshRealtimePagesBatch([...changedKeys], [...changedPages]);
+    }
+    if (needsPull) scheduleRealtimePull();
+  };
   REALTIME_SHADOW_TABLES.forEach(config => {
     channel.on('postgres_changes', {
       event: '*',
       schema: 'public',
       table: config.table,
     }, (payload) => {
-      if (!handleRealtimeShadowChange(config, payload)) scheduleRealtimePull();
+      pendingRealtimeEvents.push({ config, payload });
+      if (!realtimeFlushTimer) realtimeFlushTimer = setTimeout(flushRealtimeEvents, REALTIME_EVENT_BATCH_MS);
     });
   });
   realtimeChannel = channel.subscribe((status) => {
@@ -2164,8 +2339,15 @@ async function pushGS(options = {}) {
       return false;
     }
 
-    const runFullMirror = !!options.fullMirror
+    // The healing full mirror is heavy (remote hash sweep of every table).
+    // Never run it inside the scoped auto-push that follows a data entry —
+    // do the quick scoped push now and schedule the full mirror for a quiet
+    // moment instead, so logging entries stays smooth.
+    const fullMirrorDue = !!options.fullMirror
       || syncAgeMs(syncMeta.shadowLastFullMirrorAt) > FULL_MIRROR_REFRESH_MS;
+    const scopedAutoPush = !options.fullMirror
+      && Array.isArray(options.tableKeys) && options.tableKeys.length > 0;
+    const runFullMirror = fullMirrorDue && !scopedAutoPush;
     let shadowResult = null;
     try {
       shadowResult = await mirrorPayloadToShadowTables(client, localPayload, session, {
@@ -2194,6 +2376,7 @@ async function pushGS(options = {}) {
     const pushedAt = nowISO();
     const newerLocalChange = (Date.parse(syncMeta.updatedAt || 0) || 0) > (Date.parse(localPayload.meta.updatedAt || 0) || 0);
     if (runFullMirror) syncMeta.shadowLastFullMirrorAt = pushedAt;
+    else if (fullMirrorDue) scheduleDeferredFullMirror();
     syncMeta.lastPushedAt = pushedAt;
     syncMeta.lastCloudUploadAt = pushedAt;
     syncMeta.lastRemoteUpdatedAt = pushedAt;

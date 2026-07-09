@@ -85,6 +85,9 @@ function bestStockTokenScore(queryToken, candidateTokens) {
     }
     const maxLen = Math.max(token.length, queryToken.length);
     if (!maxLen) return;
+    // Edit distance is at least the length difference — skip the O(n·m)
+    // Levenshtein when even the best case can't reach the 0.34 ratio band.
+    if (Math.abs(token.length - queryToken.length) / maxLen > 0.34) return;
     const distance = levenshteinDistance(queryToken, token);
     const ratio = distance / maxLen;
     if (ratio <= 0.2) best = Math.max(best, 0.84);
