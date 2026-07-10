@@ -366,6 +366,40 @@ function renderSyncDiagnostics() {
       <span style="text-align:right;max-width:60%;word-break:break-word;">${value}</span>
     </div>
   `).join('');
+  const junkCount = findImportReviewJunkJobs().length;
+  if (junkCount) {
+    box.innerHTML += `
+      <div class="mrow" style="align-items:center;">
+        <span style="color:var(--warn);">Imported review rows on Job Board</span>
+        <span style="text-align:right;">
+          <button class="btn btn-g btn-sm" onclick="cleanImportReviewJunkJobs()">Remove ${junkCount} rows</button>
+        </span>
+      </div>`;
+  }
+}
+
+// The Khatabook legacy import flagged unclear rows as "kb-review-NNNN"
+// review items; some ended up inside the jobs store, where they render as
+// placeholder "Customer / Vehicle / Work" cards on the Job Board. They were
+// never real jobs. Cleanup soft-deletes them through the normal tombstone
+// path so the removal syncs to cloud and every device.
+function findImportReviewJunkJobs() {
+  return (typeof jobs !== 'undefined' ? jobs : []).filter(j =>
+    /^kb-review-/.test(String(j?.id || '')) && !j.deletedAt);
+}
+
+function cleanImportReviewJunkJobs() {
+  if (!requireCloudWriteAccess('remove imported review rows')) return;
+  const junk = findImportReviewJunkJobs();
+  if (!junk.length) { toast('No imported review rows found', 2200); return; }
+  if (!confirm(`Remove ${junk.length} imported Khatabook review rows (kb-review-*)? They are not real jobs. They will disappear from the Job Board on every synced device.`)) return;
+  const ts = nowISO();
+  junk.forEach(j => { j.deletedAt = ts; j.updatedAt = ts; });
+  logAction('delete', 'job', 'kb-review-cleanup', { count: junk.length, reason: 'khatabook import review rows' });
+  saveAll({ domain: 'jobs' });
+  if (typeof renderJobs === 'function') renderJobs();
+  renderSyncDiagnostics();
+  toast(`Removed ${junk.length} imported review rows`, 3200);
 }
 
 function syncErrMsg(err, fallback) {

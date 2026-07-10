@@ -359,6 +359,11 @@ function prepareDoneModal(id, mode = 'create') {
   document.getElementById('done-invoice-no').value   = j.invoiceNo || (mode === 'edit' ? '' : suggestedNextInvoiceNo());
   document.getElementById('done-pay-method').value   = j.payMethod || getStoredPaymentMethod();
   if (typeof renderDonePaymentChips === 'function') renderDonePaymentChips(j.payMethod || getStoredPaymentMethod());
+  const doneMechInput = document.getElementById('done-mech');
+  if (doneMechInput) {
+    doneMechInput.value = j.mech || '';
+    if (typeof renderMechanicChoiceChips === 'function') renderMechanicChoiceChips('done-mech-chips', 'done-mech', j.mech || '');
+  }
   const paymentInput = document.getElementById('done-payment');
   const paymentHelp = document.getElementById('done-payment-help');
   const paymentChips = document.getElementById('done-pay-chips');
@@ -373,7 +378,9 @@ function prepareDoneModal(id, mode = 'create') {
     paymentChips.style.opacity = hasPaymentHistory ? '0.6' : '';
   }
   document.getElementById('done-applied-advance').value = '0';
-  const doneBtn = document.querySelector('#m-done .btn.btn-p');
+  // Scope to the footer: active choice chips also carry .btn-p and would
+  // otherwise be renamed to the footer button label.
+  const doneBtn = document.querySelector('#m-done .mftr .btn.btn-p');
   if (doneBtn) doneBtn.textContent = mode === 'edit' ? 'Save Invoice Changes' : 'Mark Done & Close Job';
   const nextBtn = document.getElementById('done-next-btn');
   const newCustomerBtn = document.getElementById('done-new-customer-btn');
@@ -478,6 +485,7 @@ function confirmDone(nextAction = 'close') {
   const netInvoiceTotal = Math.max(0, invoiceGrossTotal - j.discount);
   const pay    = parseFloat(document.getElementById('done-payment').value) || 0;
   const method = document.getElementById('done-pay-method').value;
+  const doneMechValue = document.getElementById('done-mech')?.value;
   const notes  = document.getElementById('done-notes').value.trim();
   const invoiceDate = document.getElementById('done-invoice-date').value || j.date || today();
   const typedInvoiceNo = document.getElementById('done-invoice-no').value.trim();
@@ -535,6 +543,7 @@ function confirmDone(nextAction = 'close') {
     j.collectedBy = '';
     j.invoicePhotos = invoicePhotos;
     j.invoicePhoto = invoicePhoto;
+    if (typeof doneMechValue === 'string') j.mech = doneMechValue;
     j.updatedAt = nowISO();
     markOptimisticInvoice(j.id);
     rememberPaymentMethod(method);
@@ -581,6 +590,7 @@ function confirmDone(nextAction = 'close') {
   j.invoiceNo   = invNo;
   j.date        = invoiceDate;
   j.doneAt      = invoiceDateTime(invoiceDate, j.time || '');
+  if (typeof doneMechValue === 'string') j.mech = doneMechValue;
   j.invoicePhotos = invoicePhotos;
   j.invoicePhoto = invoicePhoto;
   if (notes) j.notes = (j.notes ? j.notes + ' | ' : '') + notes;
