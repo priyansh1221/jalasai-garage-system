@@ -17,6 +17,12 @@ export default {
     if (url.pathname === '/config.js') {
       const projectUrl = String(env.SUPABASE_URL || '').trim();
       const anonKey = String(env.SUPABASE_ANON_KEY || '').trim();
+      // No env config (e.g. preview deployments without production env vars):
+      // fall through to static assets so a bundled config.js can serve instead
+      // of overriding it with empty values.
+      if (!projectUrl && !anonKey) {
+        return env.ASSETS.fetch(request);
+      }
       const admins = adminEmails(env);
       const body = [
         'window.SUPABASE_URL = ' + jsString(projectUrl) + ';',

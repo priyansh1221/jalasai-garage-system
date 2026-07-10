@@ -281,6 +281,10 @@ function openGS() {
   const prefillNote = document.getElementById('cloud-prefill-note');
   if (urlRow) urlRow.style.display = hasBuiltInConfig ? 'none' : '';
   if (keyRow) keyRow.style.display = hasBuiltInConfig ? 'none' : '';
+  // Developer setup card (old UI only) is irrelevant once the project
+  // connection ships inside the build — staff only sign in.
+  const setupCard = document.getElementById('gs-setup-instructions');
+  if (setupCard) setupCard.style.display = hasBuiltInConfig ? 'none' : '';
   if (prefillNote) {
     prefillNote.textContent = hasBuiltInConfig
       ? 'Project connection is already built into this app. Staff only need email and password on each device.'
@@ -308,7 +312,7 @@ function updateGSBadge() {
     b.textContent = '☁ Cloud: ON';
     b.className = 'gs-badge';
   } else if (canUseCloudConfig()) {
-    b.textContent = '☁ Cloud: SETUP';
+    b.textContent = '☁ Cloud: sign in to sync';
     b.className = 'gs-badge';
   } else {
     b.textContent = '☁ Offline · saved on device';
