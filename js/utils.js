@@ -45,6 +45,11 @@ function addOnceListener(target, event, key, handler, options) {
 let _toastTimer = null;
 function toast(msg, dur = 2800) {
   const t = document.getElementById('toast');
+  if (!t.dataset.a11yBound) {
+    t.dataset.a11yBound = '1';
+    t.setAttribute('role', 'status');
+    t.setAttribute('aria-live', 'polite');
+  }
   t.textContent = msg;
   t.classList.add('show');
   clearTimeout(_toastTimer);
@@ -123,6 +128,19 @@ function closeM(id) {
   clearModalHistory(id);
   updateBackButtons();
 }
+
+// Escape closes the top-most open modal. Form contents are preserved by the
+// sticky-draft bindings, so an accidental Escape never loses entered data.
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Escape' || e.defaultPrevented) return;
+  const open = document.querySelectorAll('.ovl.open');
+  if (!open.length) return;
+  const top = open[open.length - 1];
+  if (top.id) {
+    closeM(top.id);
+    e.preventDefault();
+  }
+});
 const STICKY_FORM_MODALS = new Set([
   'm-job',
   'm-quick-invoice',

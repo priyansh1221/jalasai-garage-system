@@ -168,6 +168,8 @@ function calculateNewUiHomeStats() {
     riskyStockPreview: riskyStock.slice(0, 5),
     syncHealthy: syncMeta && !syncMeta.pendingSync && !syncMeta.lastSyncError,
     pendingSync: !!syncMeta?.pendingSync,
+    syncError: !!syncMeta?.lastSyncError,
+    cloudConnected: !!(typeof cloudSessionActive !== 'undefined' && cloudSessionActive),
     lastPushedAt: syncMeta?.lastPushedAt || '',
   };
 }
@@ -221,8 +223,22 @@ function renderHomeDashboard() {
     }).join('') || '<div class="new-empty">Stock levels look okay.</div>';
   }
 
-  newUiSetText('home-sync-title', stats.syncHealthy ? 'Cloud sync healthy' : stats.pendingSync ? 'Pending sync' : 'Local cache ready');
-  newUiSetText('home-sync-copy', stats.lastPushedAt
-    ? `Last push: ${typeof fmtDateTime === 'function' ? fmtDateTime(stats.lastPushedAt) : stats.lastPushedAt}`
-    : 'Business data stays available offline and syncs when cloud is connected.');
+  // Sync box must reflect real cloud state: never claim "healthy" while cloud
+  // is disconnected (the top badge says Offline at the same time).
+  const syncState = !stats.cloudConnected
+    ? 'offline'
+    : stats.syncError ? 'issue' : stats.pendingSync ? 'pending' : 'healthy';
+  newUiSetText('home-sync-title',
+    syncState === 'offline' ? 'Working offline — saved on this device'
+    : syncState === 'issue' ? 'Sync issue — open Cloud settings'
+    : syncState === 'pending' ? 'Changes waiting to sync'
+    : 'Cloud sync healthy');
+  newUiSetText('home-sync-copy',
+    syncState === 'offline'
+      ? 'Everything keeps working without internet. Connect cloud from the top badge to back up.'
+      : stats.lastPushedAt
+        ? `Last push: ${typeof fmtDateTime === 'function' ? fmtDateTime(stats.lastPushedAt) : stats.lastPushedAt}`
+        : 'Business data stays available offline and syncs when cloud is connected.');
+  const syncDot = document.querySelector('.new-sync-box .new-sync-dot');
+  if (syncDot) syncDot.dataset.state = syncState;
 }

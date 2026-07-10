@@ -5,7 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#d7d9de">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<title>JalaSai Garage System - New UI</title>
+<title>JalaSai Garage System</title>
+<meta name="description" content="JalaSai garage workshop management — jobs, billing, stock and reminders. Works offline.">
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=Rajdhani:wght@500;600;700&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 <link rel="manifest" href="manifest.webmanifest">
@@ -66,7 +67,7 @@
 <!-- ═══════ STATUS BAR ═══════════════════════════════════ -->
 <div class="gs-bar no-print">
   <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-    <button class="gs-badge off" id="gs-badge" onclick="openGS()">☁ Cloud: OFF</button>
+    <button class="gs-badge off" id="gs-badge" onclick="openGS()">☁ Offline · saved on device</button>
     <button class="gs-badge off" id="nav-back-btn" onclick="goBack()" style="display:none;">← Back</button>
   </div>
   <div class="gs-bar-right" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
@@ -84,7 +85,7 @@
     <div class="new-kpi"><div class="new-kpi-icon blue"><span class="ui-ico ico-card"></span></div><span>Today Revenue</span><strong id="home-revenue">₹0</strong><small id="home-invoices">0 invoices today</small></div>
     <div class="new-kpi"><div class="new-kpi-icon green"><span class="ui-ico ico-bag"></span></div><span>Active Jobs</span><strong id="home-active-jobs">0</strong><small id="home-ready-jobs">0 ready</small></div>
     <div class="new-kpi"><div class="new-kpi-icon purple"><span class="ui-ico ico-user"></span></div><span>Customers</span><strong id="home-customers">0</strong><small id="home-dues">₹0 pending dues</small></div>
-    <div class="new-kpi"><div class="new-kpi-icon orange"><span class="ui-ico ico-bell"></span></div><span>Stock Risk</span><strong id="home-stock-risk">0</strong><small>low / out items</small></div>
+    <div class="new-kpi"><div class="new-kpi-icon orange"><span class="ui-ico ico-bell"></span></div><span>Parts to Reorder</span><strong id="home-stock-risk">0</strong><small>low or out of stock</small></div>
   </div>
 
   <div class="new-home-grid">
@@ -294,7 +295,7 @@
       <option value="oldest">Oldest</option>
     </select>
   </div>
-  <div style="font-size:12px;color:var(--mut);margin:-2px 0 10px;">Try: `brake pad activa 5g`, `ASKBS0212`, `lamp`, or fitment names.</div>
+  <div style="font-size:12px;color:var(--mut);margin:-2px 0 10px;">Try: "brake pad activa 5g", "ASKBS0212", "lamp", or fitment names.</div>
   <div class="stbl">
     <table>
       <thead><tr>

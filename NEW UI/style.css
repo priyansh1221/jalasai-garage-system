@@ -3636,3 +3636,60 @@ table td {
 @keyframes sharedSyncSpin {
   to { transform: rotate(360deg); }
 }
+
+/* ═══════ UX polish pass (2026-07): additive overrides only ═══════ */
+
+/* Offline is a normal, designed state — not an error. Red stays reserved
+   for real sync failures (Retry Sync keeps its own copy). */
+.gs-badge.off {
+  background: rgba(255,255,255,.55);
+  color: #4c525c;
+  border-color: rgba(18,20,24,.12);
+}
+
+/* A later .ui-ico rule repaints glyphs grey; KPI chips declare white icons. */
+.new-kpi-icon .ui-ico { color: #fff; }
+
+/* Home sync dot mirrors real cloud state (data-state set in js/new-ui.js). */
+.new-sync-dot[data-state="offline"] { background: #8f97a3; }
+.new-sync-dot[data-state="pending"] { background: var(--warn); }
+.new-sync-dot[data-state="issue"]   { background: var(--dan); }
+
+@media (max-width: 600px) {
+  /* Compact horizontal KPI cards (icon left, text right) so Home fits in
+     roughly one screen instead of a column of tall, mostly-empty cards. */
+  .new-kpi {
+    display: grid;
+    grid-template-columns: 38px 1fr;
+    column-gap: 12px;
+    align-items: center;
+    min-height: 0;
+    padding: 12px 14px;
+  }
+  .new-kpi-icon {
+    grid-row: 1 / span 3;
+    width: 38px;
+    height: 38px;
+    margin-bottom: 0;
+    border-radius: 12px;
+  }
+  .new-kpi span   { grid-column: 2; }
+  .new-kpi strong { grid-column: 2; margin-top: 2px; font-size: 20px; }
+  .new-kpi small  { grid-column: 2; margin-top: 2px; }
+
+  /* 16px inputs stop iOS Safari zooming the whole page on focus. */
+  .finp, .fsel, .sbox, textarea.finp { font-size: 16px; }
+
+  /* Stock +/- steppers need a real touch target. */
+  .qbtn { width: 38px; height: 38px; font-size: 17px; }
+}
+
+/* Respect the OS reduced-motion preference. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    transition-duration: .01ms !important;
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+  }
+}

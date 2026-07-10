@@ -311,7 +311,7 @@ function updateGSBadge() {
     b.textContent = '☁ Cloud: SETUP';
     b.className = 'gs-badge';
   } else {
-    b.textContent = '☁ Cloud: OFF';
+    b.textContent = '☁ Offline · saved on device';
     b.className = 'gs-badge off';
   }
   updateQuickSyncButton();
@@ -2457,7 +2457,7 @@ async function initGSSync() {
       return;
     }
     if (!canUseCloudConfig()) {
-      updateGSStatus('Local cache only. Connect cloud when you are ready.');
+      updateGSStatus('Working offline. Data is saved on this device — connect cloud any time to back up.');
       startBackgroundSyncLoop();
       return;
     }

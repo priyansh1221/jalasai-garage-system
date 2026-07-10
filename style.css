@@ -1293,3 +1293,11 @@ nav {
 @keyframes sharedSyncSpin {
   to { transform: rotate(360deg); }
 }
+
+/* UX polish (2026-07): offline is a normal state, not an error — mirror of
+   the New UI change so the shared badge copy reads consistently. */
+.gs-badge.off {
+  background: rgba(255,255,255,.05);
+  color: var(--mut);
+  border-color: rgba(255,255,255,.14);
+}
