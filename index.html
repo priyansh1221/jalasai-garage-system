@@ -92,13 +92,13 @@
           </label>
         </div>
       </div>
-      <button class="btn btn-g" onclick="showPage('invoices')">Invoices</button>
-      <button class="btn btn-g" data-admin-only="true" onclick="showPage('print')">Print QR</button>
-      <button class="btn btn-g" onclick="openAddIncome()">+ Income</button>
-      <button class="btn btn-g" onclick="openAddExp()">+ Expense</button>
-      <button class="btn btn-g" onclick="openQuickInvoice()">Quick Invoice</button>
-      <button class="btn btn-p" onclick="openNewJob()">+ New Job</button>
     </div>
+  </div>
+  <!-- Secondary utilities (calmer than the old top toolbar; access preserved) -->
+  <div class="rd-utilrow">
+    <button class="btn btn-g btn-sm" onclick="openAddIncome()">+ Income</button>
+    <button class="btn btn-g btn-sm" onclick="openAddExp()">+ Expense</button>
+    <button class="btn btn-g btn-sm" data-admin-only="true" onclick="showPage('print')">Print QR</button>
   </div>
   <div class="jgrid" id="jgrid"></div>
 
@@ -111,6 +111,12 @@
       <span id="done-toggle" style="color:var(--mut);font-size:12px;">▼ Show</span>
     </div>
     <div id="done-grid" class="jgrid" style="display:none;"></div>
+  </div>
+
+  <!-- Pinned thumb action bar: primary CTAs (existing handlers) -->
+  <div class="actionbar">
+    <button class="btn btn-g" onclick="openQuickInvoice()">Quick Invoice</button>
+    <button class="btn btn-p" onclick="openNewJob()">+ New Job</button>
   </div>
 </div>
 
@@ -172,12 +178,9 @@
 <div class="page" id="page-stock">
   <div class="board-hdr">
     <div class="board-ttl">Parts Stock</div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;">
-      <button class="btn btn-p"  onclick="openAddPart()">+ Add Part</button>
-      <button class="btn btn-g"  onclick="openOrderStockModal()" id="st-order-btn">Order Stock</button>
-      <button class="btn btn-g"  onclick="openStockReceiveScan()">Receive Stock</button>
-      <button class="btn btn-g"  onclick="showPage('scan')">Scan</button>
-      <button class="btn btn-g" data-admin-only="true" onclick="showPage('print')">Print QR</button>
+    <div class="rd-utilrow" style="margin:0;">
+      <button class="btn btn-g btn-sm"  onclick="openOrderStockModal()" id="st-order-btn">Order Stock</button>
+      <button class="btn btn-g btn-sm" data-admin-only="true" onclick="showPage('print')">Print QR</button>
     </div>
   </div>
   <div class="sctrl">
@@ -214,6 +217,13 @@
     </table>
     <div class="stock-footer"><span id="stock-value"></span><div id="stock-pager"></div></div>
   </div>
+
+  <!-- Pinned thumb action bar: primary CTAs (existing handlers) -->
+  <div class="actionbar">
+    <button class="btn btn-g icon" onclick="showPage('scan')">▣ Scan</button>
+    <button class="btn btn-g" onclick="openStockReceiveScan()">Receive</button>
+    <button class="btn btn-p" onclick="openAddPart()">+ Add Part</button>
+  </div>
 </div>
 
 <!-- ═══════════════════════════════════════════════════════
@@ -231,10 +241,14 @@
         <option value="advance-desc">Advance: High to Low</option>
         <option value="advance-asc">Advance: Low to High</option>
       </select>
-      <button class="btn btn-p" onclick="openAddCust()">+ Add Customer</button>
     </div>
   </div>
   <div class="cust-grid" id="cust-grid"></div>
+
+  <!-- Pinned thumb action bar: primary CTA (existing handler) -->
+  <div class="actionbar">
+    <button class="btn btn-p" onclick="openAddCust()">+ Add Customer</button>
+  </div>
 </div>
 
 <!-- ═══════════════════════════════════════════════════════
@@ -254,7 +268,6 @@
 <div class="page" id="page-mechanics">
   <div class="board-hdr">
     <div class="board-ttl">Mechanics</div>
-    <button class="btn btn-p" onclick="openAddMech()">+ Add Mechanic</button>
   </div>
   <div class="mech-toolbar">
     <select class="fsel" id="mech-period-mode" style="width:120px;" onchange="setMechanicPeriodMode(this.value)">
@@ -267,6 +280,11 @@
     <input class="finp" id="mech-period-year" type="number" min="2000" max="2100" step="1" style="width:100px;display:none;" onchange="renderMechanics()" oninput="renderMechanics()">
   </div>
   <div class="mech-grid" id="mech-grid"></div>
+
+  <!-- Pinned thumb action bar: primary CTA (existing handler) -->
+  <div class="actionbar">
+    <button class="btn btn-p" onclick="openAddMech()">+ Add Mechanic</button>
+  </div>
 </div>
 
 <!-- ═══════════════════════════════════════════════════════
@@ -293,11 +311,13 @@
         <option>Parts</option><option>Tools</option><option>Rent</option><option>Salary</option>
         <option>Utilities</option><option>Marketing</option><option>Miscellaneous</option>
       </select>
-      <button class="btn btn-p" onclick="openAddExp()">+ Add Expense</button>
     </div>
   </div>
-  <div class="exp-summary">
-    <div class="sc"><div class="sc-lbl">Expenses</div><div class="sc-val r" id="exp-total">₹0</div></div>
+  <div class="rd-total-card">
+    <div>
+      <div class="rd-total-eyebrow">Expenses</div>
+      <div class="rd-total-value r" id="exp-total">₹0</div>
+    </div>
   </div>
   <div style="font-size:12px;color:var(--mut);margin:-4px 0 14px;">Revenue totals, manual income, profit, and invoice comparisons now live in Reports and Income.</div>
   <div style="display:grid;grid-template-columns:1fr 220px;gap:14px;margin-bottom:14px;" class="exp-split">
@@ -311,6 +331,11 @@
       <div class="rcard-ttl">By Category</div>
       <div id="exp-bycat"></div>
     </div>
+  </div>
+
+  <!-- Pinned thumb action bar: primary CTA (existing handler) -->
+  <div class="actionbar">
+    <button class="btn btn-p" onclick="openAddExp()">+ Add Expense</button>
   </div>
 </div>
 
@@ -333,11 +358,13 @@
       <select class="fsel" style="width:120px;" id="income-year-filter" onchange="setExpenseYear(this.value)"></select>
       <input class="finp" type="date" id="income-start" style="width:160px;padding:6px 10px;font-size:13px;" onchange="setExpenseCustomDates()">
       <input class="finp" type="date" id="income-end" style="width:160px;padding:6px 10px;font-size:13px;" onchange="setExpenseCustomDates()">
-      <button class="btn btn-p" onclick="openAddIncome()">+ Add Income</button>
     </div>
   </div>
-  <div class="exp-summary">
-    <div class="sc"><div class="sc-lbl">Manual Income</div><div class="sc-val o" id="income-total">₹0</div></div>
+  <div class="rd-total-card">
+    <div>
+      <div class="rd-total-eyebrow">Manual Income</div>
+      <div class="rd-total-value" style="color:#00c896;" id="income-total">₹0</div>
+    </div>
   </div>
   <div style="font-size:12px;color:var(--mut);margin:-4px 0 14px;">This page keeps manual income separate from Admin expenses for faster daily checking.</div>
   <div style="display:grid;grid-template-columns:1fr 220px;gap:14px;" class="exp-split">
@@ -352,6 +379,11 @@
       <div id="income-bytype"></div>
     </div>
   </div>
+
+  <!-- Pinned thumb action bar: primary CTA (existing handler) -->
+  <div class="actionbar">
+    <button class="btn btn-p" onclick="openAddIncome()">+ Add Income</button>
+  </div>
 </div>
 
 <!-- ═══════════════════════════════════════════════════════
@@ -360,10 +392,6 @@
 <div class="page" id="page-reports">
   <div class="board-hdr">
     <div class="board-ttl">Reports</div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;">
-      <button class="btn btn-g" onclick="sendClosingSummary()">📱 Closing Summary</button>
-      <button class="btn btn-g" onclick="aiDraftClosingSummary()">AI Draft Summary</button>
-    </div>
   </div>
 
   <div class="report-filter-row" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;align-items:center;">
@@ -613,6 +641,12 @@
       <tbody id="rpt-tbody"></tbody>
     </table>
   </div>
+
+  <!-- Pinned thumb action bar: primary CTAs (existing handlers) -->
+  <div class="actionbar">
+    <button class="btn btn-g" onclick="aiDraftClosingSummary()">AI Draft Summary</button>
+    <button class="btn btn-p" onclick="sendClosingSummary()">📱 Closing Summary</button>
+  </div>
 </div>
 
 <div class="page" id="page-logs">
@@ -640,16 +674,16 @@
   <div class="scan-wrap">
     <div class="board-hdr">
       <div class="board-ttl">Scan Part QR</div>
-      <div style="display:flex;gap:8px;align-items:center;">
-        <button class="btn btn-p" id="scan-btn" onclick="toggleScanner()">Start Camera</button><label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--mut);margin-left:8px;cursor:pointer;"><input type="checkbox" class="batch-scan-toggle" onchange="setBatchScanMode(this.checked)"> Batch scan</label>
-        <select class="fsel" id="scan-job" style="width:200px;">
-          <option value="">Link to job (optional)</option>
-        </select>
-      </div>
     </div>
     <div id="reader"></div>
     <div class="scan-status" id="scan-status">
       <div style="color:var(--mut);font-size:13px;">Camera stopped. Press "Start Camera" to scan.</div>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;margin-top:12px;">
+      <select class="fsel" id="scan-job" style="flex:1;min-width:0;">
+        <option value="">Link to job (optional)</option>
+      </select>
+      <label style="display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--mut);white-space:nowrap;cursor:pointer;"><input type="checkbox" class="batch-scan-toggle" style="accent-color:var(--acc2);width:16px;height:16px;" onchange="setBatchScanMode(this.checked)"> Batch</label>
     </div>
     <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:12px;">
       <button class="btn btn-g" id="scan-inventory-add-btn" type="button" onclick="setScanInventoryMode('add')">Add Stock</button>
@@ -674,6 +708,11 @@
       <input class="sbox" id="manual-search" placeholder="Type SKU or part name…" oninput="manualSearch(this.value)" style="width:100%;">
       <div id="manual-results" style="margin-top:8px;"></div>
     </div>
+  </div>
+
+  <!-- Pinned thumb action bar: primary CTA (existing handler; #scan-btn id kept for label toggle) -->
+  <div class="actionbar">
+    <button class="btn btn-p" id="scan-btn" onclick="toggleScanner()">▶ Start Camera</button>
   </div>
 </div>
 
@@ -746,6 +785,11 @@
         <input class="sbox" style="width:260px;" placeholder="Search customer / invoice / phone / vehicle no…" oninput="filterInvoices(this.value)" id="inv-search">
   </div>
   <div class="stbl" id="inv-list"></div>
+
+  <!-- Pinned thumb action bar: primary CTA (existing handler) -->
+  <div class="actionbar">
+    <button class="btn btn-p" onclick="openQuickInvoice()">+ Quick Invoice</button>
+  </div>
 </div>
 
 <!-- ═══════════════════════════════════════════════════════
@@ -876,18 +920,20 @@
 ═══════════════════════════════════════════════════════ -->
 <div class="ovl" id="m-quick-invoice">
   <div class="modal">
-    <div class="modal-ttl">Quick Invoice</div>
-    <div style="font-size:12px;color:var(--mut);margin-bottom:12px;">Fast billing for walk-in work. Full Job Card stays available for detailed workshop jobs.</div>
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;">
+      <div class="modal-ttl" style="margin-bottom:4px;">Quick Invoice</div>
+      <button class="btn btn-g rd-modal-x" type="button" onclick="closeM('m-quick-invoice')" aria-label="Cancel">✕</button>
+    </div>
+    <div style="font-size:12px;color:var(--mut);margin-bottom:16px;">Fast billing for walk-in work. Full Job Card stays available for detailed workshop jobs.</div>
 
-    <div style="background:var(--sur2);border-radius:8px;padding:14px;margin-bottom:14px;">
-      <div style="font-family:var(--fh);font-size:13px;color:var(--mut);margin-bottom:10px;text-transform:uppercase;letter-spacing:.8px;">Customer</div>
+    <div class="rd-qi-sec">
+      <span class="rd-seclbl">Customer</span>
       <div class="frow">
-        <label class="flbl">Search Name / Phone</label>
         <input type="hidden" id="qi-cust-sel">
         <div style="display:flex;gap:8px;align-items:center;">
           <input class="sbox" id="qi-cust-search" placeholder="Search by name or number..." oninput="filterQuickInvoiceCustomer(this.value)" style="flex:1;">
           <datalist id="qi-customer-suggestions"></datalist>
-          <button class="btn btn-g btn-sm" type="button" onclick="clearQuickInvoiceCustomer(true)">+ New</button>
+          <button class="btn btn-g btn-sm" type="button" style="color:var(--acc2);border:1px dashed rgba(210,138,66,.4);background:transparent;" onclick="clearQuickInvoiceCustomer(true)">+ New</button>
         </div>
         <div id="qi-cust-results" style="margin-top:8px;"></div>
         <div id="qi-recent-customers" class="hint-chips"></div>
@@ -898,39 +944,48 @@
       </div>
     </div>
 
-    <div style="background:var(--sur2);border-radius:8px;padding:14px;margin-bottom:14px;">
-      <div style="font-family:var(--fh);font-size:13px;color:var(--mut);margin-bottom:10px;text-transform:uppercase;letter-spacing:.8px;">Vehicle & Work</div>
-      <div class="frow">
-        <label class="flbl">Bike Name</label>
-        <input class="finp" id="qi-veh" list="jm-vehicle-suggestions" placeholder="Start typing e.g. Shine, Activa, Jupiter" oninput="suggestVehicleName(this.value)">
-        <div id="qi-recent-bikes" class="hint-chips"></div>
-      </div>
-      <div class="f2">
+    <div class="rd-qi-sec">
+      <span class="rd-seclbl">Vehicle & Work</span>
+      <div class="f2" style="grid-template-columns:1.4fr 1fr;">
+        <div class="frow">
+          <label class="flbl">Bike Name</label>
+          <input class="finp" id="qi-veh" list="jm-vehicle-suggestions" placeholder="Shine, Activa, Jupiter…" oninput="suggestVehicleName(this.value)">
+        </div>
         <div class="frow"><label class="flbl">Reg. Number</label><input class="finp" id="qi-vno" placeholder="4448" style="text-transform:uppercase;" inputmode="numeric" autocomplete="off"></div>
       </div>
+      <div id="qi-recent-bikes" class="hint-chips"></div>
       <div class="frow"><label class="flbl">Work / Service *</label>
-        <textarea class="finp" id="qi-prob" placeholder="Puncture, brake work, oil change..." rows="2" style="resize:vertical;"></textarea>
+        <textarea class="finp" id="qi-prob" placeholder="Puncture, brake work, oil change..." rows="2" style="resize:vertical;min-height:64px;"></textarea>
         <div style="margin-top:8px;"><button class="btn btn-g btn-sm" type="button" onclick="aiCleanQuickInvoiceWork()">AI Clean Work</button></div>
       </div>
       <div id="qi-service-chips" class="hint-chips"></div>
     </div>
 
-    <div style="background:var(--sur2);border-radius:8px;padding:14px;margin-bottom:14px;">
-      <div style="font-family:var(--fh);font-size:13px;color:var(--mut);margin-bottom:10px;text-transform:uppercase;letter-spacing:.8px;">Billing</div>
+    <div class="rd-qi-sec">
+      <span class="rd-seclbl">Amount</span>
       <div class="f2">
-        <div class="frow"><label class="flbl">Mechanic</label>
-          <input type="hidden" id="qi-mech">
-          <div id="qi-mech-chips" class="choice-chips"></div>
-        </div>
+        <div class="frow"><label class="flbl">Total Amount ₹ *</label><input class="finp rd-qi-amount rd-qi-total" id="qi-total" type="number" placeholder="0"></div>
+        <div class="frow"><label class="flbl">Paid ₹</label><input class="finp rd-qi-amount" id="qi-paid" type="number" placeholder="0"></div>
+      </div>
+      <div class="f2">
         <div class="frow"><label class="flbl">Payment Method</label>
           <input type="hidden" id="qi-pay-method" value="cash">
           <div id="qi-pay-chips" class="choice-chips"></div>
         </div>
+        <div class="frow"><label class="flbl">Mechanic</label>
+          <input type="hidden" id="qi-mech">
+          <div id="qi-mech-chips" class="choice-chips"></div>
+        </div>
       </div>
-      <div class="f2">
-        <div class="frow"><label class="flbl">Total Amount ₹ *</label><input class="finp" id="qi-total" type="number" placeholder="0"></div>
-        <div class="frow"><label class="flbl">Paid ₹</label><input class="finp" id="qi-paid" type="number" placeholder="0"></div>
-      </div>
+    </div>
+
+    <!-- "More" collapsed group: pure show/hide wrapper; every field keeps its id
+         so saveQuickInvoice() reads them unchanged -->
+    <button class="rd-more-toggle" type="button" id="qi-more-toggle"
+      onclick="var b=document.getElementById('qi-more-body');var open=b.style.display!=='none';b.style.display=open?'none':'block';this.querySelector('span').textContent=open?'▼':'▲';">
+      More — discount, invoice no. &amp; date, notes, photo <span>▼</span>
+    </button>
+    <div id="qi-more-body" style="display:none;">
       <div class="f2">
         <div class="frow"><label class="flbl">Discount ₹</label><input class="finp" id="qi-discount" type="number" placeholder="0"></div>
       </div>
@@ -951,28 +1006,28 @@
         <input class="finp" id="qi-notes" placeholder="Any short note...">
         <div style="margin-top:8px;"><button class="btn btn-g btn-sm" type="button" onclick="aiCleanQuickInvoiceNotes()">AI Clean Note</button></div>
       </div>
-    </div>
-
-    <div class="frow">
-      <label class="flbl">Invoice / Vehicle Photo</label>
-      <div class="photo-upload-area" onclick="triggerPhotoPicker('qi-photo','quick', event)">
-        <input type="file" id="qi-photo" accept="image/*" capture="environment" multiple style="display:none;" onchange="handlePhotoUpload(this,'qi-photo-preview')">
-        <div id="qi-photo-preview" class="photo-preview-box">
-          <span style="color:var(--mut);font-size:12px;">📷 Tap to take / upload photo</span>
+      <div class="frow">
+        <label class="flbl">Invoice / Vehicle Photo</label>
+        <div class="photo-upload-area" onclick="triggerPhotoPicker('qi-photo','quick', event)">
+          <input type="file" id="qi-photo" accept="image/*" capture="environment" multiple style="display:none;" onchange="handlePhotoUpload(this,'qi-photo-preview')">
+          <div id="qi-photo-preview" class="photo-preview-box">
+            <span style="color:var(--mut);font-size:12px;">📷 Tap to take / upload photo</span>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
+          <button class="btn btn-g btn-sm" type="button" onclick="openPhotoCamera('qi-photo','quick', event)">Open Camera</button>
+          <button class="btn btn-g btn-sm" type="button" onclick="openPhotoLibrary('qi-photo','quick', event)">Upload Photos</button>
+          <button class="btn btn-g btn-sm" type="button" onclick="clearPhotoUpload('qi-photo-preview','qi-photo','quick')">Remove All Photos</button>
         </div>
       </div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
-        <button class="btn btn-g btn-sm" type="button" onclick="openPhotoCamera('qi-photo','quick', event)">Open Camera</button>
-        <button class="btn btn-g btn-sm" type="button" onclick="openPhotoLibrary('qi-photo','quick', event)">Upload Photos</button>
-        <button class="btn btn-g btn-sm" type="button" onclick="clearPhotoUpload('qi-photo-preview','qi-photo','quick')">Remove All Photos</button>
-      </div>
     </div>
 
-    <div class="mftr">
-      <button class="btn btn-p" style="flex:1" onclick="saveQuickInvoice('close')">Save Invoice</button>
-      <button class="btn btn-g" type="button" onclick="saveQuickInvoice('job-card')">Save as Job Card</button>
-      <button class="btn btn-g" type="button" onclick="saveQuickInvoice('next')">Save & Next</button>
-      <button class="btn btn-g" onclick="closeM('m-quick-invoice')">Cancel</button>
+    <div style="margin-top:16px;">
+      <button class="btn btn-p" style="width:100%;min-height:50px;font-size:15px;font-weight:700;" onclick="saveQuickInvoice('close')">Save Invoice</button>
+      <div style="display:flex;gap:8px;margin-top:8px;">
+        <button class="btn btn-g" style="flex:1;min-height:42px;font-size:12px;" type="button" onclick="saveQuickInvoice('job-card')">Save as Job Card</button>
+        <button class="btn btn-g" style="flex:1;min-height:42px;font-size:12px;" type="button" onclick="saveQuickInvoice('next')">Save & Next</button>
+      </div>
     </div>
   </div>
 </div>

@@ -1301,3 +1301,308 @@ nav {
   color: var(--mut);
   border-color: rgba(255,255,255,.14);
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   Phone-first "calm" redesign (2026-07) — LEGACY UI ONLY
+   Overrides + new classes only. Restyles existing markup/classes emitted by
+   shared js/ (does not change that markup) and Legacy-only index.html shell.
+   Reference: LegacyUI/Redesign - Both UIs.dc.html + LegacyUI/README.md
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ─── Header band: slim the nav toward the mock's compact band ─────────── */
+nav {
+  height: auto;
+  min-height: 52px;
+  padding: 8px 12px;
+  gap: 8px;
+}
+.brand { margin-right: 10px; }
+.brand-logo { width: 108px; height: 38px; border-radius: 8px; }
+.tabs { gap: 6px; }
+.tab { min-height: 38px; padding: 7px 13px; font-size: 12px; }
+
+/* ─── Status row: keep it thin; offline stays the calm grey pill ──────── */
+.gs-bar { padding: 6px 12px; gap: 6px; }
+.gs-badge { font-size: 11px; padding: 5px 10px; border-radius: 999px; }
+
+/* Give scrollable pages room to clear the pinned bottom action bar. */
+.page { padding-bottom: calc(94px + env(safe-area-inset-bottom)); }
+
+/* ─── One stat strip (replaces 4 stacked KPI cards) ───────────────────── */
+.stats {
+  display: flex;
+  gap: 0;
+  margin-bottom: 12px;
+  border-radius: 14px;
+  overflow: hidden;
+  background: linear-gradient(180deg, rgba(28,31,36,.97) 0%, rgba(16,18,22,.99) 100%);
+  border: 1px solid rgba(255,255,255,.06);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.04), 0 16px 34px rgba(0,0,0,.28);
+}
+.stats .sc {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  border-left: 1px solid rgba(255,255,255,.06);
+  border-radius: 0;
+  box-shadow: none;
+  padding: 12px 6px;
+  text-align: center;
+  overflow: visible;
+}
+.stats .sc:first-child { border-left: none; }
+.stats .sc:last-child  { flex: 1.4; }
+.stats .sc::after { display: none; }
+.stats .sc-val { order: 1; font-size: 20px; line-height: 1; }
+.stats .sc-lbl { order: 2; margin: 4px 0 0; font-size: 9px; letter-spacing: .8px; }
+
+/* ─── Pinned bottom thumb action bar ──────────────────────────────────── */
+.actionbar {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(12px + env(safe-area-inset-bottom));
+  width: calc(100% - 24px);
+  max-width: 720px;
+  z-index: 60;
+  display: flex;
+  gap: 8px;
+  padding: 8px;
+  border-radius: 18px;
+  background: rgba(12,14,18,.92);
+  border: 1px solid rgba(255,255,255,.08);
+  box-shadow: 0 18px 42px rgba(0,0,0,.5);
+  backdrop-filter: blur(12px);
+}
+.actionbar .btn {
+  flex: 1;
+  min-height: 48px;
+  border-radius: 12px;
+  margin: 0;
+}
+.actionbar .btn.icon { flex: 0 0 auto; padding: 0 16px; }
+
+/* ─── Calmer board header / toolbar ───────────────────────────────────── */
+.board-hdr { padding: 12px 14px; margin-bottom: 12px; }
+.board-ttl { font-size: 17px; }
+.board-sub { font-size: 12px; color: var(--mut); margin-top: 3px; }
+/* Slim horizontal filter chip row */
+.chip-row {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  margin-bottom: 12px;
+  padding-bottom: 2px;
+  -webkit-overflow-scrolling: touch;
+}
+.chip-row::-webkit-scrollbar { display: none; }
+.chip {
+  flex: 0 0 auto;
+  min-height: 34px;
+  padding: 6px 13px;
+  border-radius: 999px;
+  font-family: var(--fh);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--mut);
+  background: rgba(255,255,255,.04);
+  border: 1px solid rgba(255,255,255,.1);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: all .18s ease;
+}
+.chip.active {
+  color: var(--txt);
+  background: linear-gradient(180deg, rgba(50,51,56,.96) 0%, rgba(30,31,35,.98) 100%);
+  border-color: rgba(210,138,66,.28);
+}
+.chip.red    { color: var(--dan);  background: rgba(255,71,87,.12);  border-color: rgba(255,71,87,.3); }
+.chip.yellow { color: var(--warn); background: rgba(245,197,24,.12); border-color: rgba(245,197,24,.3); }
+.chip.green  { color: #00c896;     background: rgba(0,200,150,.12);  border-color: rgba(0,200,150,.3); }
+/* Section label used inside modals / manual-entry cards (mock's warm caps) */
+.rd-seclbl {
+  display: block;
+  font-family: var(--fh);
+  font-weight: 600;
+  font-size: 10px;
+  color: #d6c2ae;
+  text-transform: uppercase;
+  letter-spacing: .8px;
+  margin-bottom: 6px;
+}
+
+/* Secondary utility row (small ghost actions moved out of the top toolbar) */
+.rd-utilrow {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: -4px 0 12px;
+}
+.rd-utilrow .btn { flex: 1 1 auto; }
+
+/* ─── Card polish: one calm primary, tidy meta ────────────────────────── */
+.jcard, .ccard, .mech-card { border-radius: 16px; padding: 14px; }
+.jcard { padding-left: 18px; }
+.jcard::before { width: 3px; }
+.jcust { font-size: 17px; }
+.jveh  { color: #d8c2a7; }
+.jprob { font-size: 13px; line-height: 1.5; color: var(--mut); }
+.jftr  { gap: 8px; }
+/* De-emphasise secondary card buttons; the primary keeps the amber accent. */
+.jacts { border-top: 1px dashed rgba(255,255,255,.1); gap: 6px; padding-top: 10px; }
+.jcard .btn-sm { min-height: 34px; }
+
+/* Mechanic card: inner stat cells become the mock's flat mini strip */
+.mech-card .sc {
+  background: rgba(255,255,255,.03);
+  border: 1px solid rgba(255,255,255,.05);
+  border-radius: 12px;
+  box-shadow: none;
+  text-align: center;
+}
+.mech-card .sc::after { display: none; }
+.mech-card .sc-val { font-size: 17px; }
+.mech-card .sc-lbl { font-size: 9px; letter-spacing: .7px; margin-bottom: 3px; }
+
+/* ─── Status / money badges per mock ──────────────────────────────────── */
+.due-badge {
+  font-size: 11px;
+  font-family: var(--fh);
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 20px;
+  background: rgba(255,71,87,.12);
+  color: var(--dan);
+  border: 1px solid rgba(255,71,87,.3);
+}
+
+/* ─── Restyled tables (Stock / Invoices / Expenses / Income) ──────────── */
+.stbl th { padding: 11px 12px; color: #d6c2ae; letter-spacing: .8px; }
+.stbl td { padding: 11px 12px; }
+
+/* ─── Expenses / Income total summary card ────────────────────────────── */
+.rd-total-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  margin-bottom: 12px;
+  background: linear-gradient(180deg, rgba(28,31,36,.97) 0%, rgba(16,18,22,.99) 100%);
+  border: 1px solid rgba(255,255,255,.06);
+}
+.rd-total-eyebrow { font-size: 10px; color: var(--mut); text-transform: uppercase; letter-spacing: 1px; }
+.rd-total-value { font-family: var(--fh); font-size: 26px; font-weight: 700; line-height: 1.15; }
+
+/* ─── Quick Invoice modal (1c): flat groups, essentials first ─────────── */
+.modal { border-radius: 18px; padding: 18px; }
+.rd-modal-x {
+  flex: 0 0 auto;
+  min-height: 34px;
+  width: 34px;
+  padding: 0;
+  border-radius: 10px;
+  font-size: 14px;
+  color: var(--mut);
+}
+.rd-qi-sec { margin-bottom: 16px; }
+.rd-qi-sec .flbl { font-size: 10px; letter-spacing: .8px; }
+.rd-qi-amount {
+  font-family: var(--fh);
+  font-size: 20px;
+  font-weight: 700;
+  min-height: 52px;
+}
+.rd-qi-total { border-color: rgba(210,138,66,.3); }
+.rd-more-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 12px 14px;
+  margin: 8px 0 16px;
+  border-radius: 12px;
+  border: 1px dashed rgba(255,255,255,.12);
+  background: transparent;
+  color: var(--mut);
+  font-family: var(--fh);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+}
+.rd-more-toggle:hover { border-color: rgba(210,138,66,.4); color: var(--txt); }
+
+/* ─── Scan: camera viewport per mock ──────────────────────────────────── */
+#reader {
+  min-height: 300px;
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(20,23,28,.98) 0%, rgba(10,12,15,1) 100%);
+  border: 1px solid rgba(255,255,255,.08);
+  overflow: hidden;
+  position: relative;
+}
+/* Dashed amber target frame — decorative, only while the camera is idle */
+#reader:empty { display: grid; place-items: center; }
+#reader:empty::after {
+  content: '';
+  width: 200px;
+  height: 200px;
+  border-radius: 20px;
+  border: 2px dashed rgba(210,138,66,.5);
+}
+.scan-status { border-radius: 14px; padding: 12px 14px; margin-top: 12px; }
+
+/* ─── Reports hero accent line ────────────────────────────────────────── */
+.report-hero { border-radius: 16px; }
+
+/* ─── Responsive touch-ups for the redesigned chrome ──────────────────── */
+@media (max-width: 600px) {
+  .stats { grid-template-columns: none; }   /* defeat the stacked-grid rule */
+  .board-hdr > div:last-child > .btn.rd-hide-sm { display: none; }
+  /* Filter selects: two per row instead of a tall full-width stack */
+  #page-stock .sctrl > .fsel,
+  #page-expenses .board-hdr > div:last-child > .fsel,
+  #page-expenses .board-hdr > div:last-child > .finp,
+  #page-income .board-hdr > div:last-child > .fsel,
+  #page-income .board-hdr > div:last-child > .finp,
+  #page-reports .report-filter-row > .fsel,
+  #page-reports .report-filter-row > .finp,
+  #page-invoices > div[style*="display:flex"] > .fsel {
+    flex: 1 1 calc(50% - 5px) !important;
+    width: auto !important;
+    min-width: 0 !important;
+  }
+  /* Search boxes stay full-width above the selects */
+  #page-stock .sctrl > .sbox,
+  #page-invoices > div[style*="display:flex"] > .sbox { flex: 1 1 100% !important; }
+  /* Utility rows: compact side-by-side buttons, not stacked */
+  .board-hdr > div.rd-utilrow > .btn,
+  .rd-utilrow > .btn { flex: 1 1 auto; min-width: 0; }
+  /* Reminder tabs: horizontal chip row, not a stacked column */
+  #rem-tabs {
+    flex-wrap: nowrap !important;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 2px;
+  }
+  #rem-tabs::-webkit-scrollbar { display: none; }
+  .board-hdr > div#rem-tabs > .btn {
+    flex: 0 0 auto;
+    border-radius: 999px;
+    white-space: nowrap;
+  }
+}
+@media (max-width: 400px) {
+  .stats .sc-val { font-size: 18px; }
+  .stats .sc { padding: 11px 4px; }
+}
