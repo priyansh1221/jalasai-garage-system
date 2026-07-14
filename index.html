@@ -410,236 +410,147 @@
     <input class="sbox" style="width:240px;" id="rpt-search" placeholder="Search by customer name / number…" oninput="setReportSearch(this.value)">
   </div>
 
-  <div class="report-hero">
-    <div class="report-hero-copy">
-      <div class="report-kicker">Growth Dashboard</div>
-      <div class="report-title">Executive Performance & System Insight</div>
-      <div class="report-sub" id="rpt-period-sub">Comparing the selected range with the previous matching period.</div>
+  <!-- Growth Dashboard hero: revenue + delta headline, then a 4-cell mini strip.
+       All rpt-* ids preserved (renderReports writes several without null-guards). -->
+  <div class="rd-rep-hero">
+    <div class="rd-rep-eyebrow">Growth Dashboard · <span id="rpt-period-current">Today</span> vs <span id="rpt-period-previous">Yesterday</span></div>
+    <div class="rd-rep-headline">
+      <span class="rd-rep-rev" id="rpt-rev">₹0</span>
+      <span class="rd-rep-delta" id="rpt-rev-delta"></span>
     </div>
-    <div class="report-period-wrap">
-      <div class="period-chip">
-        <span class="period-chip-label">Current</span>
-        <span class="period-chip-value" id="rpt-period-current">Today</span>
-      </div>
-      <div class="period-chip">
-        <span class="period-chip-label">Previous</span>
-        <span class="period-chip-value" id="rpt-period-previous">Yesterday</span>
-      </div>
+    <div class="rd-rep-sub" id="rpt-period-sub">Comparing the selected range with the previous matching period.</div>
+    <div class="rd-rep-mini">
+      <div class="rd-mini-cell"><span class="rd-mini-val r" id="rpt-exp">₹0</span><span class="rd-mini-lbl">Expenses</span></div>
+      <div class="rd-mini-cell"><span class="rd-mini-val" id="rpt-profit" style="color:#00c896;">₹0</span><span class="rd-mini-lbl">Profit</span></div>
+      <div class="rd-mini-cell"><span class="rd-mini-val" id="rpt-jobs">0</span><span class="rd-mini-lbl">Invoices</span></div>
+      <div class="rd-mini-cell"><span class="rd-mini-val o" id="rpt-avg-invoice">₹0</span><span class="rd-mini-lbl">Avg Inv</span></div>
     </div>
-  </div>
-  <div style="font-size:12px;color:var(--mut);margin:-4px 0 14px;">Today's Invoices: <span id="rpt-today-invoices" style="color:var(--acc);font-family:var(--fh);font-weight:700;">0</span> · Yesterday's Invoices: <span id="rpt-yesterday-invoices" style="color:var(--acc2);font-family:var(--fh);font-weight:700;">0</span></div>
-
-  <div class="report-exec-grid">
-    <div class="report-metric-card">
-      <div class="report-metric-label">Total Revenue</div>
-      <div class="report-metric-value" id="rpt-rev">₹0</div>
-      <div class="report-metric-delta" id="rpt-rev-delta">vs previous</div>
-    </div>
-    <div class="report-metric-card">
-      <div class="report-metric-label">Total Expenses</div>
-      <div class="report-metric-value" id="rpt-exp">₹0</div>
-      <div class="report-metric-delta" id="rpt-exp-delta">vs previous</div>
-    </div>
-    <div class="report-metric-card">
-      <div class="report-metric-label">Net Profit</div>
-      <div class="report-metric-value" id="rpt-profit">₹0</div>
-      <div class="report-metric-delta" id="rpt-profit-delta">vs previous</div>
-    </div>
-    <div class="report-metric-card">
-      <div class="report-metric-label">Invoices Issued</div>
-      <div class="report-metric-value" id="rpt-jobs">0</div>
-      <div class="report-metric-delta" id="rpt-jobs-delta">vs previous</div>
-    </div>
-    <div class="report-metric-card">
-      <div class="report-metric-label">Avg. Invoice Value</div>
-      <div class="report-metric-value" id="rpt-avg-invoice">₹0</div>
-      <div class="report-metric-delta" id="rpt-avg-invoice-delta">vs previous</div>
+    <!-- Kept for renderReports (writes these ids); not surfaced in the calm hero. -->
+    <div class="rd-rep-hidden">
+      <span id="rpt-exp-delta"></span><span id="rpt-profit-delta"></span>
+      <span id="rpt-jobs-delta"></span><span id="rpt-avg-invoice-delta"></span>
+      <span id="rpt-today-invoices"></span><span id="rpt-yesterday-invoices"></span>
     </div>
   </div>
 
-  <div class="report-bento">
-    <div class="rcard report-span-7">
-      <div class="report-section-head">
-        <div>
-          <div class="rcard-ttl">Executive Performance Summary</div>
-          <div class="report-section-copy">Current period vs previous period, built from real billing, expense, and invoice flow.</div>
+  <!-- Insight accordions: heavy analytics collapsed into tappable sections.
+       Toggle = inline class flip (presentational only); every rpt-* container id
+       is preserved so the shared renderReports() keeps filling them. -->
+  <div class="rd-acc-list">
+    <div class="rd-acc open">
+      <button class="rd-acc-hd" type="button" onclick="this.parentNode.classList.toggle('open')">
+        <span class="rd-acc-head-text"><span class="rd-acc-ttl">Executive Summary</span><span class="rd-acc-sub">Current period vs previous</span></span>
+        <span class="rd-acc-chev">▼</span>
+      </button>
+      <div class="rd-acc-body">
+        <div class="report-table-wrap">
+          <table class="report-compare-table">
+            <thead><tr><th>Metric</th><th>Current</th><th>Previous</th><th>% Change</th></tr></thead>
+            <tbody id="rpt-exec-table"></tbody>
+          </table>
         </div>
-      </div>
-      <div class="report-table-wrap">
-        <table class="report-compare-table">
-          <thead>
-            <tr>
-              <th>Metric</th>
-              <th>Current</th>
-              <th>Previous</th>
-              <th>% Change</th>
-            </tr>
-          </thead>
-          <tbody id="rpt-exec-table"></tbody>
-        </table>
       </div>
     </div>
 
-    <div class="rcard report-span-5">
-      <div class="report-section-head">
-        <div>
-          <div class="rcard-ttl">Finance Mix</div>
-          <div class="report-section-copy">Cash vs UPI ratio and discount impact on margin.</div>
-        </div>
+    <div class="rd-acc">
+      <button class="rd-acc-hd" type="button" onclick="this.parentNode.classList.toggle('open')">
+        <span class="rd-acc-head-text"><span class="rd-acc-ttl">Finance Mix</span><span class="rd-acc-sub">Cash vs UPI, discounts, profit by service</span></span>
+        <span class="rd-acc-chev">▼</span>
+      </button>
+      <div class="rd-acc-body">
+        <div id="rpt-payment-mix" class="report-stack-gap"></div>
+        <div id="rpt-discount-impact" class="report-stack-gap"></div>
+        <div id="rpt-finance-breakdown" class="report-stack-gap"></div>
+        <div class="rd-acc-subttl">Profit Analysis by Service Type</div>
+        <div id="rpt-service-profit"></div>
       </div>
-      <div id="rpt-payment-mix" class="report-stack-gap"></div>
-      <div id="rpt-discount-impact" class="report-stack-gap"></div>
-      <div id="rpt-finance-breakdown" class="report-stack-gap"></div>
     </div>
 
-    <div class="rcard report-span-4">
-      <div class="report-section-head">
-        <div>
-          <div class="rcard-ttl">System Health & Sync</div>
-          <div class="report-section-copy">Data integrity view for multi-device usage.</div>
-        </div>
+    <div class="rd-acc">
+      <button class="rd-acc-hd" type="button" onclick="this.parentNode.classList.toggle('open')">
+        <span class="rd-acc-head-text"><span class="rd-acc-ttl" id="rpt-mech-title">Mechanic Productivity</span><span class="rd-acc-sub">Revenue and strongest service category</span></span>
+        <span class="rd-acc-chev">▼</span>
+      </button>
+      <div class="rd-acc-body">
+        <div id="rpt-mechs"></div>
       </div>
-      <div id="rpt-system-health"></div>
     </div>
 
-    <div class="rcard report-span-6">
-      <div class="report-section-head">
-        <div>
-          <div class="rcard-ttl" id="rpt-mech-title">Mechanic Productivity</div>
-          <div class="report-section-copy">Revenue, completion speed proxy, and strongest service category.</div>
-        </div>
+    <div class="rd-acc">
+      <button class="rd-acc-hd" type="button" onclick="this.parentNode.classList.toggle('open')">
+        <span class="rd-acc-head-text"><span class="rd-acc-ttl">Stock &amp; Inventory</span><span class="rd-acc-sub">Turn rate, forecast, value, reorder</span></span>
+        <span class="rd-acc-chev">▼</span>
+      </button>
+      <div class="rd-acc-body">
+        <div class="rd-acc-subttl">Inventory Turn Rate</div>
+        <div id="rpt-turnover"></div>
+        <div class="rd-acc-subttl">Stock-Out Forecaster</div>
+        <div id="rpt-forecast"></div>
+        <div class="rd-acc-subttl">Stock Value</div>
+        <div class="mrow"><span>At Purchase Cost</span><span class="sc-val g" id="rpt-stock-cost" style="font-size:18px;">₹0</span></div>
+        <div class="mrow"><span>At Sell Price</span><span class="sc-val o" id="rpt-stock-sell" style="font-size:18px;">₹0</span></div>
+        <div class="rd-acc-subttl" id="rpt-parts-title">Top Parts Used</div>
+        <div id="rpt-parts"></div>
+        <div class="rd-acc-subttl">Reorder Needed</div>
+        <div id="rpt-reorder"></div>
       </div>
-      <div id="rpt-mechs"></div>
     </div>
 
-    <div class="rcard report-span-6">
-      <div class="report-section-head">
-        <div>
-          <div class="rcard-ttl">Job Status Bottlenecks</div>
-          <div class="report-section-copy">Shows where work is getting stuck right now.</div>
-        </div>
+    <div class="rd-acc">
+      <button class="rd-acc-hd" type="button" onclick="this.parentNode.classList.toggle('open')">
+        <span class="rd-acc-head-text"><span class="rd-acc-ttl">Customers &amp; Retention</span><span class="rd-acc-sub">Repeat business, return proxy, LTV</span></span>
+        <span class="rd-acc-chev">▼</span>
+      </button>
+      <div class="rd-acc-body">
+        <div class="rd-acc-subttl">Customer Retention</div>
+        <div id="rpt-retention"></div>
+        <div class="rd-acc-subttl">Reminder Return Proxy</div>
+        <div id="rpt-followup"></div>
+        <div class="rd-acc-subttl">Vehicle History Insights</div>
+        <div id="rpt-vehicle-insights"></div>
+        <div class="rd-acc-subttl">LTV Leaderboard</div>
+        <div id="rpt-ltv"></div>
       </div>
-      <div id="rpt-bottlenecks"></div>
     </div>
 
-    <div class="rcard report-span-4">
-      <div class="report-section-head">
-        <div>
-          <div class="rcard-ttl">Inventory Turn Rate</div>
-          <div class="report-section-copy">Fast movers, dead stock, and mapping efficiency.</div>
-        </div>
+    <div class="rd-acc">
+      <button class="rd-acc-hd" type="button" onclick="this.parentNode.classList.toggle('open')">
+        <span class="rd-acc-head-text"><span class="rd-acc-ttl">Jobs &amp; System Health</span><span class="rd-acc-sub">Bottlenecks and multi-device sync</span></span>
+        <span class="rd-acc-chev">▼</span>
+      </button>
+      <div class="rd-acc-body">
+        <div class="rd-acc-subttl">Job Status Bottlenecks</div>
+        <div id="rpt-bottlenecks"></div>
+        <div class="rd-acc-subttl">System Health &amp; Sync</div>
+        <div id="rpt-system-health"></div>
       </div>
-      <div id="rpt-turnover"></div>
     </div>
 
-    <div class="rcard report-span-4">
-      <div class="report-section-head">
-        <div>
-          <div class="rcard-ttl">Stock-Out Forecaster</div>
-          <div class="report-section-copy">Predicts parts that may block jobs soon.</div>
+    <div class="rd-acc">
+      <button class="rd-acc-hd" type="button" onclick="this.parentNode.classList.toggle('open')">
+        <span class="rd-acc-head-text"><span class="rd-acc-ttl">Invoice List</span><span class="rd-acc-sub">Every invoice in the selected window</span></span>
+        <span class="rd-acc-chev">▼</span>
+      </button>
+      <div class="rd-acc-body">
+        <div class="stbl" style="margin-top:0;">
+          <table>
+            <thead>
+              <tr>
+                <th>Date / Time</th>
+                <th>Invoice</th>
+                <th>Customer</th>
+                <th>Vehicle</th>
+                <th>Amount</th>
+                <th>Paid</th>
+                <th>Due</th>
+                <th>Photo</th>
+              </tr>
+            </thead>
+            <tbody id="rpt-tbody"></tbody>
+          </table>
         </div>
       </div>
-      <div id="rpt-forecast"></div>
     </div>
-
-    <div class="rcard report-span-4">
-      <div class="report-section-head">
-        <div>
-          <div class="rcard-ttl">Stock Value</div>
-          <div class="report-section-copy">Current inventory value at buy and sell side.</div>
-        </div>
-      </div>
-      <div class="mrow"><span>At Purchase Cost</span><span class="sc-val g" id="rpt-stock-cost" style="font-size:18px;">₹0</span></div>
-      <div class="mrow"><span>At Sell Price</span><span class="sc-val o" id="rpt-stock-sell" style="font-size:18px;">₹0</span></div>
-    </div>
-
-    <div class="rcard report-span-4">
-      <div class="report-section-head">
-        <div>
-          <div class="rcard-ttl" id="rpt-parts-title">Top Parts Used</div>
-          <div class="report-section-copy">Most-used parts inside the selected report window.</div>
-        </div>
-      </div>
-      <div id="rpt-parts"></div>
-    </div>
-
-    <div class="rcard report-span-4">
-      <div class="report-section-head">
-        <div>
-          <div class="rcard-ttl">Customer Retention</div>
-          <div class="report-section-copy">Repeat business in the selected period.</div>
-        </div>
-      </div>
-      <div id="rpt-retention"></div>
-    </div>
-
-    <div class="rcard report-span-4">
-      <div class="report-section-head">
-        <div>
-          <div class="rcard-ttl">Reminder Return Proxy</div>
-          <div class="report-section-copy">Service-due comeback signal based on revisit timing.</div>
-        </div>
-      </div>
-      <div id="rpt-followup"></div>
-    </div>
-
-    <div class="rcard report-span-4">
-      <div class="report-section-head">
-        <div>
-          <div class="rcard-ttl">Vehicle History Insights</div>
-          <div class="report-section-copy">Repeat bike models and revisit rhythm.</div>
-        </div>
-      </div>
-      <div id="rpt-vehicle-insights"></div>
-    </div>
-
-    <div class="rcard report-span-4">
-      <div class="report-section-head">
-        <div>
-          <div class="rcard-ttl">LTV Leaderboard</div>
-          <div class="report-section-copy">Top customer relationships by value and visit depth.</div>
-        </div>
-      </div>
-      <div id="rpt-ltv"></div>
-    </div>
-
-    <div class="rcard report-span-12">
-      <div class="report-section-head">
-        <div>
-          <div class="rcard-ttl">Profit Analysis by Service Type</div>
-          <div class="report-section-copy">Gross profit proxy using labour plus billed parts minus known part buy cost.</div>
-        </div>
-      </div>
-      <div id="rpt-service-profit"></div>
-    </div>
-
-    <div class="rcard report-span-12">
-      <div class="report-section-head">
-        <div>
-          <div class="rcard-ttl">Reorder Needed</div>
-          <div class="report-section-copy">Immediate stock risk from current min-level rules.</div>
-        </div>
-      </div>
-      <div id="rpt-reorder"></div>
-    </div>
-  </div>
-
-  <div class="stbl" style="margin-top:14px;">
-    <table>
-      <thead>
-        <tr>
-          <th>Date / Time</th>
-          <th>Invoice</th>
-          <th>Customer</th>
-          <th>Vehicle</th>
-          <th>Amount</th>
-          <th>Paid</th>
-          <th>Due</th>
-          <th>Photo</th>
-        </tr>
-      </thead>
-      <tbody id="rpt-tbody"></tbody>
-    </table>
   </div>
 
   <!-- Pinned thumb action bar: primary CTAs (existing handlers) -->
