@@ -779,8 +779,48 @@ function mechanicReferenceNames(record = {}) {
   );
 }
 
+// Workshop lanes. The lane is how the floor batches work: one mechanic, one set of
+// tools, one lane, worked oldest-first. '' means Unsorted and shows as its own lane.
+const JOB_LANES = [
+  { value: 'mcu-lv', label: 'MCU / LV' },
+  { value: 'bandh', label: 'Bandh' },
+  { value: 'ev-service', label: 'EV Service' },
+  { value: 'petrol', label: 'Petrol' },
+];
+const JOB_LANE_VALUES = JOB_LANES.map(l => l.value);
+const JOB_UNSORTED_LANE_LABEL = 'Unsorted';
+
+function jobLaneLabel(value) {
+  const key = String(value || '').trim();
+  return JOB_LANES.find(l => l.value === key)?.label || JOB_UNSORTED_LANE_LABEL;
+}
+
+// The board used to carry five open statuses plus a separate priority dropdown. Only
+// three facts change what anyone does today: it is here, it is stuck waiting for a part,
+// or it is finished and can go home. Older records are folded on read.
+const JOB_LEGACY_STATUS_MAP = {
+  waiting: 'in-shop',
+  'in-progress': 'in-shop',
+  returned: 'in-shop',
+  'parts-needed': 'parts-needed',
+  ready: 'ready',
+  'in-shop': 'in-shop',
+  done: 'done',
+};
+
+function normalizeJobStatus(value) {
+  const key = String(value || '').trim();
+  if (key === 'done') return 'done';
+  return JOB_LEGACY_STATUS_MAP[key] || 'in-shop';
+}
+
 function normalizeJob(j) {
   const job = { ...j };
+  // 'returned' meant the bike came back for rework. Collapsing it loses that, so keep
+  // the one bit worth keeping before the original value is gone for good.
+  if (String(job.status || '').trim() === 'returned') job.wasReturned = true;
+  job.status = normalizeJobStatus(job.status);
+  job.lane = JOB_LANE_VALUES.includes(String(job.lane || '').trim()) ? String(job.lane).trim() : '';
   job.partsUsed = Array.isArray(job.partsUsed) ? job.partsUsed : [];
   job.payments = Array.isArray(job.payments) ? job.payments : [];
   job.discount = parseFloat(job.discount || 0) || 0;
@@ -830,6 +870,7 @@ function normalizeJob(j) {
     job.mech,
     ...(job.mechIds || []),
     job.invoiceNo,
+    job.lane ? jobLaneLabel(job.lane) : '',
   ]);
   return job;
 }

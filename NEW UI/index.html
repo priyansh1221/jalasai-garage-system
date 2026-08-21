@@ -141,7 +141,7 @@
 <div class="page" id="page-jobs">
   <div class="stats">
     <div class="sc"><div class="sc-lbl">Active Jobs</div><div class="sc-val g" id="st-tot">0</div></div>
-    <div class="sc"><div class="sc-lbl">In Progress</div><div class="sc-val y" id="st-prg">0</div></div>
+    <div class="sc"><div class="sc-lbl">Waiting Part</div><div class="sc-val y" id="st-prg">0</div></div>
     <div class="sc"><div class="sc-lbl">Ready</div><div class="sc-val o" id="st-rdy">0</div></div>
     <div class="sc" data-admin-only="true" onclick="openTodayRevenueBreakdown()" style="cursor:pointer;"><div class="sc-lbl">Today's Revenue</div><div class="sc-val g" id="st-rev">₹0</div></div>
   </div>
@@ -163,24 +163,16 @@
             All status
           </label>
           <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:8px;">
-            <input type="checkbox" class="job-status-option" value="waiting" checked onchange="toggleJobStatusOption('waiting', this.checked)">
-            Waiting
-          </label>
-          <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:8px;">
-            <input type="checkbox" class="job-status-option" value="in-progress" checked onchange="toggleJobStatusOption('in-progress', this.checked)">
-            In Progress
+            <input type="checkbox" class="job-status-option" value="in-shop" checked onchange="toggleJobStatusOption('in-shop', this.checked)">
+            In Shop
           </label>
           <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:8px;">
             <input type="checkbox" class="job-status-option" value="parts-needed" checked onchange="toggleJobStatusOption('parts-needed', this.checked)">
-            Parts Needed
+            Waiting for Part
           </label>
           <label style="display:flex;align-items:center;gap:8px;font-size:13px;">
             <input type="checkbox" class="job-status-option" value="ready" checked onchange="toggleJobStatusOption('ready', this.checked)">
             Ready
-          </label>
-          <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-top:8px;">
-            <input type="checkbox" class="job-status-option" value="returned" checked onchange="toggleJobStatusOption('returned', this.checked)">
-            Returned
           </label>
         </div>
       </div>
@@ -192,7 +184,20 @@
       <button class="btn btn-p" onclick="openNewJob()">+ New Job</button>
     </div>
   </div>
+  <!-- Work lanes: the primary way the floor is organised -->
+  <div class="chip-row" id="job-lane-chips"></div>
   <div class="jgrid" id="jgrid"></div>
+
+  <!-- Long-stay jobs (collapsed): open bikes untouched for 30+ days -->
+  <div style="margin-top:20px;" id="stale-jobs-wrap">
+    <div class="board-hdr" style="cursor:pointer;" onclick="toggleStaleJobs()">
+      <div class="board-ttl" style="color:var(--mut);font-size:14px;">
+        Long Stay <span id="stale-count" style="font-size:12px;"></span>
+      </div>
+      <span id="stale-toggle" style="color:var(--mut);font-size:12px;">▼ Show</span>
+    </div>
+    <div id="stale-grid" class="jgrid" style="display:none;"></div>
+  </div>
 
   <!-- Done jobs (collapsed) -->
   <div style="margin-top:20px;">
@@ -946,22 +951,17 @@
           <input type="hidden" id="jm-mech">
           <div id="jm-mech-chips" class="choice-chips"></div>
         </div>
-        <div class="frow"><label class="flbl">Priority</label>
-          <select class="fsel" id="jm-pri">
-            <option value="normal">Normal</option>
-            <option value="urgent">Urgent</option>
-            <option value="waiting">Waiting</option>
-          </select>
+        <div class="frow"><label class="flbl">Lane *</label>
+          <input type="hidden" id="jm-lane">
+          <div id="jm-lane-chips" class="choice-chips"></div>
         </div>
       </div>
       <div class="f2">
         <div class="frow"><label class="flbl">Status</label>
           <select class="fsel" id="jm-status">
-            <option value="waiting">Waiting</option>
-            <option value="in-progress">In Progress</option>
-            <option value="parts-needed">Parts Needed</option>
+            <option value="in-shop">In Shop</option>
+            <option value="parts-needed">Waiting for Part</option>
             <option value="ready">Ready</option>
-            <option value="returned">Returned</option>
           </select>
         </div>
         <div class="frow"><label class="flbl">Expected Delivery</label>

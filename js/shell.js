@@ -540,7 +540,6 @@ function confirmDone(nextAction = 'close') {
     j.date = invoiceDate;
     j.doneAt = invoiceDateTime(invoiceDate, j.time || '');
     j.notes = notes;
-    j.collectedBy = '';
     j.invoicePhotos = invoicePhotos;
     j.invoicePhoto = invoicePhoto;
     if (typeof doneMechValue === 'string') j.mech = doneMechValue;
@@ -586,7 +585,6 @@ function confirmDone(nextAction = 'close') {
     });
   }
   j.status      = 'done';
-  j.collectedBy = '';
   j.invoiceNo   = invNo;
   j.date        = invoiceDate;
   j.doneAt      = invoiceDateTime(invoiceDate, j.time || '');

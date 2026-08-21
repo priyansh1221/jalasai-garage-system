@@ -1159,7 +1159,6 @@ function buildJobShadowRows(payload, session) {
       vehicle: String(item.veh || '').trim(),
       registration_no: String(item.vno || '').trim(),
       job_status: String(item.status || '').trim(),
-      priority: String(item.pri || '').trim(),
       job_date: shadowDate(item.date || item.doneAt || item.createdAt),
       invoice_no: String(item.invoiceNo || '').trim().toUpperCase(),
       mechanic_ids: mechIds,
@@ -2101,7 +2100,7 @@ async function pullFromShadowTables(client, options = {}) {
     const rows = [];
     let from = 0;
     const selectColumns = config.key === 'jobs'
-      ? 'record_data,source_updated_at,mirrored_at,customer_id,customer_name,phone,vehicle,registration_no,job_status,priority,job_date,invoice_no,mechanic_ids,mechanic_names,service_note,remarks'
+      ? 'record_data,source_updated_at,mirrored_at,customer_id,customer_name,phone,vehicle,registration_no,job_status,job_date,invoice_no,mechanic_ids,mechanic_names,service_note,remarks'
       : config.key === 'incomeEntries'
         ? 'record_data,source_updated_at,mirrored_at,entry_date,income_kind,category,amount,method,invoice_no,note,mechanic_id,mechanic_name'
         : 'record_data,source_updated_at,mirrored_at';
@@ -2133,7 +2132,6 @@ async function pullFromShadowTables(client, options = {}) {
             if (String(row.vehicle || '').trim()) base.veh = String(row.vehicle || '').trim();
             if (String(row.registration_no || '').trim()) base.vno = String(row.registration_no || '').trim();
             if (String(row.job_status || '').trim()) base.status = String(row.job_status || '').trim();
-            if (String(row.priority || '').trim()) base.pri = String(row.priority || '').trim();
             if (String(row.job_date || '').trim()) base.date = String(row.job_date || '').trim();
             if (String(row.invoice_no || '').trim()) base.invoiceNo = String(row.invoice_no || '').trim().toUpperCase();
             if (String(row.service_note || '').trim()) base.prob = String(row.service_note || '').trim();

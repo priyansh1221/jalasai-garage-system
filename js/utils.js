@@ -607,8 +607,11 @@ function setVehicleValue(fullVeh) {
 }
 
 // ─── Status labels & classes ─────────────────────────────
-const SLbl = { waiting: 'Waiting', 'in-progress': 'In Progress', ready: 'Ready', 'parts-needed': 'Parts Needed', returned: 'Returned', done: 'Done' };
-const SCls = { waiting: 'waiting', 'in-progress': 'in-progress', ready: 'ready', 'parts-needed': 'parts', returned: 'returned', done: 'ready' };
+// The live statuses are in-shop / parts-needed / ready / done. The legacy keys stay
+// mapped so a record arriving from a device still on the old bundle renders correctly
+// instead of showing "undefined" on the card.
+const SLbl = { 'in-shop': 'In Shop', 'parts-needed': 'Waiting for Part', ready: 'Ready', done: 'Done', waiting: 'In Shop', 'in-progress': 'In Shop', returned: 'In Shop' };
+const SCls = { 'in-shop': 'waiting', 'parts-needed': 'parts', ready: 'ready', done: 'ready', waiting: 'waiting', 'in-progress': 'waiting', returned: 'waiting' };
 
 // ─── Dues badge (called from jobs.js updateStats) ────────
 function updateDuesBadge() {

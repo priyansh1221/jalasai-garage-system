@@ -3,10 +3,14 @@
 // ═══════════════════════════════════════════════════════
 
 let jobMechFilter   = '';
-const JOB_STATUS_OPTIONS = ['waiting', 'in-progress', 'parts-needed', 'ready', 'returned'];
+const JOB_STATUS_OPTIONS = ['in-shop', 'parts-needed', 'ready'];
 let jobStatusFilter = new Set(JOB_STATUS_OPTIONS);
 let jobSearchFilter = '';
-const JOB_DRAFT_STORAGE_KEY = 'jala_job_draft_v1';
+// '' = all lanes, '__unsorted' = jobs with no lane yet, otherwise a JOB_LANES value.
+let jobLaneFilter = '';
+// Bumped to v2: v1 drafts hold retired status values ('waiting' etc.) that no longer
+// match any option in the status select, which would restore a blank status.
+const JOB_DRAFT_STORAGE_KEY = 'jala_job_draft_v2';
 const LAST_PAYMENT_METHOD_KEY = 'jala_last_payment_method_v1';
 const QUICK_INVOICE_DRAFT_STORAGE_KEY = 'jala_quick_invoice_draft_v1';
 const QUICK_INVOICE_DATALIST_LIMIT = 12;
@@ -393,6 +397,7 @@ function setChoiceChipValue(inputId, containerId, value) {
   if (!input) return;
   input.value = value;
   if (inputId === 'jm-mech') renderJobMechanicChips();
+  if (inputId === 'jm-lane') renderJobLaneChips();
   if (inputId === 'qi-mech') renderQuickInvoiceMechanicChips();
   if (inputId === 'qi-pay-method') renderQuickInvoicePaymentChips();
   if (inputId === 'done-pay-method') renderDonePaymentChips();
@@ -406,6 +411,10 @@ function setChoiceChipValue(inputId, containerId, value) {
 function renderJobMechanicChips(selectedId = document.getElementById('jm-mech')?.value || '') {
   if (!FAST_ENTRY_UI.chipMechanics) return;
   renderMechanicChoiceChips('jm-mech-chips', 'jm-mech', selectedId);
+}
+
+function renderJobLaneChips(selected = document.getElementById('jm-lane')?.value || '') {
+  renderChoiceChips('jm-lane-chips', 'jm-lane', JOB_LANES, selected, persistJobDraft);
 }
 
 function renderQuickInvoiceMechanicChips(selectedId = document.getElementById('qi-mech')?.value || '') {
@@ -730,8 +739,8 @@ function captureJobDraft() {
     odo: document.getElementById('jm-odo')?.value || '',
     prob: document.getElementById('jm-prob')?.value || '',
     mechId: document.getElementById('jm-mech')?.value || '',
-    pri: document.getElementById('jm-pri')?.value || 'normal',
-    status: document.getElementById('jm-status')?.value || 'waiting',
+    status: document.getElementById('jm-status')?.value || 'in-shop',
+    lane: document.getElementById('jm-lane')?.value || '',
     delivery: document.getElementById('jm-delivery')?.value || '',
     lab: document.getElementById('jm-lab')?.value || '',
     prt: document.getElementById('jm-prt')?.value || '',
@@ -770,8 +779,9 @@ function restoreJobDraft() {
     document.getElementById('jm-prob').value = draft.prob || '';
     document.getElementById('jm-mech').value = draft.mechId || '';
     renderJobMechanicChips(draft.mechId || '');
-    document.getElementById('jm-pri').value = draft.pri || 'normal';
-    document.getElementById('jm-status').value = draft.status || 'waiting';
+    document.getElementById('jm-status').value = normalizeJobStatus(draft.status);
+    document.getElementById('jm-lane').value = draft.lane || '';
+    renderJobLaneChips(draft.lane || '');
     document.getElementById('jm-delivery').value = draft.delivery || '';
     document.getElementById('jm-lab').value = draft.lab || '';
     document.getElementById('jm-prt').value = draft.prt || '';
@@ -793,7 +803,7 @@ function restoreJobDraft() {
 
 function bindStickyJobDrafts() {
   if (window._jobDraftBindingsReady) return;
-  const ids = ['jm-cust-search','jm-cust-name','jm-phone','jm-veh','jm-vno','jm-odo','jm-prob','jm-mech','jm-pri','jm-status','jm-delivery','jm-lab','jm-prt','jm-advance','jm-invoice-no','jm-discount','jm-notes','jm-cust-sel'];
+  const ids = ['jm-cust-search','jm-cust-name','jm-phone','jm-veh','jm-vno','jm-odo','jm-prob','jm-mech','jm-lane','jm-status','jm-delivery','jm-lab','jm-prt','jm-advance','jm-invoice-no','jm-discount','jm-notes','jm-cust-sel'];
   ids.forEach(id => {
     const el = document.getElementById(id);
     if (!el) return;
@@ -866,7 +876,7 @@ function bindStickyInvoiceDrafts() {
 }
 
 function nextInvoiceCandidate(excludeId = '') {
-  const order = { ready: 0, 'in-progress': 1, 'parts-needed': 2, returned: 3, waiting: 4 };
+  const order = { ready: 0, 'in-shop': 1, 'parts-needed': 2 };
   return jobs
     .filter(j => isLiveJob(j) && j.status !== 'done' && j.id !== excludeId)
     .sort((a, b) => (order[a.status] ?? 9) - (order[b.status] ?? 9) || jobDateTimeValue(a) - jobDateTimeValue(b))[0] || null;
@@ -1229,8 +1239,7 @@ function saveQuickInvoice(nextAction = 'close') {
       mechIds,
       mechId: mechIds[0] || '',
       mech: mechName,
-      pri: 'normal',
-      status: 'waiting',
+      status: 'in-shop',
       lab: total,
       prt: 0,
       payment: paid,
@@ -1251,7 +1260,6 @@ function saveQuickInvoice(nextAction = 'close') {
       photo,
       invoicePhoto: '',
       invoicePhotos: [],
-      collectedBy: '',
       invoiceNo: manualInvoiceNo,
       discount,
     });
@@ -1285,7 +1293,6 @@ function saveQuickInvoice(nextAction = 'close') {
     mechIds,
     mechId: mechIds[0] || '',
     mech: mechIds.length ? mechName : 'Quick Invoice',
-    pri: 'normal',
     status: 'done',
     lab: total,
     prt: 0,
@@ -1307,7 +1314,6 @@ function saveQuickInvoice(nextAction = 'close') {
     photo,
     invoicePhotos: photos,
     invoicePhoto: photo,
-    collectedBy: '',
     invoiceNo,
     doneAt: invoiceStamp,
     discount,
@@ -1346,6 +1352,19 @@ function jobDateTimeValue(j) {
     if (mer === 'AM' && hours === 12) hours = 0;
   }
   return new Date(`${date}T${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}:00`).getTime() || 0;
+}
+
+// Whole days since the bike came in. Drives both the oldest-first sort and the card
+// stripe, so a bike sitting too long is visible without opening it.
+function jobDaysInShop(j) {
+  const started = jobDateTimeValue(j);
+  if (!started) return 0;
+  return Math.max(0, Math.floor((Date.now() - started) / 86400000));
+}
+
+function jobAgeClass(j) {
+  const days = jobDaysInShop(j);
+  return days >= 7 ? 'age-old' : days >= 3 ? 'age-mid' : 'age-new';
 }
 
 function jobCreatedLabel(j) {
@@ -1517,6 +1536,40 @@ function toggleJobStatusOption(status, checked) {
   renderJobs();
 }
 
+// Lane order for the board. Unsorted sits LAST: on day one every job is unsorted, and
+// leading with it would bury the lanes the feature exists to show.
+function jobLaneRank(j) {
+  const idx = JOB_LANE_VALUES.indexOf(String(j.lane || '').trim());
+  return idx === -1 ? JOB_LANE_VALUES.length : idx;
+}
+
+// Within a lane: anything blocked on a part drops to the bottom (you cannot work on it),
+// then oldest first so nothing rots at the back of the shop.
+function compareJobsForBoard(a, b) {
+  return jobLaneRank(a) - jobLaneRank(b)
+    || (a.status === 'parts-needed' ? 1 : 0) - (b.status === 'parts-needed' ? 1 : 0)
+    || jobDateTimeValue(a) - jobDateTimeValue(b);
+}
+
+function setJobLaneFilter(value) {
+  jobLaneFilter = String(value ?? '');
+  if (typeof resetLongListPage === 'function') resetLongListPage('jobs');
+  renderJobs();
+}
+
+function renderJobBoardLaneChips(counts, total) {
+  const box = document.getElementById('job-lane-chips');
+  if (!box) return;
+  const chips = [{ value: '__all', label: 'All' }]
+    .concat(JOB_LANES)
+    .concat([{ value: '__unsorted', label: JOB_UNSORTED_LANE_LABEL }]);
+  box.innerHTML = chips.map(c => {
+    const count = c.value === '__all' ? total : (counts.get(c.value === '__unsorted' ? '' : c.value) || 0);
+    const active = jobLaneFilter === (c.value === '__all' ? '' : c.value);
+    return `<button type="button" class="chip${active ? ' active' : ''}" onclick="setJobLaneFilter('${c.value === '__all' ? '' : c.value}')">${c.label} <span style="opacity:.75;">${count}</span></button>`;
+  }).join('');
+}
+
 function renderJobs() {
   const stateJobs = window.appState?.jobs || jobs;
   let list = stateJobs.filter(isActiveWorkshopJob);
@@ -1525,6 +1578,21 @@ function renderJobs() {
     list = list.filter(j => jobStatusFilter.has(j.status));
   }
   if (jobSearchFilter) list = list.filter(j => matchesJobSearch(j, jobSearchFilter));
+
+  // Lane counts come from the pre-lane-filter list so the chips always show the whole
+  // board, and from the pre-pagination list so page 2 doesn't renumber them.
+  const laneCounts = new Map();
+  list.forEach(j => {
+    const key = JOB_LANE_VALUES.includes(String(j.lane || '').trim()) ? String(j.lane).trim() : '';
+    laneCounts.set(key, (laneCounts.get(key) || 0) + 1);
+  });
+  renderJobBoardLaneChips(laneCounts, list.length);
+  if (jobLaneFilter) {
+    const want = jobLaneFilter === '__unsorted' ? '' : jobLaneFilter;
+    list = list.filter(j => (JOB_LANE_VALUES.includes(String(j.lane || '').trim()) ? String(j.lane).trim() : '') === want);
+  }
+  list = list.slice().sort(compareJobsForBoard);
+
   const pageInfo = typeof paginatedLongList === 'function'
     ? paginatedLongList('jobs', list)
     : { items: list, total: list.length, page: 1, pages: 1, pageSize: list.length || 1, start: 0, end: list.length };
@@ -1549,7 +1617,19 @@ function renderJobs() {
     grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:48px 20px;color:var(--mut);">No active jobs. Press <b style=\'color:var(--acc)\'>+ New Job</b> to add one.</div>';
   } else {
     const pager = typeof longListPagerHtml === 'function' ? longListPagerHtml('jobs', pageInfo, 'jobs') : '';
-    grid.innerHTML = visibleJobs.map(j => jobCard(j)).join('') + pager;
+    // Sorted by lane, so lanes are contiguous and a header can be emitted whenever the
+    // lane changes. Emitting on i === 0 too keeps page 2 from starting headerless.
+    let lastLane = null;
+    const cards = visibleJobs.map((j, i) => {
+      const lane = JOB_LANE_VALUES.includes(String(j.lane || '').trim()) ? String(j.lane).trim() : '';
+      let header = '';
+      if (i === 0 || lane !== lastLane) {
+        header = `<div class="rd-seclbl" style="grid-column:1/-1;">${jobLaneLabel(lane)} <span style="opacity:.6;">(${laneCounts.get(lane) || 0})</span></div>`;
+        lastLane = lane;
+      }
+      return header + jobCard(j);
+    }).join('');
+    grid.innerHTML = cards + pager;
   }
   updateStats();
 }
@@ -1568,16 +1648,22 @@ function jobCard(j) {
   const customerLabel = j.cust || j.customerName || j.customer || 'Customer';
   const vehicleLabel = j.veh || j.vehicle || j.bike || j.bikeName || 'Vehicle';
   const workLabel = j.prob || j.problem || j.workDescription || 'Work';
-  const status = JOB_STATUS_OPTIONS.includes(j.status) ? j.status : 'waiting';
+  const status = JOB_STATUS_OPTIONS.includes(j.status) ? j.status : 'in-shop';
   const statusSelect = `
     <select class="fsel" style="width:145px;font-size:11px;padding:6px 8px;" onchange="setJobStatus('${j.id}', this.value)">
       ${JOB_STATUS_OPTIONS.map(st => `<option value="${st}"${st===status?' selected':''}>${SLbl[st]}</option>`).join('')}
     </select>`;
+  const currentLane = JOB_LANE_VALUES.includes(String(j.lane || '').trim()) ? String(j.lane).trim() : '';
+  const laneSelect = `
+    <select class="fsel" style="width:125px;font-size:11px;padding:6px 8px;" onchange="setJobLane('${j.id}', this.value)">
+      <option value=""${currentLane ? '' : ' selected'}>${JOB_UNSORTED_LANE_LABEL}</option>
+      ${JOB_LANES.map(l => `<option value="${l.value}"${l.value===currentLane?' selected':''}>${l.label}</option>`).join('')}
+    </select>`;
 
   return `
-  <div class="jcard ${j.pri || 'normal'}">
+  <div class="jcard ${jobAgeClass(j)}">
     <div class="jtop">
-      <span class="jnum">${j.id} · ${createdLabel}</span>
+      <span class="jnum">${j.id} · ${createdLabel} · ${jobDaysInShop(j)}d in shop</span>
       <span class="jnum" style="color:var(--acc2)">${j.vno || '—'}</span>
     </div>
     <div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:6px;">
@@ -1596,6 +1682,7 @@ function jobCard(j) {
     </div>
     <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
       ${statusSelect}
+      ${laneSelect}
       <button class="btn btn-g btn-sm" onclick="openEditJob('${j.id}')">Edit</button>
       <button class="btn btn-p btn-sm" onclick="openJobPartsDrawer('${j.id}')">Parts</button>
     </div>
@@ -1612,7 +1699,7 @@ function jobCard(j) {
 function updateStats() {
   const liveJobs = (window.appState?.jobs || jobs).filter(isLiveJob);
   const active    = liveJobs.filter(isActiveWorkshopJob);
-  const inProg    = active.filter(j => j.status === 'in-progress');
+  const waitingPart = active.filter(j => j.status === 'parts-needed');
   const ready     = active.filter(j => j.status === 'ready');
   const todayDone = liveJobs.filter(j => j.status === 'done' && j.date === today());
   const todayInvoices = liveJobs.filter(j => j.status === 'done' && ((j.doneAt || '').slice(0, 10) || j.date || '') === today());
@@ -1620,7 +1707,7 @@ function updateStats() {
     .filter(entry => entry.date === today())
     .reduce((a, entry) => a + (entry.amount || 0), 0);
   document.getElementById('st-tot').textContent = active.length;
-  document.getElementById('st-prg').textContent = inProg.length;
+  document.getElementById('st-prg').textContent = waitingPart.length;
   document.getElementById('st-rdy').textContent = ready.length;
   document.getElementById('st-rev').textContent = fmtMoney(rev);
   // Update done count badge
@@ -1628,6 +1715,13 @@ function updateStats() {
   if (dc) dc.textContent = `(${todayDone.length})`;
   const todayInvoiceEl = document.getElementById('jobs-today-invoice-count');
   if (todayInvoiceEl) todayInvoiceEl.textContent = String(todayInvoices.length);
+  const staleEl = document.getElementById('stale-count');
+  if (staleEl) {
+    const staleTotal = staleOpenJobList().length;
+    staleEl.textContent = `(${staleTotal})`;
+    const wrap = document.getElementById('stale-jobs-wrap');
+    if (wrap) wrap.style.display = staleTotal ? '' : 'none';
+  }
   // Update dues badge
   if (typeof updateDuesBadge === 'function') updateDuesBadge();
 }
@@ -1788,7 +1882,10 @@ function cycleStatus(id) {
   if (!requireCloudWriteAccess('change job status')) return;
   const j = jobs.find(x => x.id === id);
   if (!j) return;
+  // A done job is not part of the open cycle; indexOf would return -1 and reopen it.
+  if (j.status === 'done') return;
   j.status = JOB_STATUS_OPTIONS[(JOB_STATUS_OPTIONS.indexOf(j.status) + 1) % JOB_STATUS_OPTIONS.length];
+  j.updatedAt = nowISO();
   logAction('update', 'job', j.id, { status: j.status });
   saveAll({ domain: 'jobs' }); renderJobs(); toast('Status → ' + SLbl[j.status]);
 }
@@ -1803,6 +1900,48 @@ function setJobStatus(id, status) {
   saveAll({ domain: 'jobs' });
   renderJobs();
   toast('Status → ' + SLbl[j.status]);
+}
+
+// Open jobs the daily board hides because nobody has touched the record in 30 days
+// (isStaleOpenJob). These are exactly the bikes most likely to be forgotten, so they get
+// their own collapsed section instead of silently disappearing.
+function staleOpenJobList() {
+  const stateJobs = window.appState?.jobs || jobs;
+  return stateJobs
+    .filter(j => isLiveJob(j) && j.status !== 'done' && !isPlaceholderOpenJob(j) && isStaleOpenJob(j))
+    .sort(compareJobsForBoard);
+}
+
+function renderStaleJobs() {
+  const grid = document.getElementById('stale-grid');
+  if (!grid) return;
+  const list = staleOpenJobList();
+  grid.innerHTML = list.length
+    ? list.map(j => jobCard(j)).join('')
+    : '<div style="grid-column:1/-1;text-align:center;padding:24px;color:var(--mut);">Nothing parked.</div>';
+}
+
+function toggleStaleJobs() {
+  const grid   = document.getElementById('stale-grid');
+  const toggle = document.getElementById('stale-toggle');
+  if (!grid || !toggle) return;
+  const hidden = grid.style.display === 'none';
+  grid.style.display = hidden ? '' : 'none';
+  toggle.textContent = hidden ? '▲ Hide' : '▼ Show';
+  if (hidden) renderStaleJobs();
+}
+
+function setJobLane(id, lane) {
+  if (!requireCloudWriteAccess('change job lane')) return;
+  const j = jobs.find(x => x.id === id);
+  const next = JOB_LANE_VALUES.includes(String(lane || '').trim()) ? String(lane).trim() : '';
+  if (!j || (j.lane || '') === next) return;
+  j.lane = next;
+  j.updatedAt = nowISO();
+  logAction('update', 'job', j.id, { lane: j.lane });
+  saveAll({ domain: 'jobs' });
+  renderJobs();
+  toast('Lane → ' + jobLaneLabel(next));
 }
 
 function removeJob(id) {
@@ -1958,6 +2097,7 @@ function openNewJob(options = {}) {
   if (startFresh) clearJobDraft(`${JOB_DRAFT_STORAGE_KEY}:new`);
   document.getElementById('jm-mech').value = '';
   renderJobMechanicChips('');
+  renderJobLaneChips('');
   setVehicleValue('');
   ['jm-cust-name','jm-phone','jm-vno','jm-odo','jm-prob','jm-lab','jm-prt','jm-advance','jm-discount','jm-notes','jm-cust-search'].forEach(i => {
     const el = document.getElementById(i);
@@ -1965,8 +2105,7 @@ function openNewJob(options = {}) {
   });
   document.getElementById('jm-invoice-no').value = suggestedNextInvoiceNo();
   document.getElementById('jm-cust-sel').value     = '';
-  document.getElementById('jm-pri').value      = 'normal';
-  document.getElementById('jm-status').value   = 'waiting';
+  document.getElementById('jm-status').value   = 'in-shop';
   document.getElementById('jm-delivery').value = '';
   document.getElementById('jm-cust-new').style.display = 'grid';
   renderJobCustomerSearchResults([], '');
@@ -2001,6 +2140,7 @@ function openEditJob(id) {
   refreshCustomerSuggestions();
   document.getElementById('jm-mech').value         = mechanicValueString(jobMechanicIds(j));
   renderJobMechanicChips(mechanicValueString(jobMechanicIds(j)));
+  renderJobLaneChips(j.lane || '');
   renderRecentCustomerChips('jm-recent-customers', 'selectJobCustomer');
   renderRecentBikeChips('jm-recent-bikes', 'jm-veh');
   document.getElementById('jm-cust-sel').value     = j.custId || '';
@@ -2018,8 +2158,9 @@ function openEditJob(id) {
   document.getElementById('jm-invoice-no').value   = j.invoiceNo || '';
   document.getElementById('jm-discount').value     = jobDiscountAmount(j) || '';
   document.getElementById('jm-notes').value        = j.notes || '';
-  document.getElementById('jm-pri').value          = j.pri;
-  document.getElementById('jm-status').value       = j.status;
+  // A done job has no matching option; assigning it would blank the select and then
+  // save an empty status back over it.
+  document.getElementById('jm-status').value       = j.status === 'done' ? '' : j.status;
   document.getElementById('jm-delivery').value     = j.delivery || '';
   document.getElementById('jm-cust-new').style.display = j.custId ? 'none' : 'grid';
   renderJobCustomerSearchResults([], '');
@@ -2057,6 +2198,7 @@ function saveJob(options = {}) {
 
   if (!custName) { toast('Enter customer name'); return; }
   if (!prob)     { toast('Describe the problem/work'); return; }
+  if (!document.getElementById('jm-lane').value) { toast('Pick a lane'); return; }
   if (discount < 0) { toast('Enter valid discount'); return; }
   const duplicateInvoice = manualInvoiceNo ? findDuplicateInvoiceNumber(manualInvoiceNo, editJobId || '') : null;
   if (duplicateInvoice) {
@@ -2101,8 +2243,8 @@ function saveJob(options = {}) {
     mechIds,
     mechId:    mechIds[0] || '',
     mech:      mechanicLabel(mechIds),
-    pri:       document.getElementById('jm-pri').value,
     status:    document.getElementById('jm-status').value,
+    lane:      document.getElementById('jm-lane').value,
     lab:       parseFloat(document.getElementById('jm-lab').value) || 0,
     prt:       parseFloat(document.getElementById('jm-prt').value) || 0,
     notes:     document.getElementById('jm-notes').value.trim(),
@@ -2135,7 +2277,6 @@ function saveJob(options = {}) {
       payment: shouldCreateInvoice ? 0 : advance,
       payMethod: !shouldCreateInvoice && advance > 0 ? 'advance' : '',
       partsUsed: [],
-      collectedBy: '',
       createdAt: nowISO(),
       updatedAt: nowISO(),
       ...jobData

@@ -834,11 +834,9 @@ function renderReports() {
   const openJobs = jobs.filter(j => isLiveJob(j) && j.status !== 'done').filter(j => matchesReportSearch(j, q));
   const nowStamp = nowISO();
   const statusOrder = [
-    { key: 'waiting', label: 'Waiting' },
-    { key: 'in-progress', label: 'In Progress' },
-    { key: 'parts-needed', label: 'Parts Needed' },
+    { key: 'in-shop', label: 'In Shop' },
+    { key: 'parts-needed', label: 'Waiting for Part' },
     { key: 'ready', label: 'Ready' },
-    { key: 'returned', label: 'Returned' },
   ];
   document.getElementById('rpt-bottlenecks').innerHTML = statusOrder.map(status => {
     const items = openJobs.filter(job => job.status === status.key);
@@ -849,7 +847,7 @@ function renderReports() {
       <div class="report-status-card">
         <div class="report-status-head">
           <span>${status.label}</span>
-          <span class="sst ${status.key === 'parts-needed' || status.key === 'returned' ? 'out' : status.key === 'ready' ? 'ok' : 'low'}">${items.length}</span>
+          <span class="sst ${status.key === 'parts-needed' ? 'out' : status.key === 'ready' ? 'ok' : 'low'}">${items.length}</span>
         </div>
         <div class="report-status-metrics">
           <div><span>Avg age</span><strong>${avgAge ? `${avgAge.toFixed(avgAge >= 24 ? 0 : 1)}${avgAge >= 24 ? 'h+' : 'h'}` : '—'}</strong></div>

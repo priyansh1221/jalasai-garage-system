@@ -196,14 +196,14 @@ function renderHomeDashboard() {
   const jobsEl = document.getElementById('home-jobs-list');
   if (jobsEl) {
     const rows = stats.openJobsPreview.map(j => {
-      const status = j.status || 'waiting';
-      const statusClass = status === 'ready' ? 'good' : status === 'parts-needed' ? 'warn' : status === 'returned' ? 'danger' : '';
+      const status = j.status || 'in-shop';
+      const statusClass = status === 'ready' ? 'good' : status === 'parts-needed' ? 'warn' : '';
       return `<div class="new-row">
         <div>
           <b>${newUiEscape(j.cust || j.customer || j.customerName || 'Customer')}</b>
           <span>${newUiEscape(j.veh || j.bike || j.bikeName || 'Vehicle')} · ${newUiEscape(j.vno || j.reg || j.registerNumber || 'No reg')} · ${newUiEscape(j.prob || j.problem || j.workDescription || 'Work')}</span>
         </div>
-        <em class="${statusClass}">${newUiEscape(status.replace(/-/g, ' '))}</em>
+        <em class="${statusClass}">${newUiEscape(typeof SLbl === 'object' && SLbl[status] ? SLbl[status] : status.replace(/-/g, ' '))}</em>
       </div>`;
     }).join('');
     jobsEl.innerHTML = rows || '<div class="new-empty">No active jobs. Use New Job to start the day.</div>';

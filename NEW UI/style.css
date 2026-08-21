@@ -235,9 +235,10 @@ nav {
   box-shadow: inset 0 1px 0 rgba(255,255,255,.04), 0 22px 38px rgba(0,0,0,.3);
 }
 .jcard::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 2px; border-radius: 10px 0 0 10px; }
-.jcard.urgent::before  { background: var(--dan); }
-.jcard.normal::before  { background: var(--warn); }
-.jcard.waiting::before { background: var(--mut); }
+/* Stripe reads bike age: the longer it has sat, the hotter the edge. */
+.jcard.age-new::before { background: var(--mut); }
+.jcard.age-mid::before { background: var(--warn); }
+.jcard.age-old::before { background: var(--dan); }
 .jcard.done::before    { background: var(--acc); }
 .jtop   { display: flex; justify-content: space-between; margin-bottom: 8px; }
 .jnum   { font-family: var(--fh); font-size: 12px; color: var(--mut); font-weight: 600; }
@@ -3693,3 +3694,41 @@ table td {
     scroll-behavior: auto !important;
   }
 }
+
+/* Ported from root style.css — lane filter chips on the job board. */
+/* Slim horizontal filter chip row */
+.chip-row {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  margin-bottom: 12px;
+  padding-bottom: 2px;
+  -webkit-overflow-scrolling: touch;
+}
+.chip-row::-webkit-scrollbar { display: none; }
+.chip {
+  flex: 0 0 auto;
+  min-height: 34px;
+  padding: 6px 13px;
+  border-radius: 999px;
+  font-family: var(--fh);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--mut);
+  background: rgba(255,255,255,.04);
+  border: 1px solid rgba(255,255,255,.1);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: all .18s ease;
+}
+.chip.active {
+  color: var(--txt);
+  background: linear-gradient(180deg, rgba(50,51,56,.96) 0%, rgba(30,31,35,.98) 100%);
+  border-color: rgba(210,138,66,.28);
+}
+.chip.red    { color: var(--dan);  background: rgba(255,71,87,.12);  border-color: rgba(255,71,87,.3); }
+.chip.yellow { color: var(--warn); background: rgba(245,197,24,.12); border-color: rgba(245,197,24,.3); }
+.chip.green  { color: #00c896;     background: rgba(0,200,150,.12);  border-color: rgba(0,200,150,.3); }
