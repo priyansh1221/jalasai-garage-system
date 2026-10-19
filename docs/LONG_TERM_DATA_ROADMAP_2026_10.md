@@ -249,6 +249,33 @@ Built our own engine (no build step, no new service). PowerSync was not tried.
   read-only for 2 releases.
 - *Pass:* 0 rupee difference on every customer and every day across all history.
 
+#### Stage 3 status (2026-10-20): built, tested locally — server-side ledger
+
+Built as an **insert-only ledger on the server that follows the job records**,
+rather than rewriting the app's money model. Every invoice, payment, edit,
+print and balance screen works on `jobs[].payments` today; changing that is
+the highest-risk change possible for a garage's money. The ledger gives the
+same guarantees without it:
+- `supabase/2026-10-ledger-stage3.sql` (needs Phase 1): `garage_ledger_entries`,
+  insert-only (updates and deletes are refused). A trigger on `garage_jobs`
+  adds lines for every saved change: the invoice total (charge), one line per
+  payment / advance, the part of the paid figure not covered by entries (old
+  records), and `change` / `reversal` lines when anything is edited or removed.
+  A removed payment keeps its original line next to its reversal.
+- For every job the lines add up to exactly what the app shows (total − paid).
+  `jalasai_ledger_reconcile()` lists any job where they don't (expect none).
+- `garage_ledger_balances` (customer balances) and
+  `jalasai_customer_statement(customer, from, to)` (opening, lines, closing)
+  feed the Stage 6 statement and reminders.
+- Two phones taking payments at once are already safe: Stage 2's server merge
+  combines payment lists entry by entry.
+- Tested with messy money data (partial payments, negative adjustments,
+  advances, old single-figure payments, figures that don't match their entries,
+  deletes): 0 rupee difference per job and per customer, before and after
+  edits, with and without the Stage 2 SQL.
+- Not done: moving the app itself to ledger entries. Revisit only if the job
+  model blocks a feature; the reconcile check makes that switch provable.
+
 ### Stage 4: Invoices that follow GST rules
 - GST rule (CGST Rule 46): invoice serial must be **consecutive, unique per
   financial year, ≤ 16 characters**, using only letters, digits, `-` and `/`.
