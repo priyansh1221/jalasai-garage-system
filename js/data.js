@@ -408,12 +408,68 @@ function clearLargeLocalBackupKeys() {
   try { localStorage.removeItem(BEFORE_PULL_BACKUP_KEY); } catch (_) {}
 }
 
+// Storage keys whose latest in-memory value could not be written to this
+// device (e.g. phone storage full). While any remain, the red save-failure
+// banner stays up; each key clears once a later save of it succeeds.
+const localSaveFailures = new Map();
+const LOCAL_SAVE_FAILED_MSG = 'This phone could not save. Don\'t close the app — tap to download a backup.';
+
+function localSaveFailureSummary() {
+  if (!localSaveFailures.size) return '';
+  const first = localSaveFailures.values().next().value;
+  return `Device save failed (${first.reason}) for ${localSaveFailures.size} item${localSaveFailures.size === 1 ? '' : 's'} since ${fmtDateTime(first.at)}. Download a backup now.`;
+}
+
+function renderLocalSaveFailureBanner() {
+  const banner = document.getElementById('save-fail-banner');
+  if (!banner) return;
+  const failing = localSaveFailures.size > 0;
+  banner.hidden = !failing;
+  document.body.classList.toggle('has-save-fail-banner', failing);
+}
+
+function noteLocalSaveResult(key, ok, err) {
+  const wasFailing = localSaveFailures.size > 0;
+  if (ok) {
+    if (!localSaveFailures.delete(key)) return;
+  } else {
+    if (!localSaveFailures.has(key)) {
+      localSaveFailures.set(key, { at: nowISO(), reason: err?.name || err?.message || 'unknown error' });
+    }
+  }
+  const failing = localSaveFailures.size > 0;
+  if (failing) {
+    syncMeta.lastSyncError = localSaveFailureSummary();
+  } else if (wasFailing && String(syncMeta.lastSyncError || '').startsWith('Device save failed')) {
+    syncMeta.lastSyncError = '';
+  }
+  if (failing !== wasFailing || failing) {
+    renderLocalSaveFailureBanner();
+    if (typeof renderSyncDiagnostics === 'function') renderSyncDiagnostics();
+    if (typeof updateQuickSyncButton === 'function') updateQuickSyncButton();
+  }
+}
+
+window.addEventListener('beforeunload', event => {
+  if (!localSaveFailures.size) return;
+  event.preventDefault();
+  event.returnValue = LOCAL_SAVE_FAILED_MSG;
+});
+
 function setLocalStorageSafe(key, value, options = {}) {
+  // Backup copies are optional; only the real data keys drive the banner.
+  if (options.trackFailure === false) return writeLocalStorageSafe(key, value, options).ok;
+  const result = writeLocalStorageSafe(key, value, options);
+  noteLocalSaveResult(key, result.ok, result.error);
+  return result.ok;
+}
+
+function writeLocalStorageSafe(key, value, options = {}) {
   let previousValue = null;
   try { previousValue = localStorage.getItem(key); } catch (_) {}
   try {
     localStorage.setItem(key, value);
-    return true;
+    return { ok: true };
   } catch (err) {
     if (options.retryAfterBackupCleanup !== false && isLocalStorageQuotaError(err)) {
       clearLargeLocalBackupKeys();
@@ -423,17 +479,17 @@ function setLocalStorageSafe(key, value, options = {}) {
       }
       try {
         localStorage.setItem(key, value);
-        return true;
+        return { ok: true };
       } catch (retryErr) {
         if (replacingWithSmallerValue) {
           try { localStorage.setItem(key, previousValue); } catch (_) {}
         }
         console.warn(`localStorage save failed for ${key}`, retryErr);
-        return false;
+        return { ok: false, error: retryErr };
       }
     }
     console.warn(`localStorage save failed for ${key}`, err);
-    return false;
+    return { ok: false, error: err };
   }
 }
 
@@ -612,6 +668,9 @@ function flushTableSaves() {
       // The localStorage copy is now stale and only eats Safari's 5 MB.
       try { localStorage.removeItem(SK[key]); } catch (_) {}
       noteTableSaveResult(key, true);
+      // An earlier failed localStorage write of this table no longer
+      // matters once the table is safely in IndexedDB.
+      if (typeof noteLocalSaveResult === 'function') noteLocalSaveResult(SK[key], true);
     });
     try { localStorage.setItem(DATA_IDB_MARKER_KEY, '1'); } catch (_) {}
   }).catch(err => {
@@ -716,7 +775,7 @@ function persistLocalBackupPayload(payload, stamp = nowISO()) {
     try { localStorage.removeItem(SK.localBackupLatest); } catch (_) {}
     return false;
   }
-  const saved = setLocalStorageSafe(SK.localBackupLatest, encoded, { retryAfterBackupCleanup: false });
+  const saved = setLocalStorageSafe(SK.localBackupLatest, encoded, { retryAfterBackupCleanup: false, trackFailure: false });
   if (saved) syncMeta.localBackupAt = stamp;
   return saved;
 }
@@ -727,7 +786,7 @@ function persistBeforePullBackup(payload) {
     try { localStorage.removeItem(BEFORE_PULL_BACKUP_KEY); } catch (_) {}
     return false;
   }
-  return setLocalStorageSafe(BEFORE_PULL_BACKUP_KEY, encoded, { retryAfterBackupCleanup: false });
+  return setLocalStorageSafe(BEFORE_PULL_BACKUP_KEY, encoded, { retryAfterBackupCleanup: false, trackFailure: false });
 }
 
 function saveAll(options = {}) {
@@ -759,7 +818,11 @@ function saveAll(options = {}) {
     if (!options.skipSync && typeof queueAutoSync === 'function') {
       queueAutoSync({ domain: options.domain, domains: options.domains });
     }
-  } catch(e) { console.warn('localStorage save failed', e); }
+    if (!scopedKeys) noteLocalSaveResult('saveAll', true);
+  } catch(e) {
+    console.warn('localStorage save failed', e);
+    noteLocalSaveResult('saveAll', false, e);
+  }
 }
 
 function loadAll() {

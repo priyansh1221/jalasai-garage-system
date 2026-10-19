@@ -1510,11 +1510,26 @@
 
 <!-- ═══════ TOAST ═══════════════════════════════════════ -->
 <div class="toast" id="toast"></div>
+<!-- ═══════ DEVICE SAVE FAILURE (keep in sync with the other UI) ═══════ -->
+<button type="button" class="save-fail-banner" id="save-fail-banner" role="alert" hidden onclick="downloadBackup()">This phone could not save. Don't close the app — tap to download a backup.</button>
 
 <!-- ═══════════════════════════════════════════════════════
      EXTRA CSS for new features
 ═══════════════════════════════════════════════════════ -->
 <style>
+/* Device save failure banner (mirrored in both UIs) */
+.save-fail-banner {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 6000;
+  display: block; width: 100%; margin: 0; border: 0; border-radius: 0;
+  padding: calc(12px + env(safe-area-inset-top, 0px)) 16px 12px;
+  background: #c62828; color: #fff; font: 600 14px/1.35 'DM Sans', sans-serif;
+  text-align: center; cursor: pointer; box-shadow: 0 4px 16px rgba(0,0,0,.35);
+}
+.save-fail-banner[hidden] { display: none; }
+.save-fail-banner:focus-visible { outline: 3px solid #fff; outline-offset: -5px; }
+body.has-save-fail-banner { padding-top: 48px; }
+@media (max-width: 480px) { body.has-save-fail-banner { padding-top: 68px; } }
+
 /* Photo upload */
 .photo-upload-area { cursor: pointer; }
 .photo-preview-box {

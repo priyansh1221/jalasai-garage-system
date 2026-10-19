@@ -344,6 +344,7 @@ function renderSyncDiagnostics() {
       </div>`;
     return;
   }
+  const deviceSaveError = typeof localSaveFailureSummary === 'function' ? localSaveFailureSummary() : '';
   const rows = [
     ['Device ID', syncMeta.deviceId || '—'],
     ['Local Updated', syncMeta.updatedAt ? fmtDateTime(syncMeta.updatedAt) : '—'],
@@ -354,7 +355,8 @@ function renderSyncDiagnostics() {
     syncMeta.lastPushTiming ? ['Last Upload Speed', `${syncTimingSummary(syncMeta.lastPushTiming)} · ${fmtDateTime(syncMeta.lastPushTiming.at)}`] : null,
     ['Pending Local Changes', syncMeta.pendingSync ? `Yes${syncMeta.pendingSince ? ' · since ' + fmtDateTime(syncMeta.pendingSince) : ''}` : 'No'],
     ['Local Backup', syncMeta.localBackupAt ? fmtDateTime(syncMeta.localBackupAt) : '—'],
-    syncMeta.lastSyncError ? ['Last Sync Error', syncMeta.lastSyncError] : null,
+    deviceSaveError ? ['Device Save', `<span style="color:#e5484d;font-weight:600;">${deviceSaveError}</span>`] : null,
+    syncMeta.lastSyncError && syncMeta.lastSyncError !== deviceSaveError ? ['Last Sync Error', syncMeta.lastSyncError] : null,
     syncMeta.lastMergeSummary ? ['Last Merge', syncMeta.lastMergeSummary] : null,
     ['Table Sync', syncMeta.shadowLastMirrorError
       ? `Failed · ${fmtDateTime(syncMeta.shadowLastMirrorAt)} — ${shadowMirrorErrorMessage(syncMeta.shadowLastMirrorError)}`
@@ -2120,11 +2122,49 @@ async function saveGS() {
   }
 }
 
+// Disconnect wipes this device, so it must never run while changes exist only
+// here. Keep the data (and the cloud session) and offer a backup file instead.
+function blockDisconnectToKeepLocalData(reason) {
+  const msg = `${reason} Nothing was removed from this phone.`;
+  updateGSStatus(msg);
+  closeM('m-gs');
+  toast(msg, 8000);
+  if (confirm(`${msg}\n\nDownload a backup file of this phone's data now?`)) downloadBackup();
+}
+
 async function disconnectGS() {
   if (CLOUD_SYNC_DISABLED) {
     closeM('m-gs');
     return;
   }
+  const hasLocalOnlyChanges = !!syncMeta.pendingSync;
+  const confirmMsg = hasLocalOnlyChanges
+    ? 'This phone has changes that are not in the cloud yet.\n\nDisconnect will upload them first, then sign out and remove all garage data from this phone.\n\nContinue?'
+    : 'Disconnect will sign out and remove all garage data from this phone. The cloud copy stays.\n\nContinue?';
+  if (!confirm(confirmMsg)) return;
+
+  if (hasLocalOnlyChanges) {
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      blockDisconnectToKeepLocalData('You are offline, so this phone\'s unsynced changes cannot be uploaded. Disconnect was cancelled.');
+      return;
+    }
+    updateGSStatus('Uploading this phone\'s changes before signing out...');
+    let pushed = false;
+    try {
+      pushed = await pushGS({ quiet: false, fullMirror: true });
+    } catch (err) {
+      console.warn('Upload before disconnect failed', err);
+      pushed = false;
+    }
+    if (pushed !== true || syncMeta.pendingSync) {
+      const why = pushed === 'busy'
+        ? 'A sync is already running. Wait for it to finish, then try Disconnect again.'
+        : `Upload failed${syncMeta.lastSyncError ? ` (${syncMeta.lastSyncError})` : ''}, so Disconnect was cancelled.`;
+      blockDisconnectToKeepLocalData(why);
+      return;
+    }
+  }
+
   try {
     const client = ensureCloudClient();
     if (client) await client.auth.signOut();
