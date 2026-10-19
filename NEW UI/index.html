@@ -1903,8 +1903,7 @@ function renderInvoices() {
   const totAmt     = monthDone.reduce((s,j) => s + jobTotal(j), 0);
   const totPaid    = monthDone.reduce((s,j) => s + jobPaid(j), 0);
   const totBalance = totAmt - totPaid;
-  const todayCollected = allRevenueEntries()
-    .filter(entry => entry.date === today())
+  const todayCollected = revenueEntriesForDate(today())
     .reduce((sum, entry) => sum + (entry.amount || 0), 0);
   const invStats = document.getElementById('inv-stats');
   if (invStats) {
@@ -1912,7 +1911,8 @@ function renderInvoices() {
       `This month · ${monthDone.length} invoices · <span style="color:var(--acc)">${fmtMoney(totAmt)}</span>` +
         ` · <span style="color:#00c896">Collected ${fmtMoney(totPaid)}</span>` +
         ` · <span style="color:#7dd3fc">Today ${fmtMoney(todayCollected)}</span>` +
-        (totBalance > 0 ? ` · <span style="color:var(--dan)">Owe ${fmtMoney(totBalance)}</span>` : totBalance < 0 ? ` · <span style="color:#00c896">Advance ${fmtMoney(Math.abs(totBalance))}</span>` : ` · <span style="color:var(--mut)">Clear</span>`);
+        (totBalance > 0 ? ` · <span style="color:var(--dan)">Owe ${fmtMoney(totBalance)}</span>` : totBalance < 0 ? ` · <span style="color:#00c896">Advance ${fmtMoney(Math.abs(totBalance))}</span>` : ` · <span style="color:var(--mut)">Clear</span>`) +
+        (typeof historyLoadingNoteHtml === 'function' ? historyLoadingNoteHtml() : '');
   }
 
   const container = document.getElementById('inv-list');

@@ -1725,3 +1725,18 @@ nav {
 input[type="date"].finp { -webkit-appearance: none; appearance: none; display: block; min-width: 0; min-height: 44px; text-align: left; }
 input[type="date"].finp::-webkit-date-and-time-value { text-align: left; }
 .f2 > .frow { min-width: 0; }
+
+/* Background history download note (js/sync.js historyLoadingNoteHtml):
+   shown only while older invoices are still downloading to this phone. */
+.history-loading-note {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--mut);
+  background: rgba(138,143,158,.12);
+  border: 1px solid rgba(138,143,158,.28);
+  white-space: nowrap;
+}

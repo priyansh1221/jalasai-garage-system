@@ -274,7 +274,28 @@ function mechanicValueString(ids = []) {
   return uniqStrings(ids).join(',');
 }
 
+// Resolved ids per job object, reused until the next save (any save bumps
+// __JALASAI_DATA_VERSION). Reports, Mechanics and revenue call this for
+// every invoice, several times per render.
+const jobMechanicIdsCache = new WeakMap();
+
 function jobMechanicIds(job) {
+  if (!job || typeof job !== 'object') return resolveJobMechanicIds(job);
+  const version = window.__JALASAI_DATA_VERSION || 0;
+  // The job's own mechanic fields are part of the key, so an edit made in
+  // place shows at once, even before its save runs.
+  const sig = [
+    job.mechId, job.mechanicId, job.mech, job.mechName, job.mechanicName, job.mechanic_name, job.mechanic,
+    [].concat(job.mechIds || [], job.mechanicIds || [], job.mechanic_ids || [], job.mechanicNames || [], job.mechanic_names || []).join(','),
+  ].join('|');
+  const hit = jobMechanicIdsCache.get(job);
+  if (hit && hit.version === version && hit.mechanics === mechanics && hit.sig === sig) return hit.ids.slice();
+  const ids = resolveJobMechanicIds(job);
+  jobMechanicIdsCache.set(job, { version, mechanics, sig, ids });
+  return ids.slice();
+}
+
+function resolveJobMechanicIds(job) {
   return canonicalMechanicIds(
     []
       .concat(job?.mechIds || [])
@@ -1703,8 +1724,7 @@ function updateStats() {
   const ready     = active.filter(j => j.status === 'ready');
   const todayDone = liveJobs.filter(j => j.status === 'done' && j.date === today());
   const todayInvoices = liveJobs.filter(j => j.status === 'done' && ((j.doneAt || '').slice(0, 10) || j.date || '') === today());
-  const rev       = allRevenueEntries()
-    .filter(entry => entry.date === today())
+  const rev       = revenueEntriesForDate(today())
     .reduce((a, entry) => a + (entry.amount || 0), 0);
   document.getElementById('st-tot').textContent = active.length;
   document.getElementById('st-prg').textContent = waitingPart.length;
@@ -1728,8 +1748,7 @@ function updateStats() {
 
 function todayRevenueBreakdownData() {
   const day = today();
-  const incomeEntriesToday = allRevenueEntries()
-    .filter(entry => entry.date === day)
+  const incomeEntriesToday = revenueEntriesForDate(day)
     .sort((a, b) => new Date(b.timestamp || b.date).getTime() - new Date(a.timestamp || a.date).getTime());
   const expenseEntriesToday = expenses
     .map(normalizeExpense)

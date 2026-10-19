@@ -65,8 +65,20 @@ function renderMechanics() {
     grid.innerHTML = '<div class="report-empty" style="grid-column:1/-1;">No mechanics saved yet. Add a mechanic to manage assignments and daily totals.</div>';
     return;
   }
+  // Each job's mechanic list is resolved once per render, not once per
+  // mechanic card.
+  const liveJobMechs = [];
+  const jobMechCount = new Map();
+  jobs.forEach(j => {
+    if (!isLiveJob(j)) return;
+    const ids = jobMechanicIds(j);
+    if (!ids.length) return;
+    liveJobMechs.push([j, ids]);
+    jobMechCount.set(j, ids.length);
+  });
+  const mechanicShare = j => jobTotal(j) / Math.max(1, jobMechCount.get(j) || jobMechanicIds(j).length);
   grid.innerHTML = liveMechanics.map(m => {
-    const myJobs    = jobs.filter(j => isLiveJob(j) && jobMechanicIds(j).includes(m.id));
+    const myJobs    = liveJobMechs.filter(([, ids]) => ids.includes(m.id)).map(([j]) => j);
     const active    = myJobs.filter(j => j.status !== 'done');
     const doneToday = myJobs.filter(j => j.status === 'done' && mechanicJobDate(j) === today());
     const donePeriod = myJobs.filter(j => j.status === 'done' && period.includes(mechanicJobDate(j)));
@@ -76,10 +88,10 @@ function renderMechanics() {
     const quickIncomePeriod = incomeEntries
       .map(normalizeIncomeEntry)
       .filter(entry => entry.kind === 'regular_income' && period.includes(entry.date) && entry.mechId === m.id);
-    const jobRevenue = doneToday.reduce((a, j) => a + (jobTotal(j) / Math.max(1, jobMechanicIds(j).length)), 0);
+    const jobRevenue = doneToday.reduce((a, j) => a + mechanicShare(j), 0);
     const quickIncomeRevenue = quickIncomeToday.reduce((sum, entry) => sum + (entry.amount || 0), 0);
     const rev = jobRevenue + quickIncomeRevenue;
-    const periodJobRevenue = donePeriod.reduce((a, j) => a + (jobTotal(j) / Math.max(1, jobMechanicIds(j).length)), 0);
+    const periodJobRevenue = donePeriod.reduce((a, j) => a + mechanicShare(j), 0);
     const periodIncomeRevenue = quickIncomePeriod.reduce((sum, entry) => sum + (entry.amount || 0), 0);
     const periodRev = periodJobRevenue + periodIncomeRevenue;
     const workCount = doneToday.length + quickIncomeToday.length;

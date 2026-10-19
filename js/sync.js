@@ -354,6 +354,11 @@ function renderSyncDiagnostics() {
     syncMeta.lastPullTiming?.tables ? ['Download By Table', syncTableTimingSummary(syncMeta.lastPullTiming.tables)] : null,
     syncMeta.lastPushTiming ? ['Last Upload Speed', `${syncTimingSummary(syncMeta.lastPushTiming)} · ${fmtDateTime(syncMeta.lastPushTiming.at)}`] : null,
     ['Pending Local Changes', syncMeta.pendingSync ? `Yes${syncMeta.pendingSince ? ' · since ' + fmtDateTime(syncMeta.pendingSince) : ''}` : 'No'],
+    ['Download Mode', deltaServerReady === true
+      ? 'Changes only (server clock)'
+      : deltaServerReady === false
+        ? 'Full table reads (run the fast-sync SQL to enable changes only)'
+        : 'Not checked yet'],
     ['Local Backup', syncMeta.localBackupAt ? fmtDateTime(syncMeta.localBackupAt) : '—'],
     deviceSaveError ? ['Device Save', `<span style="color:#e5484d;font-weight:600;">${deviceSaveError}</span>`] : null,
     syncMeta.lastSyncError && syncMeta.lastSyncError !== deviceSaveError ? ['Last Sync Error', syncMeta.lastSyncError] : null,
@@ -371,6 +376,15 @@ function renderSyncDiagnostics() {
       <span style="text-align:right;max-width:60%;word-break:break-word;">${value}</span>
     </div>
   `).join('');
+  if (cloudSessionActive) {
+    box.innerHTML += `
+      <div class="mrow" style="align-items:center;">
+        <span style="color:var(--mut);">Phone data looks wrong?</span>
+        <span style="text-align:right;">
+          <button class="btn btn-g btn-sm" onclick="repairCloudDownload()"${cloudSyncBusy ? ' disabled' : ''}>Repair: re-download everything</button>
+        </span>
+      </div>`;
+  }
   const junkCount = findImportReviewJunkJobs().length;
   if (junkCount) {
     box.innerHTML += `
@@ -1471,7 +1485,8 @@ async function mirrorPayloadToShadowTables(client, payload, session, options = {
   for (const config of tablesToMirror) {
     await yieldRecentRefreshChunk();
     const builtRows = config.buildRows(payloadForConfig(config), session, {
-      skipDerivedBalances: !!tableKeyFilter && IO_SAVER_SYNC,
+      // Balances are summed from local jobs: never from part of the history.
+      skipDerivedBalances: (!!tableKeyFilter && IO_SAVER_SYNC) || historyIncomplete(),
     });
     const deduped = dedupeShadowRows(builtRows);
     const expectedRows = deduped.rows;
@@ -1930,6 +1945,12 @@ function handleRealtimeShadowChange(config, payload, options = {}) {
 async function refreshRecentCloudChanges(windowMs = VISIBILITY_GAP_FILL_MS, options = {}) {
   if (recentRefreshBusy || !cloudSessionActive || cloudSyncBusy || !cloudClient) return false;
   if (typeof navigator !== 'undefined' && navigator.onLine === false) return false;
+  // Changes-only server: one cursor read covers any gap (deletes included,
+  // no 200-row cap), so the time-window sweep below isn't needed.
+  if (deltaServerReady && deltaCursorsReady(deltaPullConfigs(false))) {
+    const pulled = await pullGS({ quiet: true, allowEmpty: true, force: true });
+    return pulled === true;
+  }
   if (!beginRecentSyncWork()) return false;
   const since = new Date(Date.now() - (parseInt(windowMs, 10) || VISIBILITY_GAP_FILL_MS)).toISOString();
   recentRefreshBusy = true;
@@ -2199,14 +2220,74 @@ async function syncGS() {
 }
 
 // Read all 14 shadow tables and reconstruct a payload compatible with applyRemoteSnapshot
+// One cloud table row → the app record it mirrors. Shared by the full table
+// pull and the changes-only pull so both build records the same way.
+function shadowRowToRecord(config, row) {
+  const base = { ...(row?.record_data || {}) };
+  if (!row?.record_data) return null;
+  if (config.key === 'customers' && typeof isCustomerShapedRaw === 'function' && !isCustomerShapedRaw(base)) return null;
+  if (config.key === 'jobs') {
+    const mechIds = uniqStrings([].concat(row.mechanic_ids || []).map(value => String(value || '').trim()).filter(Boolean));
+    const mechNames = uniqStrings([].concat(row.mechanic_names || []).map(value => String(value || '').trim()).filter(Boolean));
+    if (String(row.customer_id || '').trim()) base.custId = String(row.customer_id || '').trim();
+    if (String(row.customer_name || '').trim()) base.cust = String(row.customer_name || '').trim();
+    if (String(row.phone || '').trim()) base.phone = String(row.phone || '').trim();
+    if (String(row.vehicle || '').trim()) base.veh = String(row.vehicle || '').trim();
+    if (String(row.registration_no || '').trim()) base.vno = String(row.registration_no || '').trim();
+    if (String(row.job_status || '').trim()) base.status = String(row.job_status || '').trim();
+    if (String(row.job_date || '').trim()) base.date = String(row.job_date || '').trim();
+    if (String(row.invoice_no || '').trim()) base.invoiceNo = String(row.invoice_no || '').trim().toUpperCase();
+    if (String(row.service_note || '').trim()) base.prob = String(row.service_note || '').trim();
+    if (String(row.remarks || '').trim()) base.notes = String(row.remarks || '').trim();
+    if (mechIds.length) {
+      base.mechIds = mechIds;
+      base.mechId = mechIds[0];
+      base.mechanicIds = mechIds;
+      base.mechanicId = mechIds[0];
+    }
+    if (mechNames.length) {
+      const label = mechNames.join(', ');
+      base.mech = label;
+      base.mechName = label;
+      base.mechanicName = label;
+      base.mechanic_names = mechNames;
+      base.mechanicNames = mechNames;
+    }
+  } else if (config.key === 'incomeEntries') {
+    if (String(row.entry_date || '').trim()) base.date = String(row.entry_date || '').trim();
+    if (String(row.income_kind || '').trim()) base.kind = String(row.income_kind || '').trim();
+    if (String(row.category || '').trim()) base.category = String(row.category || '').trim();
+    if (typeof row.amount !== 'undefined' && row.amount !== null && row.amount !== '') base.amount = row.amount;
+    if (String(row.method || '').trim()) base.method = String(row.method || '').trim();
+    if (String(row.invoice_no || '').trim()) base.invoiceNo = String(row.invoice_no || '').trim().toUpperCase();
+    if (String(row.note || '').trim()) {
+      base.note = String(row.note || '').trim();
+      base.description = base.description || base.note;
+    }
+    if (String(row.mechanic_id || '').trim()) {
+      base.mechId = String(row.mechanic_id || '').trim();
+      base.mechanicId = base.mechId;
+      base.mechanic_id = base.mechId;
+    }
+    if (String(row.mechanic_name || '').trim()) {
+      base.mechName = String(row.mechanic_name || '').trim();
+      base.mechanicName = base.mechName;
+      base.mechanic_name = base.mechName;
+    }
+  }
+  return base;
+}
+
 async function pullFromShadowTables(client, options = {}) {
   const payload = {};
   const localFallback = buildSyncPayload();
   const pullFailures = [];
   let newestRemoteUpdatedAt = '';
-  const pullTables = options.criticalOnly
-    ? SHADOW_PULL_TABLES.filter(config => SHADOW_PULL_PRIORITY.includes(config.key))
-    : SHADOW_PULL_TABLES;
+  const pullTables = Array.isArray(options.tableKeys)
+    ? SHADOW_PULL_TABLES.filter(config => options.tableKeys.includes(config.key))
+    : options.criticalOnly
+      ? SHADOW_PULL_TABLES.filter(config => SHADOW_PULL_PRIORITY.includes(config.key))
+      : SHADOW_PULL_TABLES;
   const tableTimings = {};
   for (const config of pullTables) {
     const rows = [];
@@ -2235,58 +2316,8 @@ async function pullFromShadowTables(client, options = {}) {
           if (rowUpdatedAt && (!newestRemoteUpdatedAt || Date.parse(rowUpdatedAt) > Date.parse(newestRemoteUpdatedAt))) {
             newestRemoteUpdatedAt = rowUpdatedAt;
           }
-          const base = { ...(row?.record_data || {}) };
-          if (!row?.record_data) return;
-          if (config.key === 'customers' && typeof isCustomerShapedRaw === 'function' && !isCustomerShapedRaw(base)) return;
-          if (config.key === 'jobs') {
-            const mechIds = uniqStrings([].concat(row.mechanic_ids || []).map(value => String(value || '').trim()).filter(Boolean));
-            const mechNames = uniqStrings([].concat(row.mechanic_names || []).map(value => String(value || '').trim()).filter(Boolean));
-            if (String(row.customer_id || '').trim()) base.custId = String(row.customer_id || '').trim();
-            if (String(row.customer_name || '').trim()) base.cust = String(row.customer_name || '').trim();
-            if (String(row.phone || '').trim()) base.phone = String(row.phone || '').trim();
-            if (String(row.vehicle || '').trim()) base.veh = String(row.vehicle || '').trim();
-            if (String(row.registration_no || '').trim()) base.vno = String(row.registration_no || '').trim();
-            if (String(row.job_status || '').trim()) base.status = String(row.job_status || '').trim();
-            if (String(row.job_date || '').trim()) base.date = String(row.job_date || '').trim();
-            if (String(row.invoice_no || '').trim()) base.invoiceNo = String(row.invoice_no || '').trim().toUpperCase();
-            if (String(row.service_note || '').trim()) base.prob = String(row.service_note || '').trim();
-            if (String(row.remarks || '').trim()) base.notes = String(row.remarks || '').trim();
-            if (mechIds.length) {
-              base.mechIds = mechIds;
-              base.mechId = mechIds[0];
-              base.mechanicIds = mechIds;
-              base.mechanicId = mechIds[0];
-            }
-            if (mechNames.length) {
-              const label = mechNames.join(', ');
-              base.mech = label;
-              base.mechName = label;
-              base.mechanicName = label;
-              base.mechanic_names = mechNames;
-              base.mechanicNames = mechNames;
-            }
-          } else if (config.key === 'incomeEntries') {
-            if (String(row.entry_date || '').trim()) base.date = String(row.entry_date || '').trim();
-            if (String(row.income_kind || '').trim()) base.kind = String(row.income_kind || '').trim();
-            if (String(row.category || '').trim()) base.category = String(row.category || '').trim();
-            if (typeof row.amount !== 'undefined' && row.amount !== null && row.amount !== '') base.amount = row.amount;
-            if (String(row.method || '').trim()) base.method = String(row.method || '').trim();
-            if (String(row.invoice_no || '').trim()) base.invoiceNo = String(row.invoice_no || '').trim().toUpperCase();
-            if (String(row.note || '').trim()) {
-              base.note = String(row.note || '').trim();
-              base.description = base.description || base.note;
-            }
-            if (String(row.mechanic_id || '').trim()) {
-              base.mechId = String(row.mechanic_id || '').trim();
-              base.mechanicId = base.mechId;
-              base.mechanic_id = base.mechId;
-            }
-            if (String(row.mechanic_name || '').trim()) {
-              base.mechName = String(row.mechanic_name || '').trim();
-              base.mechanicName = base.mechName;
-              base.mechanic_name = base.mechName;
-            }
-          }
+          const base = shadowRowToRecord(config, row);
+          if (!base) return;
           rows.push(base);
         });
         if (!data || data.length < SHADOW_BATCH_SIZE) break;
@@ -2336,6 +2367,408 @@ async function pullFromShadowTables(client, options = {}) {
   return payload;
 }
 
+// ─── Changes-only sync (docs/FAST_CLOUD_LOAD_PLAN_2026_10.md, Phase 2) ───
+// Needs jalasai_changes_since() from supabase/2026-10-fast-sync-phase1.sql.
+// Until that SQL is run the app keeps the old pull path unchanged.
+//   * The cursor is the SERVER's clock (server_updated_at), one per table, so
+//     an edit uploaded late by an offline phone, or by a phone with a wrong
+//     date, is still fetched.
+//   * Deleted rows come down too, so deletes reach every phone.
+//   * Only the changed records are merged into the local tables (same merge
+//     rules as a full pull); nothing is re-normalized or re-saved wholesale.
+const DELTA_SYNC_ENABLED = true;
+const DELTA_OVERLAP_MS = 2 * 60 * 1000;
+const DELTA_PAGE_LIMIT = 500;
+const DELTA_MAX_ROUNDS = 40;
+const DELTA_SERVER_CHECK_MS = 6 * 60 * 60 * 1000;
+let deltaServerReady = null;
+let deltaServerCheckedAt = 0;
+
+function isMissingRpcError(err) {
+  const raw = String(err?.message || err?.details || err?.code || err || '');
+  return err?.code === 'PGRST202' || err?.code === '42883' || /could not find the function|function .* does not exist/i.test(raw);
+}
+
+// Returns the server time when the function exists, '' otherwise.
+async function fetchDeltaServerTime(client) {
+  const { data, error } = await client.rpc('jalasai_changes_since', { p_cursors: {}, p_limit: 1 });
+  if (error) throw error;
+  return String(data?.server_time || '');
+}
+
+async function checkDeltaServer(client, options = {}) {
+  if (!DELTA_SYNC_ENABLED || !client) return false;
+  if (!options.force && deltaServerReady !== null && Date.now() - deltaServerCheckedAt < DELTA_SERVER_CHECK_MS) {
+    return deltaServerReady;
+  }
+  try {
+    deltaServerReady = !!(await fetchDeltaServerTime(client));
+  } catch (err) {
+    // Only "function doesn't exist" means the SQL isn't installed; a network
+    // error says nothing, so keep the previous answer.
+    if (isMissingRpcError(err)) deltaServerReady = false;
+    else if (deltaServerReady === null) return false;
+  }
+  deltaServerCheckedAt = Date.now();
+  return deltaServerReady;
+}
+
+function deltaPullConfigs(criticalOnly) {
+  return criticalOnly
+    ? SHADOW_PULL_TABLES.filter(config => SHADOW_PULL_PRIORITY.includes(config.key))
+    : SHADOW_PULL_TABLES;
+}
+
+function deltaCursorsReady(configs) {
+  const cursors = syncMeta.deltaCursors || {};
+  return configs.every(config => cursors[config.key] && cursors[config.key].at);
+}
+
+function deltaOverlapAt(at) {
+  const ms = Date.parse(at || '');
+  return Number.isFinite(ms) ? new Date(ms - DELTA_OVERLAP_MS).toISOString() : '';
+}
+
+function setDeltaCursors(keys, at) {
+  if (!at) return;
+  syncMeta.deltaCursors = { ...(syncMeta.deltaCursors || {}) };
+  keys.forEach(key => { syncMeta.deltaCursors[key] = { at }; });
+}
+
+// Fetches every row changed since each table's cursor. Returns null when a
+// table has more changes than DELTA_MAX_ROUNDS pages (a long-idle phone):
+// the caller then does a full pull instead.
+async function fetchChangesSince(client, configs) {
+  const byTable = new Map(configs.map(config => [config.table, config]));
+  const cursors = syncMeta.deltaCursors || {};
+  let pending = {};
+  configs.forEach(config => {
+    pending[config.table] = { at: deltaOverlapAt(cursors[config.key]?.at), id: '' };
+  });
+  const recordsByKey = {};
+  const tableTimings = {};
+  let requests = 0;
+  let serverTime = '';
+  for (let round = 0; round < DELTA_MAX_ROUNDS && Object.keys(pending).length; round += 1) {
+    const { data, error } = await client.rpc('jalasai_changes_since', { p_cursors: pending, p_limit: DELTA_PAGE_LIMIT });
+    if (error) throw error;
+    requests += 1;
+    if (!serverTime) serverTime = String(data?.server_time || '');
+    const nextPending = {};
+    Object.entries(data?.tables || {}).forEach(([table, info]) => {
+      const config = byTable.get(table);
+      if (!config) return;
+      const rows = Array.isArray(info?.rows) ? info.rows : [];
+      const list = recordsByKey[config.key] || (recordsByKey[config.key] = []);
+      rows.forEach(row => {
+        const record = shadowRowToRecord(config, row);
+        if (!record) return;
+        if (!record.id && row.id && config.key !== 'partsLog') record.id = row.id;
+        if (row.deleted_at) record.deletedAt = shadowTimestamp(row.deleted_at) || nowISO();
+        list.push(record);
+      });
+      const timing = tableTimings[config.key] || (tableTimings[config.key] = { rows: 0, pages: 0, ms: 0 });
+      timing.rows += rows.length;
+      timing.pages += 1;
+      const last = rows[rows.length - 1];
+      if (info?.has_more && last) nextPending[table] = { at: last.su, id: String(last.id || '') };
+    });
+    pending = nextPending;
+  }
+  if (Object.keys(pending).length) return null;
+  return { recordsByKey, tableTimings, requests, serverTime };
+}
+
+// Merges changed records into the local tables, one record at a time, with
+// the same rules as a full pull (deletes win, then the newer record stamp;
+// job payments are unioned). Returns the table keys that changed.
+const DELTA_APPLY_ORDER = Object.freeze(['mechanics', 'customers', 'jobs', 'stock', 'expenses', 'incomeEntries', 'stockMovements', 'partsLog', 'auditLog']);
+
+function applyChangedRecords(recordsByKey) {
+  const changed = [];
+  const localNewerSnapshot = !!syncMeta.pendingSync;
+  DELTA_APPLY_ORDER.forEach(key => {
+    const incoming = normaliseArray(recordsByKey[key]);
+    const access = typeof DATA_TABLE_ACCESS !== 'undefined' ? DATA_TABLE_ACCESS[key] : null;
+    if (!incoming.length || !access) return;
+    const list = normaliseArray(access.get());
+    const index = new Map();
+    list.forEach((item, i) => {
+      const id = access.key(item);
+      if (id) index.set(id, i);
+    });
+    let next = null;
+    const added = [];
+    incoming.forEach(remote => {
+      const id = access.key(remote);
+      if (!id) return;
+      const deleted = !!String(remote.deletedAt || '').trim();
+      const at = index.has(id) ? index.get(id) : -1;
+      if (access.events) {
+        if (at === -1 && !deleted) {
+          added.push(remote);
+          index.set(id, list.length + added.length - 1);
+        }
+        return;
+      }
+      if (at === -1) {
+        // A record deleted on the server that this phone never had: nothing to do.
+        if (deleted) return;
+        added.push(access.normalize ? access.normalize(remote) : remote);
+        index.set(id, list.length + added.length - 1);
+        return;
+      }
+      const local = at < list.length ? list[at] : added[at - list.length];
+      let winner = mergeByKey([remote], [local], access.key, access.normalize, { preferLocal: false, localNewerSnapshot })[0];
+      if (key === 'jobs' && winner) {
+        winner = normalizeJob(applyJobPaymentUnion([winner], buildJobPaymentUnionIndex([remote], [local]))[0]);
+      }
+      if (!winner || shadowStableStringify(winner) === shadowStableStringify(local)) return;
+      if (at < list.length) {
+        if (!next) next = list.slice();
+        next[at] = winner;
+      } else {
+        added[at - list.length] = winner;
+      }
+    });
+    if (!next && !added.length) return;
+    const base = next || list.slice();
+    // New jobs go first (the app keeps jobs newest-first); other tables append.
+    access.set(key === 'jobs' ? [...added, ...base] : [...base, ...added]);
+    changed.push(key);
+  });
+  return changed;
+}
+
+async function pullChangesOnly(client, options = {}) {
+  const configs = deltaPullConfigs(options.criticalOnly);
+  const fetched = await fetchChangesSince(client, configs);
+  if (!fetched) return { tooMany: true };
+  const changedKeys = applyChangedRecords(fetched.recordsByKey);
+  if (changedKeys.length) {
+    saveAll({ preserveUpdatedAt: true, skipSync: true, domains: changedKeys });
+    const pages = new Set();
+    REALTIME_SHADOW_TABLES.forEach(config => {
+      if (changedKeys.includes(config.key)) (config.pages || []).forEach(page => pages.add(page));
+    });
+    if (changedKeys.includes('stockMovements') || changedKeys.includes('partsLog')) pages.add('stock');
+    refreshRealtimePagesBatch(changedKeys, [...pages]);
+  }
+  // Every table read to the end: its cursor moves to the server time of this
+  // read (the overlap is subtracted when it is used next).
+  setDeltaCursors(configs.map(config => config.key), fetched.serverTime);
+  syncMeta.lastPulledAt = nowISO();
+  syncMeta.lastSyncError = '';
+  const rows = Object.values(fetched.tableTimings).reduce((sum, t) => sum + (t.rows || 0), 0);
+  syncMeta.lastMergeSummary = changedKeys.length ? `Updated ${changedKeys.join(', ')}` : '';
+  try { localStorage.setItem(SK.syncMeta, JSON.stringify(syncMeta)); } catch (_) {}
+  return { changedKeys, rows, requests: fetched.requests, tableTimings: fetched.tableTimings };
+}
+
+// Sync diagnostics "Repair": the old full re-download, for when a phone's
+// copy looks wrong.
+async function repairCloudDownload() {
+  if (!confirm('Re-download everything from the cloud? This can take a while on mobile data. Changes waiting on this phone are kept.')) return;
+  const hadPending = !!syncMeta.pendingSync;
+  const pulled = await pullGS({ quiet: false, allowEmpty: true, force: true, full: true, repair: true, replaceLocal: !hadPending });
+  if (pulled === true && hadPending) queueAutoSync();
+}
+
+// ─── Newest-first loading for a fresh phone (FAST_CLOUD_LOAD_PLAN Phase 4) ───
+// A phone with no invoices gets the first screen in one go: every open job,
+// invoices from this month (or the last 30 days, whichever is longer),
+// customers, mechanics and stock. Older invoices then download in the
+// background, newest first, 500 at a time, and resume after a restart.
+// While that runs (syncMeta.history.complete === false):
+//   * the weekly full upload and the customer balance columns wait, so a
+//     phone with part of the history never uploads wrong balances;
+//   * the customer-linking maintenance waits (data.js);
+//   * invoice header totals and the next invoice number use server values.
+const HISTORY_RECENT_DAYS = 30;
+const HISTORY_PAGE_LIMIT = 500;
+const HISTORY_SAVE_EVERY_PAGES = 4;
+const HISTORY_FIRST_TABLES = Object.freeze(['customers', 'mechanics', 'stock']);
+const HISTORY_LATER_TABLES = Object.freeze(['expenses', 'incomeEntries', 'stockMovements', 'partsLog', 'auditLog']);
+let historyBackfillRunning = false;
+let historyBackfillTimer = null;
+
+function historyIncomplete() {
+  return !!(syncMeta && syncMeta.history && syncMeta.history.complete === false);
+}
+
+function historyRecentSince() {
+  const monthStart = `${today().slice(0, 8)}01`;
+  const recent = businessDate(-HISTORY_RECENT_DAYS);
+  return monthStart < recent ? monthStart : recent;
+}
+
+function jobsShadowConfig() {
+  return SHADOW_SYNC_TABLES.find(config => config.key === 'jobs');
+}
+
+function persistSyncMeta() {
+  try { localStorage.setItem(SK.syncMeta, JSON.stringify(syncMeta)); } catch (_) {}
+}
+
+async function refreshServerTotals(client) {
+  try {
+    const [totals, maxNo] = await Promise.all([
+      client.rpc('jalasai_invoice_totals'),
+      client.rpc('jalasai_max_invoice_no'),
+    ]);
+    const row = Array.isArray(totals?.data) ? totals.data[0] : totals?.data;
+    if (totals?.error || maxNo?.error) return;
+    syncMeta.serverTotals = {
+      at: nowISO(),
+      invoiceCount: Number(row?.invoice_count || 0),
+      billed: Number(row?.billed || 0),
+      collected: Number(row?.collected || 0),
+      netDue: Number(row?.net_due || 0),
+      maxInvoiceNo: Number(maxNo?.data || 0),
+    };
+  } catch (err) {
+    console.warn('server totals unavailable', err);
+  }
+}
+
+// First screen for a fresh phone. Returns the pull summary for pullGS.
+async function loadNewestFirst(client) {
+  const serverTime = await fetchDeltaServerTime(client);
+  const since = historyRecentSince();
+  const { data: recentRows, error } = await client.rpc('jalasai_recent_jobs', { p_since: since });
+  if (error) throw error;
+  const jobsConfig = jobsShadowConfig();
+  const recentJobs = normaliseArray(recentRows).map(row => shadowRowToRecord(jobsConfig, row)).filter(Boolean);
+  const first = await pullFromShadowTables(client, { tableKeys: [...HISTORY_FIRST_TABLES] });
+  const firstFailed = first?.meta?.partialPullFailures || [];
+  const changed = applyChangedRecords({
+    jobs: recentJobs,
+    customers: firstFailed.includes('customers') ? [] : first.customers,
+    mechanics: firstFailed.includes('mechanics') ? [] : first.mechanics,
+    stock: firstFailed.includes('stock') ? [] : first.stock,
+  });
+  await refreshServerTotals(client);
+  syncMeta.history = {
+    complete: false,
+    startedAt: nowISO(),
+    jobsDone: false,
+    jobsBefore: { date: since, id: '' },
+    laterDone: false,
+    loadedInvoices: recentJobs.filter(job => job.status === 'done').length,
+  };
+  // Changes made from now on arrive through the changes-only pull; anything
+  // older comes from the background history download.
+  setDeltaCursors(SHADOW_PULL_TABLES.map(config => config.key), serverTime);
+  syncMeta.lastPulledAt = nowISO();
+  syncMeta.lastSyncError = '';
+  if (changed.length) saveAll({ preserveUpdatedAt: true, skipSync: true, domains: changed });
+  persistSyncMeta();
+  const pages = new Set(['jobs', 'invoices', 'customers', 'stock', 'reminders', 'reports', 'home']);
+  refreshRealtimePagesBatch(changed, [...pages]);
+  scheduleHistoryBackfill(1500);
+  const firstTimings = first?.meta?.tableTimings || {};
+  return {
+    rows: recentJobs.length + Object.values(firstTimings).reduce((sum, t) => sum + (t.rows || 0), 0),
+    requests: 3 + Object.values(firstTimings).reduce((sum, t) => sum + (t.pages || 0), 0),
+    tableTimings: { jobs: { rows: recentJobs.length, pages: 1, ms: 0 }, ...firstTimings },
+  };
+}
+
+function scheduleHistoryBackfill(delayMs = 2000) {
+  if (!historyIncomplete()) return;
+  clearTimeout(historyBackfillTimer);
+  historyBackfillTimer = setTimeout(() => {
+    historyBackfillTimer = null;
+    runHistoryBackfill().catch(err => console.warn('history download paused', err));
+  }, delayMs);
+}
+
+function historyBackfillYield() {
+  return new Promise(resolve => {
+    if (typeof requestIdleCallback === 'function') requestIdleCallback(() => resolve(), { timeout: 400 });
+    else setTimeout(resolve, 30);
+  });
+}
+
+async function runHistoryBackfill() {
+  if (historyBackfillRunning || !historyIncomplete() || !cloudClient || !cloudSessionActive) return;
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
+  historyBackfillRunning = true;
+  const client = cloudClient;
+  const jobsConfig = jobsShadowConfig();
+  try {
+    // Older invoices, newest first. The saved cursor only moves after the
+    // records it covers are saved on the phone, so a restart resumes without
+    // gaps (and re-reading a page is harmless).
+    let cursor = { ...(syncMeta.history.jobsBefore || { date: historyRecentSince(), id: '' }) };
+    let pagesSinceSave = 0;
+    let loadedSinceSave = 0;
+    while (!syncMeta.history.jobsDone) {
+      if (!cloudSessionActive || (typeof navigator !== 'undefined' && navigator.onLine === false)) return;
+      const { data, error } = await client.rpc('jalasai_jobs_before', { p_date: cursor.date, p_id: cursor.id, p_limit: HISTORY_PAGE_LIMIT });
+      if (error) throw error;
+      const rows = normaliseArray(data);
+      const records = rows.map(row => shadowRowToRecord(jobsConfig, row)).filter(Boolean);
+      if (records.length) applyChangedRecords({ jobs: records });
+      loadedSinceSave += records.length;
+      pagesSinceSave += 1;
+      const last = rows[rows.length - 1];
+      const finished = rows.length < HISTORY_PAGE_LIMIT || !last;
+      if (last) cursor = { date: String(last.job_date || '').slice(0, 10), id: String(last.id || '') };
+      if (finished || pagesSinceSave >= HISTORY_SAVE_EVERY_PAGES) {
+        saveAll({ preserveUpdatedAt: true, skipSync: true, domains: ['jobs'] });
+        if (typeof whenTableSavesSettled === 'function') await whenTableSavesSettled();
+        syncMeta.history.jobsBefore = cursor;
+        syncMeta.history.loadedInvoices = (syncMeta.history.loadedInvoices || 0) + loadedSinceSave;
+        if (finished) syncMeta.history.jobsDone = true;
+        persistSyncMeta();
+        pagesSinceSave = 0;
+        loadedSinceSave = 0;
+        refreshRealtimePagesBatch(['jobs'], ['invoices', 'customers', 'reminders', 'reports']);
+      }
+      await historyBackfillYield();
+    }
+    if (!syncMeta.history.laterDone) {
+      const later = await pullFromShadowTables(client, { tableKeys: [...HISTORY_LATER_TABLES] });
+      const failed = later?.meta?.partialPullFailures || [];
+      const records = {};
+      HISTORY_LATER_TABLES.forEach(key => { if (!failed.includes(key)) records[key] = later[key]; });
+      const changed = applyChangedRecords(records);
+      if (changed.length) {
+        saveAll({ preserveUpdatedAt: true, skipSync: true, domains: changed });
+        if (typeof whenTableSavesSettled === 'function') await whenTableSavesSettled();
+      }
+      if (failed.length) {
+        persistSyncMeta();
+        scheduleHistoryBackfill(60000);
+        return;
+      }
+      syncMeta.history.laterDone = true;
+    }
+    syncMeta.history.complete = true;
+    syncMeta.history.completedAt = nowISO();
+    persistSyncMeta();
+    markDataChanged('history-complete');
+    if (typeof scheduleDataMaintenanceCleanup === 'function') scheduleDataMaintenanceCleanup({ delayMs: 5000, reason: 'history-complete' });
+    refreshRealtimePagesBatch(['jobs', 'expenses', 'incomeEntries'], ['jobs', 'invoices', 'customers', 'reminders', 'reports', 'expenses', 'income', 'mechanics', 'home']);
+    updateGSStatus('All older invoices downloaded.');
+  } catch (err) {
+    console.warn('history download paused; will resume', err);
+    scheduleHistoryBackfill(30000);
+  } finally {
+    historyBackfillRunning = false;
+  }
+}
+
+// Short status for screens that total all history while it's still loading.
+function historyLoadingNoteHtml() {
+  if (!historyIncomplete()) return '';
+  const loaded = Number(syncMeta.history?.loadedInvoices || 0);
+  const total = Number(syncMeta.serverTotals?.invoiceCount || 0);
+  const progress = total ? ` ${loaded.toLocaleString('en-IN')} / ${total.toLocaleString('en-IN')}` : '';
+  return `<span class="history-loading-note" title="Older invoices are still downloading in the background. Totals that cover all history update when it finishes.">Loading older invoices…${progress}</span>`;
+}
+
 async function pullGS(options = {}) {
   if (CLOUD_SYNC_DISABLED) return false;
   if (!canUseCloudConfig() || cloudSyncBusy) return false;
@@ -2365,6 +2798,49 @@ async function pullGS(options = {}) {
     renderSyncDiagnostics();
   };
   try {
+    // Changes-only pull when the server supports it and this phone has
+    // cursors for every table it needs. Sync Now uses it too; a full
+    // re-download is "Repair" in Sync diagnostics (options.full).
+    const deltaReady = await checkDeltaServer(client);
+    const deltaConfigs = deltaPullConfigs(options.criticalOnly);
+    // A phone with no invoices (new, or its storage was cleared): first
+    // screen in one go, older invoices in the background. Repair still does
+    // the old full download.
+    if (deltaReady && !options.repair && !normaliseArray(jobs).some(isLiveJob)) {
+      timing.mode = 'Newest first (fresh phone)';
+      const first = await loadNewestFirst(client);
+      timing.fetchMs = Math.round(syncNowMs() - pullStartedAt);
+      timing.rows = first.rows;
+      timing.requests = first.requests;
+      timing.tables = first.tableTimings;
+      finishTiming('ok');
+      updateGSStatus('Recent data ready. Older invoices are downloading in the background.');
+      if (!options.quiet) toast('Recent data ready — older invoices loading in background');
+      return true;
+    }
+    if (deltaReady && options.full !== true && deltaCursorsReady(deltaConfigs)) {
+      timing.mode = `Changes only${options.criticalOnly ? ' (main tables)' : ' (all tables)'}`;
+      const delta = await pullChangesOnly(client, { criticalOnly: options.criticalOnly });
+      if (!delta.tooMany) {
+        timing.fetchMs = Math.round(syncNowMs() - pullStartedAt);
+        timing.rows = delta.rows;
+        timing.requests = delta.requests;
+        timing.tables = delta.tableTimings;
+        finishTiming('ok');
+        updateGSStatus(delta.changedKeys.length ? 'Pulled latest changes from cloud.' : 'Up to date with cloud.');
+        if (!options.quiet) toast(delta.changedKeys.length ? 'Pulled latest changes from cloud' : 'Up to date with cloud');
+        return true;
+      }
+      // Too many changes since this phone last synced: full download below.
+      timing.mode = 'Full (too many changes)';
+    }
+    // Server clock at the start of a full pull: once applied, every table's
+    // cursor starts here (rows changed during the pull are re-read later).
+    let deltaStartAt = '';
+    if (deltaReady) {
+      try { deltaStartAt = await fetchDeltaServerTime(client); } catch (_) { deltaStartAt = ''; }
+    }
+
     // Primary: read from shadow tables
     let remoteData = null;
     let remoteStamp = 0;
@@ -2373,6 +2849,7 @@ async function pullGS(options = {}) {
     const isFullPull =
       options?.full === true ||
       options?.manual === true ||
+      deltaReady ||
       !lastPullAt;
     const pullOptions = isFullPull
       ? { criticalOnly: !!options.criticalOnly }
@@ -2410,7 +2887,10 @@ async function pullGS(options = {}) {
     const localMaxInvoice = maxInvoiceNumberFromJobs(jobs);
     const cloudHasNewerInvoices = remoteMaxInvoice > localMaxInvoice;
     const cloudHasMissingInvoices = hasRemoteInvoicesMissingLocally(remoteData?.jobs, jobs);
-    if (!options.force && localStamp && remoteStamp && localStamp > remoteStamp && !cloudHasNewerInvoices && !cloudHasMissingInvoices) {
+    // (Not on a changes-only server: skipping the apply would also skip
+    // setting the cursors, and the per-record merge already keeps newer
+    // local records.)
+    if (!deltaReady && !options.force && localStamp && remoteStamp && localStamp > remoteStamp && !cloudHasNewerInvoices && !cloudHasMissingInvoices) {
       updateGSStatus('Local data is newer than cloud. A push is ready.');
       finishTiming('local newer');
       return 'local-newer';
@@ -2429,6 +2909,25 @@ async function pullGS(options = {}) {
     applyRemoteSnapshot(remoteData, remoteData?.meta?.updatedAt || nowISO(), {
       replaceLocal: requestedReplaceLocal && safeToReplaceLocal,
     });
+    if (deltaStartAt) {
+      const failed = remoteData?.meta?.partialPullFailures || [];
+      setDeltaCursors(Object.keys(remoteData?.meta?.tableTimings || {}).filter(key => !failed.includes(key)), deltaStartAt);
+      try { localStorage.setItem(SK.syncMeta, JSON.stringify(syncMeta)); } catch (_) {}
+    }
+    // A full download also completes a background history download.
+    if (historyIncomplete() && isFullPull) {
+      const failed = remoteData?.meta?.partialPullFailures || [];
+      if (!failed.includes('jobs')) syncMeta.history.jobsDone = true;
+      if (!options.criticalOnly && !partialPull) {
+        syncMeta.history.laterDone = true;
+        syncMeta.history.complete = true;
+        syncMeta.history.completedAt = nowISO();
+        if (typeof scheduleDataMaintenanceCleanup === 'function') scheduleDataMaintenanceCleanup({ delayMs: 5000, reason: 'history-complete' });
+      } else {
+        scheduleHistoryBackfill(3000);
+      }
+      persistSyncMeta();
+    }
     timing.applyMs = Math.round(syncNowMs() - applyStartedAt);
     finishTiming('ok');
     updateGSStatus('Pulled latest data from cloud.');
@@ -2532,7 +3031,10 @@ async function pushGS(options = {}) {
       || syncAgeMs(syncMeta.shadowLastFullMirrorAt) > FULL_MIRROR_REFRESH_MS;
     const scopedAutoPush = !options.fullMirror
       && Array.isArray(options.tableKeys) && options.tableKeys.length > 0;
-    const runFullMirror = fullMirrorDue && !scopedAutoPush;
+    // Not while older invoices are still downloading: the full mirror compares
+    // every table with the cloud and computes customer balances from local
+    // jobs. It runs once the history download finishes.
+    const runFullMirror = fullMirrorDue && !scopedAutoPush && !historyIncomplete();
     pushTiming.mode = runFullMirror
       ? 'Full check of all tables'
       : scopedAutoPush ? `Recent changes (${options.tableKeys.join(', ')})` : 'Recent changes (all tables)';
@@ -2687,6 +3189,7 @@ async function initGSSync() {
         }
       }
       startRealtimeSync(cloudClient);
+      if (historyIncomplete()) scheduleHistoryBackfill(3000);
       if (localDataReady && !syncMeta.pendingSync && !localJobsMissing) {
         setTimeout(() => {
           refreshRecentCloudChanges(gapFillWindowMs(), { quiet: true });
@@ -2725,6 +3228,7 @@ async function initGSSync() {
         : 'Internet restored.');
       if (cloudClient && cloudSessionActive) startRealtimeSync(cloudClient);
       if (syncMeta.pendingSync) queueAutoSync();
+      if (historyIncomplete()) scheduleHistoryBackfill(2000);
     });
     addOnceListener(window, 'offline', 'syncOffline', () => {
       realtimePaused('Sync paused');

@@ -1748,19 +1748,23 @@ function renderInvoices() {
     return invoiceSortDir * (invoiceSortValue(a) - invoiceSortValue(b));
   });
   const allDone    = jobs.filter(j => isLiveJob(j) && j.status === 'done');
-  const totAmt     = allDone.reduce((s,j) => s + jobTotal(j), 0);
-  const totPaid    = allDone.reduce((s,j) => s + jobPaid(j), 0);
+  // All-time totals: from the server while older invoices are still
+  // downloading (js/sync.js history download), local otherwise.
+  const serverTotals = typeof historyIncomplete === 'function' && historyIncomplete() ? syncMeta.serverTotals : null;
+  const invCount   = serverTotals ? serverTotals.invoiceCount : allDone.length;
+  const totAmt     = serverTotals ? serverTotals.billed : allDone.reduce((s,j) => s + jobTotal(j), 0);
+  const totPaid    = serverTotals ? serverTotals.collected : allDone.reduce((s,j) => s + jobPaid(j), 0);
   const totBalance = totAmt - totPaid;
-  const todayCollected = allRevenueEntries()
-    .filter(entry => entry.date === today())
+  const todayCollected = revenueEntriesForDate(today())
     .reduce((sum, entry) => sum + (entry.amount || 0), 0);
   const invStats = document.getElementById('inv-stats');
   if (invStats) {
     invStats.innerHTML = isAdminUser()
-      ? `${allDone.length} invoices · <span style="color:var(--acc)">${fmtMoney(totAmt)}</span>` +
+      ? `${invCount} invoices · <span style="color:var(--acc)">${fmtMoney(totAmt)}</span>` +
         ` · <span style="color:#00c896">Collected ${fmtMoney(totPaid)}</span>` +
         ` · <span style="color:#7dd3fc">Today ${fmtMoney(todayCollected)}</span>` +
-        (totBalance > 0 ? ` · <span style="color:var(--dan)">Owe ${fmtMoney(totBalance)}</span>` : totBalance < 0 ? ` · <span style="color:#00c896">Advance ${fmtMoney(Math.abs(totBalance))}</span>` : ` · <span style="color:var(--mut)">Clear</span>`)
+        (totBalance > 0 ? ` · <span style="color:var(--dan)">Owe ${fmtMoney(totBalance)}</span>` : totBalance < 0 ? ` · <span style="color:#00c896">Advance ${fmtMoney(Math.abs(totBalance))}</span>` : ` · <span style="color:var(--mut)">Clear</span>`) +
+        (typeof historyLoadingNoteHtml === 'function' ? historyLoadingNoteHtml() : '')
       : '';
   }
 

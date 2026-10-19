@@ -5,16 +5,32 @@
 // ─── Business date helpers must be defined first (used in seeds below) ─
 const BUSINESS_TIMEZONE = 'Asia/Kolkata';
 
+// Creating an Intl.DateTimeFormat costs ~25 µs. Screens call today() once
+// per invoice (isLiveJob, stats, reports), so at 1 lakh invoices building a
+// formatter on every call alone took 2.5 s per Invoices render. Reuse one
+// formatter and the date string for the current second; the second-level
+// bucket keeps the midnight rollover exact to within a second.
+let businessDateFormatter = null;
+let businessDateCache = { bucket: -1, value: '' };
+
 function businessDate(offsetDays = 0) {
-  const base = new Date();
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: BUSINESS_TIMEZONE,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).formatToParts(base);
-  const lookup = Object.fromEntries(parts.map(part => [part.type, part.value]));
-  const istDate = `${lookup.year}-${lookup.month}-${lookup.day}`;
+  const nowMs = Date.now();
+  const bucket = Math.floor(nowMs / 1000);
+  let istDate = businessDateCache.bucket === bucket ? businessDateCache.value : '';
+  if (!istDate) {
+    if (!businessDateFormatter) {
+      businessDateFormatter = new Intl.DateTimeFormat('en-CA', {
+        timeZone: BUSINESS_TIMEZONE,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+      });
+    }
+    const parts = businessDateFormatter.formatToParts(new Date(nowMs));
+    const lookup = Object.fromEntries(parts.map(part => [part.type, part.value]));
+    istDate = `${lookup.year}-${lookup.month}-${lookup.day}`;
+    businessDateCache = { bucket, value: istDate };
+  }
   if (!offsetDays) return istDate;
   const shifted = new Date(`${istDate}T00:00:00Z`);
   shifted.setUTCDate(shifted.getUTCDate() + (parseInt(offsetDays, 10) || 0));
@@ -658,12 +674,21 @@ function queueTableSave(key) {
   Promise.resolve().then(flushTableSaves);
 }
 
+// The newest flush, so callers can wait until a save has really landed on
+// the device (the background history download records its progress only
+// after the records it fetched are saved).
+let lastTableSaveFlush = Promise.resolve();
+
+function whenTableSavesSettled() {
+  return Promise.resolve().then(() => lastTableSaveFlush);
+}
+
 function flushTableSaves() {
   tableSaveFlushQueued = false;
   const keys = [...pendingTableSaves];
   pendingTableSaves.clear();
-  if (!keys.length) return Promise.resolve();
-  return writeDataTablesToIdb(keys).then(() => {
+  if (!keys.length) return lastTableSaveFlush;
+  lastTableSaveFlush = writeDataTablesToIdb(keys).then(() => {
     keys.forEach(key => {
       // The localStorage copy is now stale and only eats Safari's 5 MB.
       try { localStorage.removeItem(SK[key]); } catch (_) {}
@@ -680,6 +705,7 @@ function flushTableSaves() {
       noteTableSaveResult(key, !!ok, ok ? null : err);
     });
   });
+  return lastTableSaveFlush;
 }
 
 // Union of two copies of a table without losing any record: newer record
@@ -940,6 +966,10 @@ function runDataMaintenanceCleanup(options = {}) {
   const markDone = options.markDone !== false;
   if (!force && dataMaintenanceCleanupDone()) return { skipped: true };
   if (window.__JALASAI_DATA_MAINTENANCE_RUNNING) return { skipped: true };
+  // The repair passes link and merge customers across ALL jobs. While older
+  // invoices are still downloading they would work from part of the history,
+  // so they wait; the history download schedules them when it finishes.
+  if (typeof historyIncomplete === 'function' && historyIncomplete()) return { skipped: true, waiting: 'history' };
   window.__JALASAI_DATA_MAINTENANCE_RUNNING = true;
   const nowMs = () => (typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now());
   const started = nowMs();
@@ -1021,6 +1051,7 @@ function suggestedNextInvoiceNo() {
     window.__JALASAI_DATA_VERSION || 0,
     Array.isArray(jobs) ? jobs.length : 0,
     invoiceCtr || 1,
+    syncMeta?.serverTotals?.maxInvoiceNo || 0,
   ].join('|');
   if (suggestedNextInvoiceNoCache.signature === signature) {
     return suggestedNextInvoiceNoCache.value;
@@ -1039,6 +1070,16 @@ function suggestedNextInvoiceNo() {
       bestWidth = invoiceNo.length || bestWidth;
     }
   });
+  // While older invoices are still downloading, the server's highest number
+  // guards the suggestion too (newest invoices load first, so this rarely
+  // differs).
+  const serverMax = typeof historyIncomplete === 'function' && historyIncomplete()
+    ? parseInt(syncMeta?.serverTotals?.maxInvoiceNo || 0, 10) || 0
+    : 0;
+  if (serverMax > bestNum) {
+    bestNum = serverMax;
+    bestWidth = Math.max(bestWidth, String(serverMax).length);
+  }
   const value = bestNum > 0
     ? String(bestNum + 1).padStart(bestWidth, '0')
     : String(Math.max(1, parseInt(invoiceCtr || 1, 10) || 1)).padStart(4, '0');
@@ -1192,11 +1233,16 @@ function normalizeJob(j) {
     job.invoiceNo,
     job.lane ? jobLaneLabel(job.lane) : '',
   ]);
+  // Derived like _searchText ('_' keys never sync): screens call isLiveJob
+  // several times per invoice per render, and the pollution check below is
+  // regex-heavy (~1 s per render at 1 lakh invoices).
+  job._nonWorkshop = isNonWorkshopJobRecord(job);
   return job;
 }
 
 function isLiveJob(job) {
-  return !!job && !String(job.deletedAt || '').trim() && !isNonWorkshopJobRecord(job);
+  if (!job || String(job.deletedAt || '').trim()) return false;
+  return typeof job._nonWorkshop === 'boolean' ? !job._nonWorkshop : !isNonWorkshopJobRecord(job);
 }
 
 function hasJobFieldValue(job, fields = []) {
@@ -2513,6 +2559,10 @@ function customerAdvanceAmount(custId, options = {}) {
 function jobPaymentEntries(j) {
   if (!j || !isLiveJob(j) || j.status !== 'done') return [];
   const payments = Array.isArray(j.payments) ? j.payments.filter(p => (parseFloat(p.amount || 0) || 0) > 0) : [];
+  // Resolved once per job, not twice per payment entry.
+  const mechIds = jobMechanicIds(j);
+  const mechId = mechIds[0] || '';
+  const mechName = mechanicLabel(mechIds);
   if (payments.length) {
     return payments.map(p => ({
       id: p.id || `${j.id}-pay`,
@@ -2528,8 +2578,8 @@ function jobPaymentEntries(j) {
       customer: j.cust || '',
       phone: j.phone || '',
       invoiceNo: j.invoiceNo || '',
-      mechId: jobMechanicIds(j)[0] || '',
-      mechName: mechanicLabel(jobMechanicIds(j)),
+      mechId,
+      mechName,
     }));
   }
   if (jobPaid(j) > 0) {
@@ -2547,16 +2597,54 @@ function jobPaymentEntries(j) {
       customer: j.cust || '',
       phone: j.phone || '',
       invoiceNo: j.invoiceNo || '',
-      mechId: jobMechanicIds(j)[0] || '',
-      mechName: mechanicLabel(jobMechanicIds(j)),
+      mechId,
+      mechName,
     }];
   }
   return [];
 }
 
+// Every payment and income entry ever recorded. Built once per data version
+// (any save bumps it; adding or removing records changes the lengths, which
+// covers the instant-invoice path that renders before its save runs).
+let allRevenueEntriesCache = { key: '', value: [] };
+
+function revenueCacheKey() {
+  return [window.__JALASAI_DATA_VERSION || 0, jobs.length, (incomeEntries || []).length].join('|');
+}
+
 function allRevenueEntries() {
-  return jobs.flatMap(jobPaymentEntries).concat(
-    (incomeEntries || []).map(entry => {
+  const key = revenueCacheKey();
+  if (allRevenueEntriesCache.key === key && allRevenueEntriesCache.jobs === jobs && allRevenueEntriesCache.income === incomeEntries) {
+    return allRevenueEntriesCache.value;
+  }
+  const value = buildRevenueEntries(jobs, incomeEntries);
+  allRevenueEntriesCache = { key, jobs, income: incomeEntries, value };
+  return value;
+}
+
+// Revenue for one business date without building the whole history: only
+// jobs that can have a payment on that date are expanded. Same entries, same
+// order as allRevenueEntries().filter(e => e.date === date).
+function revenueEntriesForDate(date = today()) {
+  const day = String(date || '');
+  const candidates = jobs.filter(j => {
+    if (!j || j.status !== 'done') return false;
+    const doneDay = String(j.doneAt || '').slice(0, 10);
+    // jobPaymentEntries falls back to today() when a job has no dates.
+    if (!doneDay && !j.date) return true;
+    if (doneDay === day || j.date === day) return true;
+    return Array.isArray(j.payments) && j.payments.some(p => String(p?.at || '').slice(0, 10) === day);
+  });
+  return buildRevenueEntries(candidates, (incomeEntries || []).filter(entry => {
+    const entryDay = String(entry?.date || entry?.timestamp || '').slice(0, 10);
+    return !entryDay || entryDay === day;
+  })).filter(entry => entry.date === day);
+}
+
+function buildRevenueEntries(jobList, incomeList) {
+  return jobList.flatMap(jobPaymentEntries).concat(
+    (incomeList || []).map(entry => {
       const item = normalizeIncomeEntry(entry);
       if (!isLiveIncomeEntry(item)) return null;
       return {

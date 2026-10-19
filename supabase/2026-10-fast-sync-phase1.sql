@@ -69,7 +69,7 @@ $$;
 
 -- ── B. Row history (nothing overwritten is ever unrecoverable) ──
 -- Every time a shadow row's content or delete state changes, the OLD row is
--- copied here. Identical re-uploads (same source_hash, same deleted_at) are
+-- copied here. Identical re-uploads (same hash, record_data and deleted_at) are
 -- skipped so routine syncs don't bloat the table.
 
 create table if not exists public.garage_row_history (
@@ -97,6 +97,7 @@ as $$
 begin
   if tg_op = 'UPDATE'
      and old.source_hash is not distinct from new.source_hash
+     and old.record_data is not distinct from new.record_data
      and old.deleted_at is not distinct from new.deleted_at then
     return new;
   end if;
@@ -218,6 +219,136 @@ group by customer_id;
 grant execute on function public.jalasai_invoice_totals() to authenticated;
 grant execute on function public.jalasai_max_invoice_no() to authenticated;
 grant select on public.garage_customer_balances to authenticated;
+
+
+-- ── E. Changes since a cursor (one request for every table) ────
+-- Input:  { "garage_jobs": {"at": "<su>", "id": "<id>"}, "garage_customers": {...}, ... }
+--         Only the tables named are read. "at" is the "su" string of the last
+--         row this phone applied (microseconds, UTC); leave both empty for
+--         "from the beginning". The phone subtracts a 2-minute overlap on the
+--         first page so rows from transactions that committed out of order
+--         are not missed; re-applying a row is harmless.
+-- Output: { "tables": { "garage_jobs": { "rows": [...], "has_more": bool } },
+--           "server_time": "<su>" }
+--         Rows include deleted ones (deleted_at set), ordered by
+--         (server_updated_at, id), at most p_limit per table per call.
+-- Keyset paging on (server_updated_at, id) uses the index from section A.
+
+create or replace function public.jalasai_changes_since(p_cursors jsonb, p_limit int default 500)
+returns jsonb
+language plpgsql
+stable
+security invoker
+set search_path = public
+as $$
+declare
+  allowed text[] := array[
+    'garage_customers', 'garage_mechanics', 'garage_jobs', 'garage_stock_items',
+    'garage_expenses', 'garage_income_entries', 'garage_parts_log', 'garage_audit_log',
+    'garage_stock_movements'
+  ];
+  -- Same extra columns the app's table pull reads (js/sync.js pullFromShadowTables).
+  extra jsonb := jsonb_build_object(
+    'garage_jobs', 'customer_id, customer_name, phone, vehicle, registration_no, job_status, job_date, invoice_no, mechanic_ids, mechanic_names, service_note, remarks',
+    'garage_income_entries', 'entry_date, income_kind, category, amount, method, invoice_no, note, mechanic_id, mechanic_name'
+  );
+  lim int := least(greatest(coalesce(p_limit, 500), 1), 1000);
+  result jsonb := '{}'::jsonb;
+  t text;
+  cur jsonb;
+  v_at timestamptz;
+  v_id text;
+  v_rows jsonb;
+  v_count int;
+begin
+  if jsonb_typeof(p_cursors) is distinct from 'object' then
+    raise exception 'jalasai_changes_since expects an object of table cursors';
+  end if;
+  for t in select jsonb_object_keys(p_cursors) loop
+    continue when not (t = any(allowed));
+    cur := p_cursors->t;
+    v_at := coalesce(nullif(cur->>'at', '')::timestamptz, '-infinity'::timestamptz);
+    v_id := coalesce(cur->>'id', '');
+    execute format(
+      'select coalesce(jsonb_agg(to_jsonb(s) order by s.server_updated_at, s.id), ''[]''::jsonb), count(*)
+         from (
+           select id, record_data, source_updated_at, mirrored_at, deleted_at, server_updated_at%s,
+                  to_char(server_updated_at at time zone ''UTC'', ''YYYY-MM-DD"T"HH24:MI:SS.US"Z"'') as su
+             from public.%I
+            where (server_updated_at, id) > ($1, $2)
+            order by server_updated_at, id
+            limit $3
+         ) s',
+      coalesce(', ' || (extra->>t), ''), t)
+      into v_rows, v_count
+      using v_at, v_id, lim + 1;
+    result := result || jsonb_build_object(t, jsonb_build_object(
+      'rows', case when v_count > lim then v_rows - lim else v_rows end,
+      'has_more', v_count > lim
+    ));
+  end loop;
+  return jsonb_build_object(
+    'tables', result,
+    'server_time', to_char(now() at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')
+  );
+end;
+$$;
+
+grant execute on function public.jalasai_changes_since(jsonb, int) to authenticated;
+
+
+-- ── F. Newest-first loading for a fresh phone ────────────────────
+-- jalasai_recent_jobs: what the first screen needs — every open job, every
+-- job without a date, and invoices on or after p_since.
+-- jalasai_jobs_before: older invoices, newest first, one page at a time,
+-- keyset (job_date, id) so paging never skips or repeats rows. Uses
+-- garage_jobs_done_date_idx from section C.
+-- Both return the same row shape as jalasai_changes_since.
+
+create or replace function public.jalasai_recent_jobs(p_since date)
+returns jsonb
+language sql
+stable
+security invoker
+set search_path = public
+as $$
+  select coalesce(jsonb_agg(to_jsonb(s)), '[]'::jsonb)
+  from (
+    select id, record_data, source_updated_at, mirrored_at, deleted_at, server_updated_at,
+           customer_id, customer_name, phone, vehicle, registration_no, job_status, job_date,
+           invoice_no, mechanic_ids, mechanic_names, service_note, remarks,
+           to_char(server_updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as su
+      from public.garage_jobs
+     where deleted_at is null
+       and (job_status <> 'done' or job_date is null or job_date >= p_since)
+  ) s;
+$$;
+
+create or replace function public.jalasai_jobs_before(p_date date, p_id text, p_limit int default 500)
+returns jsonb
+language sql
+stable
+security invoker
+set search_path = public
+as $$
+  select coalesce(jsonb_agg(to_jsonb(s) order by s.job_date desc, s.id desc), '[]'::jsonb)
+  from (
+    select id, record_data, source_updated_at, mirrored_at, deleted_at, server_updated_at,
+           customer_id, customer_name, phone, vehicle, registration_no, job_status, job_date,
+           invoice_no, mechanic_ids, mechanic_names, service_note, remarks,
+           to_char(server_updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as su
+      from public.garage_jobs
+     where deleted_at is null
+       and job_status = 'done'
+       and job_date is not null
+       and (job_date, id) < (p_date, p_id)
+     order by job_date desc, id desc
+     limit least(greatest(coalesce(p_limit, 500), 1), 1000)
+  ) s;
+$$;
+
+grant execute on function public.jalasai_recent_jobs(date) to authenticated;
+grant execute on function public.jalasai_jobs_before(date, text, int) to authenticated;
 
 
 -- ════════════════════════════════════════════════════════════════

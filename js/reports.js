@@ -434,7 +434,15 @@ function retentionSummary(span) {
     seen.set(key, job);
   });
   const served = [...seen.values()];
-  const repeat = served.filter(job => jobs.filter(other => isLiveJob(other) && customerKeyFromJob(other) === customerKeyFromJob(job)).length > 1);
+  // One pass over all jobs (was: a full scan per served customer, which
+  // grows with customers × invoices and froze month/year views).
+  const visitsByKey = new Map();
+  jobs.forEach(other => {
+    if (!isLiveJob(other)) return;
+    const key = customerKeyFromJob(other);
+    visitsByKey.set(key, (visitsByKey.get(key) || 0) + 1);
+  });
+  const repeat = served.filter(job => (visitsByKey.get(customerKeyFromJob(job)) || 0) > 1);
   return {
     served: served.length,
     repeat: repeat.length,
@@ -632,6 +640,22 @@ function renderReports() {
   const avgInvoiceDelta = metricDeltaText(current.avgInvoice, previous.avgInvoice, fmtReportMoney);
 
   document.getElementById('rpt-period-current').textContent = label;
+  // Reports total local invoices: show a note while older ones still load.
+  const reportsPage = document.getElementById('page-reports');
+  if (reportsPage) {
+    let note = document.getElementById('rpt-history-note');
+    const noteHtml = typeof historyLoadingNoteHtml === 'function' ? historyLoadingNoteHtml() : '';
+    if (noteHtml && !note) {
+      note = document.createElement('div');
+      note.id = 'rpt-history-note';
+      note.style.cssText = 'margin:0 0 10px;';
+      reportsPage.insertBefore(note, reportsPage.firstChild);
+    }
+    if (note) {
+      note.innerHTML = noteHtml;
+      note.hidden = !noteHtml;
+    }
+  }
   document.getElementById('rpt-period-previous').textContent = reportLabel('custom', prevSpan.start, prevSpan.end);
   document.getElementById('rpt-period-sub').textContent = `Comparing ${label.toLowerCase()} with ${reportLabel('custom', prevSpan.start, prevSpan.end).toLowerCase()}.`;
   const rptTodayInvoices = document.getElementById('rpt-today-invoices');

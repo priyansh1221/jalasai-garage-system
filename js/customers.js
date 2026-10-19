@@ -271,9 +271,13 @@ function renderCustomers() {
     </div>`;
   }).join('') + pager;
 
-  document.getElementById('cust-count').textContent = visibleCustomers.length === fil.length
+  const custCount = document.getElementById('cust-count');
+  custCount.textContent = visibleCustomers.length === fil.length
     ? fil.length + ' customers'
     : `${visibleCustomers.length}/${fil.length} customers`;
+  // Dues are summed from local invoices: say so while older ones still load.
+  const historyNote = typeof historyLoadingNoteHtml === 'function' ? historyLoadingNoteHtml() : '';
+  if (historyNote) custCount.insertAdjacentHTML('beforeend', ` ${historyNote}`);
 }
 
 function setCustomerSort(value) {
