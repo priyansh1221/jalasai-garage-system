@@ -271,6 +271,30 @@ Realtime sync between devices:
 - Never store dumps in the public app repo or as public-repo workflow artifacts
 - After `supabase/2026-10-fast-sync-phase1.sql` is run, every overwritten or deleted cloud row is also kept in `garage_row_history`, so a bad edit or sync can be restored by hand
 
+### Backups to Cloudflare R2 (2026-10, roadmap Stage 0)
+- The same nightly workflow also uploads the dump, gzipped, to an R2 bucket the garage controls: `daily/YYYY-MM-DD/<table>.json.gz` (kept 30 days) and, on the 1st of each month, `monthly/YYYY-MM/` (kept 12 months). Old folders are pruned by the workflow.
+- One-time setup:
+  1. Cloudflare dashboard → R2 → create a bucket, e.g. `jalasai-backups` (private; no public access).
+  2. R2 → Manage API tokens → create a token with **Object Read & Write** on that bucket only.
+  3. GitHub repo → Settings → Secrets and variables → Actions → add `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET` (plus `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE` if not set yet).
+  4. Actions → Nightly Supabase Backup → Run workflow, and check `daily/<today>/` appears in the bucket.
+- Until the R2 secrets are set the step logs a notice and stays green.
+
+### Restoring from a backup
+Download a `daily/` or `monthly/` folder from R2 (or a dated folder from the backup repo), then use `scripts/supabase-restore.mjs` with the TARGET project's service-role key in the environment (never in the app, never committed):
+
+```
+SUPABASE_URL=https://<ref>.supabase.co SUPABASE_SERVICE_ROLE=<key> node scripts/supabase-restore.mjs <folder>
+```
+
+- default (`--check`): read-only, prints rows in the backup vs rows in the target per table.
+- `--insert-missing`: adds only rows the target doesn't have, so it is safe on the live project; existing rows (and newer edits) are untouched. Use it when rows vanished.
+- `--overwrite --confirm=<ref>`: writes every backup row over the target. Only for an empty scratch project (e.g. to look at an old day); on live it would undo every edit made since the backup, so it refuses without `--confirm`.
+- `--tables=garage_jobs,garage_customers` limits any mode to some tables.
+- After restoring jobs, run `select public.jalasai_rebuild_daily_totals();` in the SQL editor so report totals match.
+- To undo one bad edit or delete instead, read the old version from `garage_row_history` (newest first: `select * from garage_row_history where table_name = 'garage_jobs' and row_id = '<id>' order by changed_at desc`).
+- Practice the restore into a scratch project once after setup, and after any schema change.
+
 If diagnostics show a Table Sync Error:
 - local data stays safe on the phone; uploads retry on their own
 - rerun the latest [supabase/schema.sql](/Users/priyansh/Projects/JalaSai/supabase/schema.sql) (and the fast-sync SQL, if it was run before)

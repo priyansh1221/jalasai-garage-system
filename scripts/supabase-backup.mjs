@@ -28,10 +28,16 @@ const TABLES = [
   'garage_audit_log',
   'garage_stock_movements',
   'garage_sync_heartbeat',
+  // Added by supabase/2026-10-fast-sync-phase1.sql. Before that SQL is run
+  // these are missing and are recorded as errors without failing the run.
+  'garage_row_history',
+  'garage_daily_totals',
 ];
 
 const ORDER_COLUMNS = {
   garage_sync_heartbeat: 'device_id',
+  garage_row_history: 'history_id',
+  garage_daily_totals: 'day.asc,metric', // two-column key: stable paging
 };
 
 if (!SUPABASE_URL || !SERVICE_ROLE) {

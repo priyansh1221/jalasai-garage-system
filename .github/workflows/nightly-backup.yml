@@ -39,6 +39,57 @@ jobs:
           SUPABASE_SERVICE_ROLE: ${{ secrets.SUPABASE_SERVICE_ROLE }}
         run: node scripts/supabase-backup.mjs
 
+      # Roadmap Stage 0: a copy the garage controls, outside Supabase.
+      # One-time setup (Cloudflare dashboard → R2): create a bucket (e.g.
+      # jalasai-backups) and an R2 API token with Object Read & Write on it,
+      # then add these repo secrets:
+      #   R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET
+      # Layout: daily/YYYY-MM-DD/<table>.json.gz (kept 30 days) and, on the
+      # 1st of each month, monthly/YYYY-MM/ (kept 12 months).
+      - name: Upload dump to Cloudflare R2
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          AWS_DEFAULT_REGION: auto
+        run: |
+          if [ -z "$R2_ACCOUNT_ID" ] || [ -z "$AWS_ACCESS_KEY_ID" ] || [ -z "$AWS_SECRET_ACCESS_KEY" ] || [ -z "$R2_BUCKET" ]; then
+            echo "::notice::R2 secrets not set — dump not uploaded to R2."
+            exit 0
+          fi
+          if [ ! -d backup-out ] || [ -z "$(ls -A backup-out 2>/dev/null)" ]; then
+            echo "::notice::No dump produced — nothing to upload."
+            exit 0
+          fi
+          set -euo pipefail
+          ENDPOINT="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
+          STAMP=$(date -u +%F)
+          MONTH=$(date -u +%Y-%m)
+          mkdir -p r2-out
+          for f in backup-out/*.json; do gzip -9 -c "$f" > "r2-out/$(basename "$f").gz"; done
+          aws s3 cp r2-out/ "s3://${R2_BUCKET}/daily/${STAMP}/" --recursive --endpoint-url "$ENDPOINT" --only-show-errors
+          if [ "$(date -u +%d)" = "01" ]; then
+            aws s3 cp r2-out/ "s3://${R2_BUCKET}/monthly/${MONTH}/" --recursive --endpoint-url "$ENDPOINT" --only-show-errors
+          fi
+          # Retention: drop daily folders older than 30 days, monthly older
+          # than 12 months. Folder names sort as dates, so compare as text.
+          DAILY_CUTOFF=$(date -u -d '30 days ago' +%F)
+          MONTHLY_CUTOFF=$(date -u -d '12 months ago' +%Y-%m)
+          aws s3 ls "s3://${R2_BUCKET}/daily/" --endpoint-url "$ENDPOINT" | awk '/PRE/ {print $2}' | tr -d '/' | while read -r d; do
+            if [[ "$d" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] && [[ "$d" < "$DAILY_CUTOFF" ]]; then
+              aws s3 rm "s3://${R2_BUCKET}/daily/${d}/" --recursive --endpoint-url "$ENDPOINT" --only-show-errors
+              echo "pruned daily/${d}"
+            fi
+          done
+          aws s3 ls "s3://${R2_BUCKET}/monthly/" --endpoint-url "$ENDPOINT" | awk '/PRE/ {print $2}' | tr -d '/' | while read -r m; do
+            if [[ "$m" =~ ^[0-9]{4}-[0-9]{2}$ ]] && [[ "$m" < "$MONTHLY_CUTOFF" ]]; then
+              aws s3 rm "s3://${R2_BUCKET}/monthly/${m}/" --recursive --endpoint-url "$ENDPOINT" --only-show-errors
+              echo "pruned monthly/${m}"
+            fi
+          done
+          echo "Uploaded $(ls r2-out | wc -l) files to r2://${R2_BUCKET}/daily/${STAMP}/"
+
       - name: Push dump to private backup repo
         env:
           BACKUP_REPO: ${{ secrets.BACKUP_REPO }}
