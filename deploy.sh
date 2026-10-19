@@ -8,7 +8,7 @@ BRANCH_NAME="${CF_PAGES_BRANCH:-main}"
 rm -rf deploy
 mkdir -p deploy/newui
 
-rsync -a index.html style.css manifest.webmanifest sw.js assets icons js deploy/
+rsync -a index.html statement.html style.css manifest.webmanifest sw.js assets icons js deploy/
 rsync -a "NEW UI/" deploy/newui/ --exclude js
 cp cloudflare/pages-worker.js deploy/_worker.js
 cp cloudflare/_routes.json deploy/_routes.json

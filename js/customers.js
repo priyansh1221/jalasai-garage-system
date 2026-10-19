@@ -161,7 +161,13 @@ function remindCustomerDue(id) {
   if (!dueJobs.length) { toast('No due amount for this customer'); return; }
   if (!c.phone) { toast('Customer phone not available'); return; }
   const msg = buildDueReminderMessage(c, dueJobs);
-  window.open('https://wa.me/91' + c.phone + '?text=' + encodeURIComponent(msg), '_blank');
+  // With Stage 6 in the cloud the message carries a statement link with a
+  // "Pay by UPI" button; otherwise it's the plain message as before.
+  if (typeof staffFeaturesReady === 'function' && staffFeaturesReady() && typeof openWhatsAppWithStatement === 'function') {
+    openWhatsAppWithStatement(c, msg);
+  } else {
+    window.open('https://wa.me/91' + c.phone + '?text=' + encodeURIComponent(msg), '_blank');
+  }
   logAction('remind', 'customer', c.id, { due: customerDueAmount(id), jobs: dueJobs.length });
   saveAll({ preserveUpdatedAt: true, domain: 'reminder' });
 }
@@ -368,6 +374,7 @@ function viewCustomer(id) {
     <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;">
       <button class="btn btn-p btn-sm" onclick="newJobForCust('${c.id}')">+ New Job</button>
       ${balanceMeta.state === 'owe' ? `<button class="btn btn-g btn-sm" onclick="remindCustomerDue('${c.id}')">Remind Due</button>` : ''}
+    ${typeof staffFeaturesReady === 'function' && staffFeaturesReady() && isAdminUser() ? `<button class="btn btn-g btn-sm" onclick="shareCustomerStatement('${c.id}')">Share statement</button>` : ''}
       ${followup.feedbackActive ? `<button class="btn btn-g btn-sm" onclick="remindCustomerFeedback('${c.id}')">Feedback Msg</button>` : ''}
       ${followup.feedbackActive ? `<button class="btn btn-g btn-sm" onclick="aiDraftCustomerFeedback('${c.id}')">AI Feedback Draft</button>` : ''}
       ${followup.serviceActive ? `<button class="btn btn-g btn-sm" onclick="remindCustomerService('${c.id}')">Service Msg</button>` : ''}

@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<title>Account Statement</title>
+<style>
+  :root {
+    --bg: #f6f5f2; --card: #ffffff; --ink: #1d1d1f; --mut: #6b6b70; --line: #e6e4df;
+    --owe: #b42318; --clear: #1f7a4d; --acc: #2d4bd8; --on-acc: #ffffff;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #141416; --card: #1d1d20; --ink: #f2f2f3; --mut: #a1a1a6; --line: #2c2c30; --owe: #ff8a7a; --clear: #6fd3a0; --acc: #8ea2ff; --on-acc: #0d1330; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 640px; margin: 0 auto; padding: 20px 16px 48px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 18px; margin-bottom: 14px; }
+  h1 { font-size: 19px; margin: 0 0 2px; }
+  .mut { color: var(--mut); font-size: 13px; }
+  .balance { font-size: 30px; font-weight: 700; margin: 6px 0 2px; }
+  .owe { color: var(--owe); } .clear { color: var(--clear); }
+  .actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
+  .btn { appearance: none; border: 1px solid var(--line); background: var(--card); color: var(--ink); border-radius: 10px; padding: 11px 16px; font-size: 15px; font-weight: 600; text-decoration: none; cursor: pointer; }
+  .btn.primary { background: var(--acc); border-color: var(--acc); color: var(--on-acc); }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 9px 4px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--mut); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .02em; }
+  td.amt, th.amt { text-align: right; white-space: nowrap; }
+  .msg { text-align: center; padding: 40px 12px; }
+  @media print {
+    body { background: #fff; color: #000; }
+    .actions, .noprint { display: none !important; }
+    .card { border: 0; padding: 0; }
+  }
+</style>
+</head>
+<body>
+<main id="app"><div class="card msg mut">Loading statement…</div></main>
+<script src="/config.js"></script>
+<script>
+(function () {
+  const app = document.getElementById('app');
+  const esc = value => String(value == null ? '' : value).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const money = n => '₹' + Math.round(Math.abs(Number(n) || 0)).toLocaleString('en-IN');
+  const fmtDay = d => d ? new Date(d + 'T00:00:00').toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '';
+  const kindLabel = { charge: 'Invoice', payment: 'Payment', advance: 'Advance paid', 'unlisted-payment': 'Payment', change: 'Correction', reversal: 'Cancelled entry' };
+  const show = html => { app.innerHTML = html; };
+
+  const token = new URLSearchParams(location.search).get('t') || '';
+  const cfg = window.JALASAI_CLOUD_CONFIG || {};
+  // Live /config.js sets window.SUPABASE_*; a local config.js declares consts.
+  const url = String(window.SUPABASE_URL || cfg.projectUrl || (typeof SUPABASE_URL !== 'undefined' ? SUPABASE_URL : '') || '').replace(/\/$/, '');
+  const key = String(window.SUPABASE_ANON_KEY || cfg.anonKey || (typeof SUPABASE_ANON_KEY !== 'undefined' ? SUPABASE_ANON_KEY : '') || '');
+  if (!/^[a-f0-9]{32,80}$/.test(token) || !url || !key) {
+    show('<div class="card msg"><b>This statement link is not valid.</b><div class="mut">Ask the garage to send it again.</div></div>');
+    return;
+  }
+
+  fetch(url + '/rest/v1/rpc/jalasai_statement_by_token', {
+    method: 'POST',
+    headers: { apikey: key, Authorization: 'Bearer ' + key, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ p_token: token }),
+  }).then(res => res.ok ? res.json() : Promise.reject(new Error('HTTP ' + res.status))).then(data => {
+    if (!data || !data.ok) {
+      show('<div class="card msg"><b>' + esc(data && data.reason || 'This link has expired.') + '</b></div>');
+      return;
+    }
+    const g = data.garage || {};
+    const st = data.statement || {};
+    const balance = Number(st.balance) || 0;
+    const owes = balance > 0.009;
+    const advance = balance < -0.009;
+    const upi = String(g.upi || '').trim();
+    const payUrl = owes && upi
+      ? 'upi://pay?pa=' + encodeURIComponent(upi) + '&pn=' + encodeURIComponent(g.name || 'Garage') + '&am=' + Math.round(balance) + '&cu=INR&tn=' + encodeURIComponent('Dues ' + (data.customer || ''))
+      : '';
+    let running = Number(st.opening) || 0;
+    const rows = (st.lines || []).map(line => {
+      running += Number(line.amount) || 0;
+      const amt = Number(line.amount) || 0;
+      return '<tr><td>' + esc(fmtDay(line.day)) + '</td><td>' + esc(kindLabel[line.kind] || line.kind) +
+        (line.invoice_no ? ' <span class="mut">#' + esc(line.invoice_no) + '</span>' : '') +
+        (line.method ? '<div class="mut">' + esc(line.method) + '</div>' : '') + '</td>' +
+        '<td class="amt">' + (amt >= 0 ? money(amt) : '−' + money(amt)) + '</td>' +
+        '<td class="amt">' + (running > 0.009 ? money(running) : running < -0.009 ? money(running) + ' adv' : '—') + '</td></tr>';
+    }).join('');
+    show(
+      '<div class="card">' +
+        '<h1>' + esc(g.name || 'Garage') + '</h1>' +
+        '<div class="mut">' + esc([g.addressLine, g.phone].filter(Boolean).join(' · ')) + '</div>' +
+      '</div>' +
+      '<div class="card">' +
+        '<div class="mut">Statement for</div><div style="font-weight:600;">' + esc(data.customer || '') + '</div>' +
+        '<div class="balance ' + (owes ? 'owe' : 'clear') + '">' + (owes ? money(balance) + ' due' : advance ? money(balance) + ' advance' : 'All clear') + '</div>' +
+        '<div class="mut">As of ' + esc(new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })) + '</div>' +
+        '<div class="actions noprint">' +
+          (payUrl ? '<a class="btn primary" href="' + esc(payUrl) + '">Pay ' + money(balance) + ' by UPI</a>' : '') +
+          (owes && upi ? '<button class="btn" type="button" id="copy-upi">Copy UPI ID</button>' : '') +
+          '<button class="btn" type="button" onclick="window.print()">Save as PDF</button>' +
+          (g.phone ? '<a class="btn" href="tel:' + esc(g.phone) + '">Call garage</a>' : '') +
+        '</div>' +
+      '</div>' +
+      '<div class="card"><table><thead><tr><th>Date</th><th>Entry</th><th class="amt">Amount</th><th class="amt">Balance</th></tr></thead><tbody>' +
+        (Math.abs(Number(st.opening) || 0) > 0.009 ? '<tr><td></td><td class="mut">Earlier balance</td><td></td><td class="amt">' + money(st.opening) + '</td></tr>' : '') +
+        (rows || '<tr><td colspan="4" class="mut">No entries in the last year.</td></tr>') +
+      '</tbody></table></div>' +
+      '<div class="mut noprint" style="text-align:center;">This link works until ' + esc(new Date(data.expires_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })) + '.</div>'
+    );
+    const copy = document.getElementById('copy-upi');
+    if (copy) copy.onclick = () => { try { navigator.clipboard.writeText(upi); copy.textContent = 'Copied'; } catch (_) { copy.textContent = upi; } };
+  }).catch(() => {
+    show('<div class="card msg"><b>Could not load the statement.</b><div class="mut">Check your internet and open the link again.</div></div>');
+  });
+})();
+</script>
+</body>
+</html>

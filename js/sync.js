@@ -3339,6 +3339,146 @@ async function warnIfInvoiceNoTakenInCloud(invoiceNo, jobId = '') {
   return null;
 }
 
+// ─── Staff roles + customer statements (roadmap Stage 6) ──
+// supabase/2026-10-customer-features-stage6.sql. syncMeta.staffRole is null
+// until that SQL is installed (everyone keeps today's access).
+async function refreshStaffRole(client = cloudClient) {
+  if (!client || !cloudSessionActive) return syncMeta.staffRole || null;
+  try {
+    const { data, error } = await client.rpc('jalasai_my_role');
+    if (error) throw error;
+    const role = String(Array.isArray(data) ? data[0] : data || '').trim();
+    syncMeta.staffRole = ['owner', 'manager', 'mechanic'].includes(role) ? role : null;
+  } catch (err) {
+    if (isMissingRpcError(err)) syncMeta.staffRole = null;
+  }
+  persistSyncMeta();
+  if (typeof refreshAccessControls === 'function') refreshAccessControls();
+  if (typeof currentPage !== 'undefined' && currentPage === 'admin') renderStaffRolesCard();
+  return syncMeta.staffRole || null;
+}
+
+function staffFeaturesReady() {
+  return !!syncMeta?.staffRole;
+}
+
+async function renderStaffRolesCard() {
+  const page = typeof document !== 'undefined' ? document.getElementById('page-admin') : null;
+  if (!page) return;
+  let card = document.getElementById('staff-roles-card');
+  if (!staffFeaturesReady() || syncMeta.staffRole === 'mechanic') {
+    if (card) card.remove();
+    return;
+  }
+  if (!card) {
+    card = document.createElement('div');
+    card.id = 'staff-roles-card';
+    card.className = 'rcard';
+    card.style.marginTop = '14px';
+    page.appendChild(card);
+  }
+  let staff = [];
+  try {
+    const { data, error } = await cloudClient.from('garage_staff').select('user_id,email,role').order('role', { ascending: true });
+    if (error) throw error;
+    staff = normaliseArray(data);
+  } catch (err) {
+    console.warn('staff list unavailable', err);
+  }
+  const isOwner = syncMeta.staffRole === 'owner';
+  const esc = value => String(value || '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const roleHint = { owner: 'everything, manages roles', manager: 'everything except roles', mechanic: 'jobs and stock; no money reports' };
+  card.innerHTML = `
+    <div style="font-family:var(--fh);font-weight:700;margin-bottom:6px;">Staff roles</div>
+    ${!staff.length
+      ? `<div style="color:var(--mut);font-size:13px;margin-bottom:10px;">Everyone who signs in has full access today. Make yourself the owner, then give mechanics their role so they can't see money reports.</div>
+         <button class="btn btn-p btn-sm" onclick="claimStaffOwner()">Make me the owner</button>`
+      : `${staff.map(s => `<div class="mrow"><span>${esc(s.email || s.user_id)}</span><span style="color:var(--mut);">${esc(s.role)} · ${esc(roleHint[s.role] || '')}</span></div>`).join('')}
+         <div style="color:var(--mut);font-size:12px;margin:8px 0;">Anyone signing in who isn't listed is a manager.</div>
+         ${isOwner ? `
+         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+           <input class="finp" id="staff-role-email" placeholder="staff sign-in email" autocapitalize="off" style="flex:1;min-width:180px;">
+           <select class="finp" id="staff-role-select" style="width:auto;"><option value="mechanic">mechanic</option><option value="manager">manager</option><option value="owner">owner</option></select>
+           <button class="btn btn-p btn-sm" onclick="saveStaffRole()">Save role</button>
+         </div>` : '<div style="color:var(--mut);font-size:12px;">Only the owner can change roles.</div>'}`}
+  `;
+}
+
+async function claimStaffOwner() {
+  if (!cloudClient || !cloudSessionActive) { toast('Sign in first', 2400); return; }
+  try {
+    const { data, error } = await cloudClient.rpc('jalasai_claim_owner');
+    if (error) throw error;
+    toast(`You are now: ${data}`, 2600);
+  } catch (err) {
+    toast(syncErrMsg(err, 'Could not set the owner'), 4000);
+  }
+  await refreshStaffRole();
+  renderStaffRolesCard();
+}
+
+async function saveStaffRole() {
+  const email = String(document.getElementById('staff-role-email')?.value || '').trim();
+  const role = String(document.getElementById('staff-role-select')?.value || '');
+  if (!email) { toast('Enter the email they sign in with', 2600); return; }
+  try {
+    const { error } = await cloudClient.rpc('jalasai_set_staff_role', { p_email: email, p_role: role });
+    if (error) throw error;
+    toast(`${email} is now ${role}`, 2600);
+  } catch (err) {
+    toast(syncErrMsg(err, 'Could not save the role'), 4200);
+  }
+  await refreshStaffRole();
+  renderStaffRolesCard();
+}
+
+// A read-only statement link for one customer (statement.html?t=…), valid
+// for 30 days. Returns '' when the server doesn't have Stage 6 or the phone
+// is offline.
+async function createStatementLink(customer, days = 30) {
+  if (!customer || !cloudClient || !cloudSessionActive) return '';
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) return '';
+  if (!staffFeaturesReady() || syncMeta.staffRole === 'mechanic') return '';
+  const profile = typeof getGarageProfile === 'function' ? getGarageProfile() : {};
+  const { data, error } = await cloudClient.rpc('jalasai_create_statement_link', {
+    p_customer_key: String(customer.id || ''),
+    p_customer_phone: String(customer.phone || '').trim(),
+    p_customer_name: String(customer.name || ''),
+    p_garage: { name: profile.name || '', phone: profile.phone || '', addressLine: profile.addressLine || '', upi: profile.upi || '' },
+    p_days: days,
+  });
+  if (error) throw error;
+  const token = String(Array.isArray(data) ? data[0] : data || '').trim();
+  if (!token) return '';
+  const base = typeof location !== 'undefined' ? location.origin : '';
+  return `${base}/statement.html?t=${encodeURIComponent(token)}`;
+}
+
+// Opens WhatsApp with the message, plus a statement link when available. The
+// window opens inside the tap (phones block pop-ups opened after a wait).
+async function openWhatsAppWithStatement(customer, message) {
+  const phoneDigits = String(customer?.phone || '').replace(/\D/g, '').replace(/^91(?=\d{10}$)/, '');
+  const target = typeof window !== 'undefined' ? window.open('', '_blank') : null;
+  let link = '';
+  try { link = await createStatementLink(customer); } catch (err) { console.warn('statement link failed', err); }
+  const text = link ? `${message}\n\nYour statement: ${link}` : message;
+  const url = `https://wa.me/${phoneDigits ? '91' + phoneDigits : ''}?text=${encodeURIComponent(text)}`;
+  if (target) target.location.href = url;
+  else if (typeof window !== 'undefined') window.open(url, '_blank');
+  return link;
+}
+
+async function shareCustomerStatement(id) {
+  const customer = normaliseArray(customers).find(c => c.id === id);
+  if (!customer) return;
+  if (!staffFeaturesReady()) { toast('Statements need the Stage 6 cloud update', 3200); return; }
+  const profile = typeof getGarageProfile === 'function' ? getGarageProfile() : {};
+  const msg = `Hello ${customer.name || ''}, here is your account statement from ${profile.name || 'our garage'}.`;
+  const link = await openWhatsAppWithStatement(customer, msg);
+  if (link) logAction('share', 'customer', customer.id, { statement: true });
+  else toast('Could not create the link — sent the message without it', 3200);
+}
+
 // Short status for screens that total all history while it's still loading.
 // ─── Server report totals (fast-load Phase 5) ─────────────
 // A report range the phone doesn't fully hold — older invoices still
@@ -3918,6 +4058,7 @@ async function initGSSync() {
       // Stage 4: learn whether the server issues invoice numbers, then turn
       // any drafts (made offline, here or on another phone) into real ones.
       checkInvoiceSeriesServer(cloudClient).then(() => claimPendingInvoiceNumbers()).catch(err => console.warn('invoice numbers check failed', err));
+      refreshStaffRole(cloudClient).catch(err => console.warn('staff role check failed', err));
       // First run against the v2 server: one full download so this phone
       // learns the server version of every record. Not on a phone that keeps
       // only recent history (it would download everything): there versions

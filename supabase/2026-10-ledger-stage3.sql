@@ -259,7 +259,7 @@ as $$
     'lines', coalesce((select jsonb_agg(jsonb_build_object(
         'day', day, 'kind', kind, 'amount', amount, 'method', method,
         'invoice_no', current_invoice_no, 'job_id', job_id, 'recorded_at', recorded_at)
-        order by day, entry_id) from inrange), '[]'::jsonb)
+        order by day, (kind <> 'charge'), entry_id) from inrange), '[]'::jsonb)
   );
 $$;
 

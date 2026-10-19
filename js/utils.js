@@ -312,6 +312,7 @@ function showPage(p, options = {}) {
     admin:     () => {
       if (typeof renderSyncDiagnostics === 'function') renderSyncDiagnostics();
       if (typeof hydrateGarageProfileForm === 'function') hydrateGarageProfileForm();
+      if (typeof renderStaffRolesCard === 'function') renderStaffRolesCard();
     },
     jobs:      renderJobs,
     stock:     renderStock,

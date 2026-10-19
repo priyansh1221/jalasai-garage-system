@@ -169,6 +169,7 @@
     <div class="frow"><label class="flbl">Address Line</label><input class="finp" id="gp-address"></div>
     <div class="frow"><label class="flbl">City</label><input class="finp" id="gp-city"></div>
     <div class="frow"><label class="flbl">Phone</label><input class="finp" id="gp-phone" inputmode="tel"></div>
+    <div class="frow"><label class="flbl">UPI ID (for "Pay by UPI" on customer statements)</label><input class="finp" id="gp-upi" placeholder="shopname@okaxis" autocapitalize="off" autocomplete="off" spellcheck="false"></div>
     <button class="btn btn-p" onclick="saveGarageProfileForm()">Save Profile</button>
   </div>
   <div class="rcard" style="margin-top:14px;">
@@ -563,6 +564,7 @@
   <div class="actionbar">
     <button class="btn btn-g" onclick="aiDraftClosingSummary()">AI Draft Summary</button>
     <button class="btn btn-p" onclick="sendClosingSummary()">📱 Closing Summary</button>
+    <button class="btn btn-g" onclick="openDailyClose()">🧮 Close the day</button>
   </div>
 </div>
 

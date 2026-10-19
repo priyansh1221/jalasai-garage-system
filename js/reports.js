@@ -1212,6 +1212,109 @@ function filterLogsEntity(v) {
   renderLogs();
 }
 
+// ─── Daily close (roadmap Stage 6) ────────────────────────
+// Count the drawer at the end of the day. Expected cash = opening float +
+// cash received today − cash paid out today. A difference is recorded so the
+// books match the drawer: a shortage as an expense, a surplus as income, both
+// in "Cash difference", plus an audit entry with the full count.
+function lastDailyCloseEntry() {
+  return normaliseArray(auditLog).find(entry => entry?.action === 'close' && entry?.entity === 'cash') || null;
+}
+
+function dailyCloseNumbers(day = today()) {
+  const cashIn = revenueEntriesForDate(day)
+    .filter(entry => methodBucket(entry.method) === 'cash')
+    .reduce((sum, entry) => sum + (entry.amount || 0), 0);
+  const expensesToday = normaliseArray(expenses)
+    .filter(e => isLiveExpense(e) && String(e.date || '').slice(0, 10) === day && e.cat !== 'Cash difference')
+    .reduce((sum, e) => sum + (parseFloat(e.amount || 0) || 0), 0);
+  const last = lastDailyCloseEntry();
+  const opening = last && last.entityId !== day ? (parseFloat(last.details?.counted || 0) || 0) : 0;
+  return { day, cashIn, expensesToday, opening, closedToday: !!(last && last.entityId === day) };
+}
+
+function ensureDailyCloseModal() {
+  let modal = document.getElementById('m-daily-close');
+  if (modal) return modal;
+  modal = document.createElement('div');
+  modal.className = 'ovl';
+  modal.id = 'm-daily-close';
+  modal.innerHTML = `
+    <div class="modal">
+      <div class="modal-ttl">Close the day — count the cash</div>
+      <div id="dc-summary" style="color:var(--mut);font-size:13px;margin-bottom:10px;"></div>
+      <div class="frow"><label class="flbl">Cash in drawer at opening</label><input class="finp" id="dc-opening" type="number" inputmode="decimal"></div>
+      <div class="frow"><label class="flbl">Cash received today (from the app)</label><input class="finp" id="dc-in" type="number" disabled></div>
+      <div class="frow"><label class="flbl">Cash paid out today (expenses paid in cash)</label><input class="finp" id="dc-out" type="number" inputmode="decimal"></div>
+      <div class="frow"><label class="flbl">Cash counted now</label><input class="finp" id="dc-counted" type="number" inputmode="decimal" placeholder="Count the drawer"></div>
+      <div id="dc-diff" style="font-family:var(--fh);font-weight:700;margin:6px 0 12px;"></div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;">
+        <button class="btn btn-g" onclick="closeM('m-daily-close')">Cancel</button>
+        <button class="btn btn-p" onclick="saveDailyClose()">Save close</button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+  ['dc-opening', 'dc-out', 'dc-counted'].forEach(id => modal.querySelector('#' + id).addEventListener('input', updateDailyCloseDiff));
+  return modal;
+}
+
+function dailyCloseExpected() {
+  const val = id => parseFloat(document.getElementById(id)?.value || 0) || 0;
+  return val('dc-opening') + val('dc-in') - val('dc-out');
+}
+
+function updateDailyCloseDiff() {
+  const el = document.getElementById('dc-diff');
+  if (!el) return;
+  const countedRaw = document.getElementById('dc-counted')?.value;
+  const expected = dailyCloseExpected();
+  if (countedRaw === '' || countedRaw === undefined) { el.textContent = `Expected in drawer: ${fmtMoney(Math.round(expected))}`; el.style.color = ''; return; }
+  const diff = (parseFloat(countedRaw) || 0) - expected;
+  el.textContent = Math.abs(diff) < 1
+    ? `Matches: ${fmtMoney(Math.round(expected))}`
+    : diff < 0 ? `Short by ${fmtMoney(Math.round(-diff))} (expected ${fmtMoney(Math.round(expected))})` : `Extra ${fmtMoney(Math.round(diff))} (expected ${fmtMoney(Math.round(expected))})`;
+  el.style.color = Math.abs(diff) < 1 ? 'var(--acc)' : 'var(--dan)';
+}
+
+function openDailyClose() {
+  if (!requireAdminAccess('close the day')) return;
+  const numbers = dailyCloseNumbers();
+  ensureDailyCloseModal();
+  document.getElementById('dc-summary').textContent = numbers.closedToday
+    ? `Today (${fmtDate(numbers.day)}) was already closed once. Saving again adds a new count.`
+    : `Today, ${fmtDate(numbers.day)}.`;
+  document.getElementById('dc-opening').value = numbers.opening ? Math.round(numbers.opening) : '';
+  document.getElementById('dc-in').value = Math.round(numbers.cashIn);
+  document.getElementById('dc-out').value = Math.round(numbers.expensesToday) || '';
+  document.getElementById('dc-counted').value = '';
+  updateDailyCloseDiff();
+  openM('m-daily-close');
+}
+
+function saveDailyClose() {
+  if (!requireAdminAccess('close the day')) return;
+  const countedRaw = document.getElementById('dc-counted')?.value;
+  if (countedRaw === '' || !Number.isFinite(parseFloat(countedRaw))) { toast('Enter the cash you counted', 2600); return; }
+  const val = id => parseFloat(document.getElementById(id)?.value || 0) || 0;
+  const day = today();
+  const expected = dailyCloseExpected();
+  const counted = parseFloat(countedRaw) || 0;
+  const diff = Math.round((counted - expected) * 100) / 100;
+  const stamp = nowISO();
+  if (Math.abs(diff) >= 1) {
+    if (diff < 0) {
+      expenses.unshift(normalizeExpense({ id: nextId('e'), date: day, cat: 'Cash difference', desc: 'Daily close: cash short', amount: -diff, paidTo: '', createdAt: stamp, updatedAt: stamp }));
+    } else {
+      incomeEntries.unshift(normalizeIncomeEntry({ id: nextId('inc'), date: day, kind: 'other_income', category: 'Cash difference', amount: diff, method: 'cash', note: 'Daily close: extra cash', createdAt: stamp, updatedAt: stamp }));
+    }
+  }
+  logAction('close', 'cash', day, { opening: val('dc-opening'), cashIn: val('dc-in'), cashOut: val('dc-out'), expected, counted, difference: diff });
+  saveAll({ domains: ['expenses', 'income', 'audit'] });
+  closeM('m-daily-close');
+  toast(Math.abs(diff) < 1 ? 'Day closed — cash matches' : diff < 0 ? `Day closed — ${fmtMoney(Math.round(-diff))} short recorded` : `Day closed — ${fmtMoney(Math.round(diff))} extra recorded`, 3600);
+  if (typeof currentPage !== 'undefined' && currentPage === 'reports') renderReports();
+}
+
 function sendClosingSummary() {
   const span = reportWindow();
   const singleDay = span.start === span.end;

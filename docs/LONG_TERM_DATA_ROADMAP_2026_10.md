@@ -340,6 +340,32 @@ today's highest (e.g. 10564). `supabase/2026-10-invoice-numbers-stage4.sql`
   device only).
 - Telugu labels; "lite mode" for cheap phones.
 
+#### Stage 6 status (2026-10-20): built, tested locally
+
+`supabase/2026-10-customer-features-stage6.sql` (needs Stage 3):
+- **Staff roles** (owner / manager / mechanic) in `garage_staff`. While the list
+  is empty everyone keeps today's full access; "Staff roles" on the Admin page
+  lets the first person become owner, and the owner sets roles by sign-in
+  email. Unlisted staff are managers. Mechanics are blocked from admin pages in
+  the app, and the server refuses them the ledger, report totals and statement
+  links (jobs and stock still work).
+- **Customer statement links:** "Share statement" on a customer and the due
+  reminder on WhatsApp now carry a link to `statement.html?t=…`. That page works
+  without signing in, but only with the link's 64-character random token (30
+  days, revocable) and shows only that customer: balance, every ledger line
+  with a running balance, "Pay by UPI" (opens the UPI app with the amount),
+  Save as PDF, Call garage. The garage's UPI ID is a new field in the Garage
+  profile.
+- **Daily close** (Reports → "Close the day"): opening float + cash received −
+  cash paid out = expected; the counted amount is saved in the audit log and a
+  difference is recorded as a "Cash difference" expense (short) or income
+  (extra).
+- Tested: roles and their server limits, link creation / anon access / expiry /
+  revoke / one-customer scope, statement totals by id and phone, the statement
+  page on a phone, and daily close maths.
+- Not done: Gujarati / Hindi labels and a lite mode. Which language to support
+  is the owner's call.
+
 ### Stage 7: Many garages (if JalaSai becomes a product)
 - Turn on `tenant_id` (groundwork exists: `JALASAI_SEND_TENANT_ID`), per-tenant
   RLS from JWT claims, tenant-scoped exports and backups. Add a landing page at the

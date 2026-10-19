@@ -73,6 +73,8 @@ const GARAGE_PROFILE_DEFAULTS = Object.freeze({
   addressLine: 'Bhimrad, Surat, Gujarat - 395007',
   city: 'Surat',
   phone: '9687272157',
+  // UPI ID for "Pay by UPI" on customer statements (Stage 6); empty = no button.
+  upi: '',
 });
 let garageProfile = { ...GARAGE_PROFILE_DEFAULTS };
 
@@ -88,11 +90,12 @@ function normalizeGarageProfile(raw) {
     addressLine: String(item.addressLine || '').trim() || GARAGE_PROFILE_DEFAULTS.addressLine,
     city: String(item.city || '').trim() || GARAGE_PROFILE_DEFAULTS.city,
     phone: String(item.phone || '').trim() || GARAGE_PROFILE_DEFAULTS.phone,
+    upi: /^[\w.\-]{2,}@[a-zA-Z][\w.\-]{1,}$/.test(String(item.upi || '').trim()) ? String(item.upi).trim() : '',
   };
 }
 
 function hydrateGarageProfileForm() {
-  const fields = { 'gp-name': 'name', 'gp-short': 'shortName', 'gp-address': 'addressLine', 'gp-city': 'city', 'gp-phone': 'phone' };
+  const fields = { 'gp-name': 'name', 'gp-short': 'shortName', 'gp-address': 'addressLine', 'gp-city': 'city', 'gp-phone': 'phone', 'gp-upi': 'upi' };
   Object.entries(fields).forEach(([id, key]) => {
     const el = document.getElementById(id);
     if (el) el.value = garageProfile[key] || '';
@@ -107,9 +110,11 @@ function saveGarageProfileForm() {
     addressLine: document.getElementById('gp-address')?.value,
     city: document.getElementById('gp-city')?.value,
     phone: document.getElementById('gp-phone')?.value,
+    upi: document.getElementById('gp-upi')?.value,
   });
+  const typedUpi = String(document.getElementById('gp-upi')?.value || '').trim();
   saveAll({ domain: 'settings', skipSync: true });
-  toast('Garage profile saved on this device');
+  toast(typedUpi && !garageProfile.upi ? 'Saved — but the UPI ID looks wrong (it should look like name@bank)' : 'Garage profile saved on this device', 3600);
 }
 const DEFAULT_SYNC_META = {
   updatedAt: '',
@@ -2912,13 +2917,11 @@ function adminEmails() {
 }
 
 function isAdminUser(email = cloudEmail) {
-  // Admin access is open to everyone. The Reports page is the only gated
-  // area and it is protected by its own password prompt (see
-  // ensureReportsAccess in utils.js). Keep the function and its callers so
-  // we can re-tighten later by restoring the email-list check below.
-  //   const value = String(email || '').trim().toLowerCase();
-  //   return !!value && adminEmails().includes(value);
-  return true;
+  // Admin access is open to everyone except staff the owner marked as a
+  // mechanic (Stage 6 staff roles, supabase/2026-10-customer-features-stage6.sql;
+  // the server also keeps money data from mechanics). The Reports page keeps
+  // its own password prompt (ensureReportsAccess in utils.js).
+  return !(syncMeta && syncMeta.staffRole === 'mechanic');
 }
 
 function ensureCurrentUserIsAdmin() {
