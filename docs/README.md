@@ -72,11 +72,13 @@ Vanilla JS | Local-first architecture | Supabase cloud sync | PWA-ready | Real w
 Current app behavior:
 
 - shadow-table sync is the live cloud path
-- 15 shadow tables are mirrored on push; 14 tables are pulled back into app state
+- 10 shadow tables are mirrored on push; 9 are pulled back into app state (job payments are derived)
+- business data on each phone lives in IndexedDB (2026-10; localStorage is the fallback)
+- with `supabase/2026-10-fast-sync-phase1.sql` run, downloads are changes-only by the server's clock (deletes included), and a fresh phone loads newest first, then the older history in the background
 - devices subscribe to `garage_sync_heartbeat` for realtime multi-device updates
 - background sync keeps local backup fresh and falls back to heartbeat checks every 5 minutes when realtime misses an event
 - normal saves upload only rows changed around the pending local edit, so invoice/job updates do not rescan every cloud table
-- `Sync Now` pulls latest cloud data first, then pushes only if this device still has pending local changes
+- `Sync Now` pulls latest cloud changes first, then pushes only if this device still has pending local changes; a full re-download is `Repair` in Sync diagnostics
 - devices that have not pulled for more than 7 days refresh from cloud before upload; startup renders local data first when available and only blocks empty devices for first cloud hydration
 - if there are no pending local edits, a pull replaces the local business cache so stale records are removed automatically
 - backups: Admin exposes a one-tap full JSON download; an optional GitHub Action dumps all Supabase tables nightly to a private repository

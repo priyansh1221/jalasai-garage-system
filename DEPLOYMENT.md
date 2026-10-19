@@ -1,5 +1,7 @@
 # JalaSai Deployment
 
+> **Older copy.** The current, maintained version is [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) (updated 2026-10-19). This root file is kept for history only.
+
 Last updated: 2026-04-03
 
 For the full product/build history, see:

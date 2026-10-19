@@ -1,6 +1,6 @@
 # Implementation Overview
 
-Last updated: 2026-05-01
+Last updated: 2026-10-19
 
 Related references:
 
@@ -40,6 +40,14 @@ Current sync safety model:
 - removed rows are soft-deleted in shadow tables, never hard-deleted
 - explicit user deletes push tombstone rows so other devices apply the delete instead of resurrecting the record (2026-06-12)
 - the delta-pull cursor advances from the real `source_updated_at` seen during a pull; delta/critical-only/partially-failed pulls always merge and never replace the local cache (2026-06-12 guards)
+- 2026-10:
+  - business tables are stored in IndexedDB `jalasai-data`, with localStorage as the fallback;
+  - Disconnect never wipes unsynced changes;
+  - a failing device save shows a red banner
+- 2026-10, once `supabase/2026-10-fast-sync-phase1.sql` is run:
+  - `jalasai_changes_since()` replaces the device-clock delta with per-table server-clock cursors (deletes included, one request);
+  - a fresh phone loads newest first, then downloads older history in the background (`syncMeta.history`);
+  - see `docs/FAST_CLOUD_LOAD_PLAN_2026_10.md`
 - payments arrays are unioned across both copies of a job during merge so concurrent payments are never lost
 - backups: Admin one-tap JSON download plus the optional nightly GitHub Action (`.github/workflows/nightly-backup.yml`)
 - `SHADOW_PULL_TABLES` in sync.js lists the 9 pullable tables (excludes derived `jobPayments`)
@@ -48,7 +56,7 @@ Background sync behavior:
 - background loop interval is 5 minutes
 - auto-push delay is 8000 ms and realtime pull debounce is 12000 ms
 - background loop pushes when `pendingSync` is true; otherwise runs `checkAndPullIfStale` as a realtime fallback
-- manual `Sync Now` performs a pull-first sync, then pushes only if local pending changes remain
+- manual `Sync Now` performs a pull-first sync (changes only, once the fast-sync SQL is run), then pushes only if local pending changes remain; `Repair: re-download everything` in Sync diagnostics does the old full pull
 - devices whose `lastPulledAt` is older than 7 days force-pull before any push
 - pull applies as a local-cache replacement when `pendingSync` is false, while pending devices still merge before upload
 - `local-newer` pull result auto-queues a push even when `pendingSync` is false
@@ -74,7 +82,8 @@ Render performance model:
 - Customers builds a customer/job summary once per render, then renders only the first 240 cards with a `Load more customers` control
 - Reminders builds one shared customer/job summary and derives feedback, service, and payment lists from that single pass
 - Invoices builds a linked-income lookup once per render instead of scanning income rows once per invoice row
-- the current service worker app-shell cache is `jalasai-v19`
+- per-invoice helpers are cached so screens stay fast at lakh scale (`today()`, `isLiveJob` via `_nonWorkshop`, `jobMechanicIds`, `allRevenueEntries`, `revenueEntriesForDate`); measured numbers are in `docs/FAST_CLOUD_LOAD_PLAN_2026_10.md`
+- `deploy.sh` stamps the service worker and asset URLs with a build timestamp on every deploy
 
 ### Operational Extensions
 

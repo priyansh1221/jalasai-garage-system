@@ -1,6 +1,19 @@
 # JalaSai Project Architecture and Function Reference
 
-Last updated: 2026-06-12
+Last updated: 2026-10-19
+
+> **2026-10-19 update:**
+> - Business tables now live in IndexedDB. localStorage is only the fallback.
+> - Stage 0 safety: Disconnect refuses to wipe unsynced changes, and a failing
+>   device save shows a red banner.
+> - Stage 1 speed work:
+>   - local hot-spot fixes (screens up to 100× faster at 1 lakh invoices);
+>   - changes-only sync on the server clock;
+>   - newest-first loading with a background history download.
+>
+>   Plans: `docs/FAST_CLOUD_LOAD_PLAN_2026_10.md` ("Build status") and
+>   `docs/LONG_TERM_DATA_ROADMAP_2026_10.md`. The function tables below are
+>   current: rows for removed functions were deleted.
 
 > **2026-06-12 update:** the supplier catalog / agent-JSON / invoice-import pipeline, the legacy `garage_state` blob paths, the sync validation machinery, demo/seed purge code, and `apps-script/` were removed; the duplicated inline shell helpers now live in shared `js/shell.js`; sync gained tombstone propagation, a fixed delta cursor, replaceLocal guards, and payments-union merge; new features: batch scan, Set Count recount, Book Check closing line, Garage Profile, nightly backup workflow, tenant_id groundwork. Sections below describing removed functions are retained for history but no longer apply — see `docs/CLEANUP_AND_HARDENING_2026_06_12.md` for the authoritative delta.
 
@@ -8,7 +21,7 @@ This document explains how the JalaSai Garage System is structured, how it works
 
 Scope notes:
 
-- Primary maintained runtime files are the root `index.html`, `style.css`, `sw.js`, `js/`, `NEW UI/index.html`, `NEW UI/style.css`, `supabase/schema.sql`, and `apps-script/` files.
+- Primary maintained runtime files are the root `index.html`, `style.css`, `sw.js`, `js/`, `NEW UI/index.html`, `NEW UI/style.css`, `supabase/schema.sql` and `supabase/2026-10-fast-sync-phase1.sql`. (`apps-script/` was removed on 2026-06-12.)
 - Both UI shells load the same root `js/` files. `deploy/` is generated output only and should not contain hand-maintained JS copies.
 - `js/new-ui.js` is New UI-specific shell code and is documented separately.
 - `js/vendor/supabase.js` and `js/vendor/lz-string.min.js` are third-party/minified dependencies, not JalaSai-owned functions.
@@ -53,7 +66,7 @@ The root page loads scripts in a global-script style. Modules share global array
 
 ### Local-First Data Layer
 
-The app writes business changes to browser memory first, then to `localStorage` through `saveAll()`. The local data remains usable offline. `saveAll()` supports scoped domain saves for hot paths, updates counters/metadata, marks UI tabs stale, stores compressed local snapshots for full saves, and queues cloud sync.
+The app writes business changes to browser memory first, then to the device through `saveAll()`. Business tables (jobs, customers, stock and the rest) are stored in IndexedDB `jalasai-data`; localStorage keeps settings and counters, and is the fallback when IndexedDB can't open. This changed in 2026-10, because Safari's 5 MB localStorage cap silently dropped the jobs table on iPhones. The local data remains usable offline. `saveAll()` supports scoped domain saves for hot paths, updates counters/metadata, marks UI tabs stale, stores compressed local snapshots for full saves, and queues cloud sync.
 
 Invoice hot paths are paint-first. Completing/editing an invoice, creating a quick invoice, saving a quick job-card, and recording invoice payment all update in-memory state immediately, close the modal, mark related pages stale, then defer the blocking scoped `saveAll()` call until after the browser has had a chance to paint. This keeps mobile saves feeling responsive while still using localStorage as the durable local write path and queued Supabase sync as the cloud write path.
 
@@ -70,7 +83,12 @@ Supabase shadow tables are the active cloud source of truth. The frontend pushes
 - device/user metadata,
 - optional `deleted_at` tombstone.
 
-Pulls read live rows from shadow tables and rebuild local arrays. The legacy `garage_state` JSON blob remains as a manual backup path.
+Pulls come in three kinds:
+- **Full pull:** reads every live row of the shadow tables and merges it into the local arrays.
+- **Changes-only pull (2026-10):** once `supabase/2026-10-fast-sync-phase1.sql` is run, phones call `jalasai_changes_since()`. It returns every row changed since each table's server-clock cursor (`server_updated_at`), deletes included, in one request. Only those records are merged in.
+- **Newest first (fresh phone):** a phone with no invoices loads open jobs and recent invoices first (`jalasai_recent_jobs`). It then downloads older history in the background (`jalasai_jobs_before`, newest first). While that runs, header totals and the next invoice number use server values, and full mirrors and balance uploads wait.
+
+The `garage_state` blob was removed on 2026-06-12.
 
 Realtime sync is driven by `garage_sync_heartbeat`. After a successful push, the device updates its heartbeat row; other devices receive realtime events and pull recent changes.
 
@@ -78,12 +96,18 @@ Realtime sync is driven by `garage_sync_heartbeat`. After a successful push, the
 
 `supabase/schema.sql` creates:
 
-- legacy blob table: `garage_state`,
-- shadow tables: `garage_customers`, `garage_mechanics`, `garage_jobs`, `garage_job_payments`, `garage_stock_items`, `garage_expenses`, `garage_income_entries`, `garage_parts_log`, `garage_audit_log`, `garage_review_items`, `garage_import_batches`, `garage_purchase_entries`, `garage_stock_movements`, `garage_supplier_catalog_map`, `garage_invoice_import_reviews`,
-- sync support tables: `garage_sync_heartbeat`, `garage_sync_validation_runs`,
+- shadow tables: `garage_customers`, `garage_mechanics`, `garage_jobs`, `garage_job_payments`, `garage_stock_items`, `garage_expenses`, `garage_income_entries`, `garage_parts_log`, `garage_audit_log`, `garage_stock_movements`,
+- sync support table: `garage_sync_heartbeat`,
 - performance indexes for common pull/search paths,
 - RLS policies for authenticated access,
 - storage bucket/policies for `job-photos`.
+
+`supabase/2026-10-fast-sync-phase1.sql` (additive; **not yet run on live**) adds:
+- the `server_updated_at` server-clock column and trigger, with a `(server_updated_at, id)` index;
+- the `garage_row_history` table, which keeps every overwritten or deleted row;
+- newest-first indexes;
+- the `jalasai_invoice_totals` and `jalasai_max_invoice_no` functions and the `garage_customer_balances` view;
+- the `jalasai_changes_since`, `jalasai_recent_jobs` and `jalasai_jobs_before` functions.
 
 ### PWA Layer
 
@@ -216,11 +240,9 @@ Realtime sync is driven by `garage_sync_heartbeat`. After a successful push, the
 
 | Function | Details |
 | --- | --- |
-| `businessDate(offsetDays)` | Returns the current business date in `Asia/Kolkata`, optionally shifted by days. |
+| `businessDate(offsetDays)` | Returns the current business date in `Asia/Kolkata`, optionally shifted by days. Reuses one formatter and caches the value per second (it was 2.5 s per render at 1 lakh invoices). |
 | `today()` | Returns today’s business date. |
 | `yesterday()` | Returns yesterday’s business date. |
-| `textLooksLikeSample(value)` | Detects demo/sample/dummy/test text. |
-| `recordLooksLikeSample(record, fields)` | Detects sample records by flags, import source, or sample-looking field text. |
 | `installAppStateView()` | Installs `window.appState` getters over the live global arrays and stale-tab state. |
 | `markTabStale(page)` | Marks a page as needing rerender after data changes. |
 | `markAppTabsStale(pages)` | Marks multiple app tabs stale. |
@@ -302,13 +324,7 @@ Realtime sync is driven by `garage_sync_heartbeat`. After a successful push, the
 | `mechanicColorFromName(name)` | Generates a stable color from a mechanic name. |
 | `legacyMechanicId(value)` | Creates a deterministic legacy mechanic ID from old mechanic labels. |
 | `recoverMechanicsFromReferences()` | Rebuilds missing mechanic records from job/income references. |
-| `normalizePurchaseEntry(entry)` | Normalizes supplier purchase/import line records. |
 | `normalizeStockMovement(entry)` | Normalizes stock movement audit rows. |
-| `normalizeSupplierCatalogMap(entry)` | Normalizes supplier-to-stock mapping records. |
-| `normalizeInvoiceImportReview(entry)` | Normalizes invoice import review records. |
-| `isDemoStockItem(item)` | Detects demo stock SKUs/items. |
-| `purgeDemoStockData()` | Removes demo stock data and related demo artifacts. |
-| `purgeSeededSampleData()` | Removes sample/demo data across records. |
 | `tidyCustomerRecords()` | Repairs duplicate/customer identity issues, rebuilds customer vehicle lists, and safely merges exact duplicates. |
 | `jobSubtotal(j)` | Computes job subtotal before discount/override. |
 | `jobDiscountAmount(j)` | Computes stored discount amount. |
@@ -360,6 +376,19 @@ Realtime sync is driven by `garage_sync_heartbeat`. After a successful push, the
 | `logAction(action, entity, entityId, details)` | Adds an audit log entry. |
 | `nextJobId()` | Returns the next formatted job ID. |
 | `nextId(prefix)` | Returns a unique local ID with prefix, timestamp, sequence, and device suffix. |
+| `getGarageProfile / normalizeGarageProfile / hydrateGarageProfileForm / saveGarageProfileForm` | Garage name, address and phone for invoices and messages. |
+| `localSaveFailureSummary / renderLocalSaveFailureBanner / noteLocalSaveResult` | Stage 0: a red banner that stays while any device save is failing. |
+| `writeLocalStorageSafe(key, value, options)` | localStorage write with quota recovery. |
+| `getLastPullAt / setLastPullAt / clearLastPullAt` | Old-server delta pull cursor (`source_updated_at`). |
+| `openDataIdb / readDataTablesFromIdb / writeDataTablesToIdb` | Business tables live in IndexedDB `jalasai-data` (Safari's 5 MB localStorage cap made invoices vanish). |
+| `queueTableSave / flushTableSaves / whenTableSavesSettled / noteTableSaveResult` | Coalesce table writes into one IndexedDB transaction; wait for a save to land; report failures. |
+| `mergeStoredTableCopies / loadAllFromStorage / normaliseStoredArray / clearDataTablesInIdb` | Boot load (localStorage, then IndexedDB, merged, never dropped) and sign-out wipe. |
+| `extractMaxUpdatedAt(rows)` | Newest `source_updated_at` among pulled rows. |
+| `clearLocalDeviceDataAfterSignOut()` | Removes all garage data from this device (Disconnect, after the Stage 0 checks). |
+| `jobLaneLabel / normalizeJobStatus` | Work-lane label and the three-status model. |
+| `isKnownNonJobRecordId / isCustomerShapedJobPollution / isAuditShapedJobPollution` | Pieces of `isNonWorkshopJobRecord`. Its result is stored on each job as `_nonWorkshop` by `normalizeJob`. |
+| `revenueEntriesForDate(date)` | Revenue entries for one date, expanding only jobs that can have a payment that day. |
+| `revenueCacheKey / buildRevenueEntries` | `allRevenueEntries` is built once per data version and cached. |
 
 ### `js/utils.js`
 
@@ -551,6 +580,10 @@ Realtime sync is driven by `garage_sync_heartbeat`. After a successful push, the
 | `closeJobPartsDrawer()` | Closes the part-search drawer. |
 | `openPaymentModal(jobId)` | Opens modal for adding payment to a job/invoice. |
 | `savePayment()` | Records a payment entry, updates job paid state, logs, uses paint-first scoped payment save, and queues background sync. |
+| `jobMechanicIds(job) / resolveJobMechanicIds(job)` | Mechanic ids for a job. Cached per job object, keyed by data version, mechanics list and the job's own mechanic fields. |
+| `renderJobLaneChips / renderJobBoardLaneChips / setJobLaneFilter / setJobLane` | Work lanes (MCU/LV, Bandh, EV Service, Petrol, Unsorted) on the job form and board. |
+| `jobDaysInShop / jobAgeClass / jobLaneRank / compareJobsForBoard` | Oldest-first ordering within lanes and age styling. |
+| `staleOpenJobList / renderStaleJobs / toggleStaleJobs` | Open jobs older than 30 days. |
 
 ### `js/stock.js`
 
@@ -859,7 +892,6 @@ Realtime sync is driven by `garage_sync_heartbeat`. After a successful push, the
 | `updateGSBadge()` | Updates Cloud ON/OFF/SETUP/DISABLED badge. |
 | `updateGSStatus(msg)` | Updates sync status text, diagnostics, quick button, and startup overlay. |
 | `renderSyncDiagnostics()` | Renders detailed sync metadata/status table. |
-| `renderCloudBackupStatus()` | Renders legacy blob backup status. |
 | `syncErrMsg(err, fallback)` | Converts sync errors into readable messages. |
 | `canUseCloudConfig()` | Checks whether project URL/key are available. |
 | `hasAnyRecords(data)` | Checks if a payload contains any business records. |
@@ -880,8 +912,6 @@ Realtime sync is driven by `garage_sync_heartbeat`. After a successful push, the
 | `mergeByKey(remoteList, localList, keyFn, normalizeFn, options)` | Merges remote/local lists by key with tombstone and timestamp rules. |
 | `mergeEventLists(remoteList, localList, keyFn)` | Merges append-style event/audit lists. |
 | `mergedSyncPayload(remoteData, localData, options)` | Merges complete remote/local payloads. |
-| `shadowValidationWindowActive(nowStamp)` | Checks whether shadow validation window is active. |
-| `ensureShadowValidationWindow()` | Starts validation window metadata if needed. |
 | `shadowStableValue(value)` | Produces stable values for hashing. |
 | `shadowStableStringify(value)` | Stable-stringifies row payloads. |
 | `shadowHashString(value)` | Hashes stable payload strings. |
@@ -909,18 +939,10 @@ Realtime sync is driven by `garage_sync_heartbeat`. After a successful push, the
 | `buildIncomeEntryShadowRows(payload, session)` | Builds rows for `garage_income_entries`. |
 | `buildPartsLogShadowRows(payload, session)` | Builds rows for `garage_parts_log`. |
 | `buildAuditLogShadowRows(payload, session)` | Builds rows for `garage_audit_log`. |
-| `buildReviewItemShadowRows(payload, session)` | Builds rows for `garage_review_items`. |
-| `buildImportBatchShadowRows(payload, session)` | Builds rows for `garage_import_batches`. |
-| `buildPurchaseEntryShadowRows(payload, session)` | Builds rows for `garage_purchase_entries`. |
 | `buildStockMovementShadowRows(payload, session)` | Builds rows for `garage_stock_movements`. |
-| `buildSupplierCatalogMapShadowRows(payload, session)` | Builds rows for `garage_supplier_catalog_map`. |
-| `buildInvoiceImportReviewShadowRows(payload, session)` | Builds rows for `garage_invoice_import_reviews`. |
 | `fetchShadowRemoteMeta(client, table)` | Reads remote shadow table metadata for validation/delete comparisons. |
 | `upsertShadowRows(client, table, rows)` | Batch-upserts shadow rows to Supabase. |
 | `dedupeShadowRows(rows)` | Deduplicates shadow rows by ID. |
-| `validateShadowTableRows(expectedRows, actualMeta)` | Compares expected local rows to remote metadata. |
-| `summarizeShadowValidation(results)` | Builds human-readable validation summary. |
-| `logShadowValidationRun(client, payload, session, validation)` | Writes validation run details to Supabase. |
 | `shadowMirrorErrorMessage(err)` | Converts shadow mirror errors into readable text. |
 | `mirrorPayloadToShadowTables(client, payload, session, options)` | Pushes payload rows to all shadow tables, validates, heartbeat-updates, and records sync metadata. |
 | `buildMergeSummary(remoteData, localData, merged)` | Summarizes merge result counts. |
@@ -948,17 +970,43 @@ Realtime sync is driven by `garage_sync_heartbeat`. After a successful push, the
 | `saveGS()` | Saves cloud settings and signs in/syncs. |
 | `disconnectGS()` | Signs out and clears local cloud session state. |
 | `syncGS()` | Runs a manual sync action from cloud modal. |
-| `shouldWriteWeeklyBlob()` | Checks whether legacy weekly blob backup should be written. |
 | `pullFromShadowTables(client, options)` | Reads all live shadow tables and rebuilds app payload. |
-| `writeGarageStateBlob(client, payload, session)` | Writes legacy `garage_state` blob backup. |
-| `copyTableSyncToGarageStateBackup()` | Manually copies table-wise sync data into legacy blob row. |
 | `pullGS(options)` | Pulls from cloud shadow tables/blob and applies/merges. |
 | `pushGS(options)` | Pushes local pending state to shadow tables and optional blob backup. |
 | `initGSSync()` | Initializes cloud config, auth/session, startup pull, realtime, and background sync. |
 | `copyCloudSQL()` | Copies setup SQL to clipboard for cloud configuration. |
 | `downloadBackup()` | Downloads local data backup JSON. |
 | `restoreBackup(input)` | Restores backup JSON from file input. |
-| `importLegacyBundle(input)` | Imports legacy exported bundle format. |
+| `gapFillWindowMs(minWindowMs)` | Old-server gap-fill window: covers the time since the last pull, capped at 7 days. |
+| `beginRecentSyncWork() / endRecentSyncWork()` | Single-flight guard for the recent-changes and stale-check paths. |
+| `yieldRecentRefreshChunk()` | Yields to the browser between sync chunks. |
+| `syncTableKeysForDomains(domains)` | Maps save domains (jobs, stock, …) to the shadow tables a scoped push must send. |
+| `rememberAutoSyncScope / consumeAutoSyncScope / restoreAutoSyncScope` | Accumulate, take and re-queue the table scope of pending auto-pushes. |
+| `findImportReviewJunkJobs() / cleanImportReviewJunkJobs()` | Find / soft-delete Khatabook `kb-review-*` rows that ended up on the Job Board. |
+| `isAuthCredentialError / isCloudConfigFetchError / cloudSetupFriendlyMessage` | Classify sign-in and config errors into staff-readable messages. |
+| `setCloudLoginFeedback / setCloudConnectLoading` | Cloud Sync modal status line and button loading state. |
+| `syncNowMs / cloudBytesSince / recordSyncTiming` | Sync speed diagnostics: timers, bytes received from Supabase, last pull/push timing. |
+| `fmtSyncMs / fmtSyncBytes / syncCountLabel / syncTimingSummary / syncTableTimingSummary` | Format the speed rows in Sync diagnostics. |
+| `ioSaverPushCutoffMs / ioSaverRecordIsRecent` | IO-saver push window, applied before the row build/hash. |
+| `buildJobPaymentUnionIndex / applyJobPaymentUnion` | Union payment entries across two copies of a job so concurrent payments are never lost. |
+| `shadowTombstoneRow / appendShadowTombstones` | Emit tombstone rows for locally deleted records so deletes sync. |
+| `buildShadowBalanceJobIndex(jobs)` | O(customers + jobs) index for the customer balance column. |
+| `scheduleDeferredFullMirror(delayMs)` | Runs the weekly healing full mirror at a quiet moment. Skipped while the history download is incomplete. |
+| `refreshRealtimePagesBatch(keys, pages)` | One stale-mark and render for a batch of applied cloud changes. |
+| `blockDisconnectToKeepLocalData(reason)` | Stage 0: refuses Disconnect while changes exist only on this phone and offers a backup download. |
+| `shadowRowToRecord(config, row)` | One cloud row → the app record it mirrors (shared by full and changes-only pulls). |
+| `isMissingRpcError / fetchDeltaServerTime / checkDeltaServer` | Detect whether `jalasai_changes_since` exists (cached 6 h); read the server clock. |
+| `deltaPullConfigs / deltaCursorsReady / deltaOverlapAt / setDeltaCursors` | Per-table server-clock cursors in `syncMeta.deltaCursors`, with a 2-minute overlap when read. |
+| `fetchChangesSince(client, configs)` | Calls `jalasai_changes_since` in keyset pages of 500 until every table is read. Returns null when a phone has too many changes (the caller then does a full pull). |
+| `applyChangedRecords(recordsByKey)` | Merges changed records into local tables one by one, using the same rules as a full pull (deletes, record stamps, payment union). |
+| `pullChangesOnly(client, options)` | Changes-only pull: fetch, apply, save only the changed tables, render, advance cursors. |
+| `repairCloudDownload()` | Sync diagnostics "Repair: re-download everything" (old full pull). |
+| `historyIncomplete()` | True while a fresh phone is still downloading older invoices (`syncMeta.history`). |
+| `historyRecentSince / jobsShadowConfig / persistSyncMeta` | Helpers for newest-first loading. |
+| `refreshServerTotals(client)` | Reads `jalasai_invoice_totals` and `jalasai_max_invoice_no` into `syncMeta.serverTotals`. |
+| `loadNewestFirst(client)` | Fresh phone first screen: open jobs, this month / last 30 days of invoices, customers, mechanics and stock. Then starts the history download. |
+| `scheduleHistoryBackfill / historyBackfillYield / runHistoryBackfill` | Background download of older invoices (newest first, 500 per page), then expenses, income and logs. Resumes after a restart. |
+| `historyLoadingNoteHtml()` | The "Loading older invoices… x / y" note on Invoices, Customers and Reports. |
 
 ### `js/qrgen.js`
 
@@ -1033,11 +1081,19 @@ No functions are declared. It assigns `window.JALASAI_CLOUD_CONFIG` with Supabas
 - Optimistic invoices: invoice save paths mark pending invoice IDs and the invoice table renders a small pending dot until confirmed sync clears the specific IDs.
 - Paint-first invoice persistence: invoice completion/edit/quick/payment paths avoid cloud push and synchronous localStorage writes in the tap handler. They update memory immediately, close UI, then defer scoped `saveAll()` until after paint.
 - Deploy cache busting: `deploy.sh` adds timestamp query strings to generated JS/CSS references and `sw.js` registration so mobile PWAs do not keep stale modules after deployment.
+- **Per-invoice work must stay cheap (2026-10).** At 1 lakh invoices a screen calls `isLiveJob`/`today()` hundreds of thousands of times. Keep these rules:
+  - `today()` reuses one cached formatter;
+  - `isLiveJob` reads `_nonWorkshop`, worked out once in `normalizeJob`;
+  - `jobMechanicIds` is cached per job;
+  - `allRevenueEntries` is cached per data version, and "today" totals use `revenueEntriesForDate`;
+  - never scan all jobs inside a per-customer or per-mechanic loop: build a map once (see `retentionSummary`, `renderMechanics`).
+- Measured on a Mac at 1 lakh invoices (phones 3–5× slower): Job board 65 ms, header stats 40 ms, Invoices 86 ms, Customers ~0.2 s, Reports 0.4–0.7 s. A save still writes the whole jobs table to IndexedDB (~220 ms at 1 lakh). Saving only the changed records is FAST_CLOUD_LOAD_PLAN Phase 3.
 
 ## 8. High-Risk Areas for Future Changes
 
 - Customer matching: change carefully. `customerMatchesJob()`, `bestCustomerForJob()`, and `tidyCustomerRecords()` prevent imported/opening-balance records from attaching to the wrong customer.
-- Sync/tombstones: `SHADOW_INFER_DELETES` is disabled to avoid stale-device accidental deletes. Do not infer remote deletes from missing local rows without a fresh pull strategy.
+- Sync/tombstones: `SHADOW_INFER_DELETES` is disabled to avoid stale-device accidental deletes. Do not infer remote deletes from missing local rows without a fresh pull strategy. This matters even more with newest-first loading, where a phone legitimately holds only part of the history.
+- Partial history: while `historyIncomplete()` is true, nothing may compute and upload all-history values (customer balances, full mirror) or run the customer-linking maintenance.
 - Invoice numbers: duplicate checks are split between `jobs.js` strict matching and `index.html` invoice display matching.
 - Payments: payment history, legacy `payment` fields, due/advance calculations, and manual income are related but intentionally separate.
 - Stock imports: catalog review and agent JSON import can update live inventory, purchase records, supplier maps, and stock movements.

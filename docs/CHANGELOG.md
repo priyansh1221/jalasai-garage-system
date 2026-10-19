@@ -1,6 +1,97 @@
 # JalaSai Changelog
 
-Last updated: 2026-06-12
+Last updated: 2026-10-19
+
+## 2026-10-19
+
+### Speed for a lakh-scale database (roadmap Stage 1, not deployed yet)
+
+- **Local speed fixes** (Mac, 1 lakh synthetic invoices; phones 3–5× slower):
+  - Job board 8.1 s → 65 ms, header stats 8.0 s → 40 ms, Reports 6.0 s →
+    0.4–0.7 s, Invoices 2.6 s → 86 ms.
+  - `today()` built a new time-zone formatter on every call. Now one cached
+    formatter is used.
+  - `isLiveJob` now reads `_nonWorkshop`, worked out once in `normalizeJob`.
+  - Today's revenue no longer rebuilds every payment ever made
+    (`revenueEntriesForDate`). `allRevenueEntries` and `jobMechanicIds` are
+    cached.
+  - Reports retention and the Mechanics page no longer scan all jobs per
+    customer or per mechanic.
+- **Changes-only sync** (needs `supabase/2026-10-fast-sync-phase1.sql`; the app
+  keeps the old pull until it's run):
+  - One `jalasai_changes_since()` request returns every changed row since this
+    phone's server-clock cursor, deletes included, paged 500 at a time.
+  - An upload that arrives late from an offline phone, or from a phone with a
+    wrong date, is no longer missed.
+  - Only changed records are merged in.
+  - Sync Now uses it. "Repair: re-download everything" is now in Sync
+    diagnostics.
+  - The reconnect gap-fill has no 200-row cap any more.
+- **Newest-first loading for a fresh phone:**
+  - The first screen gets open jobs, this month / the last 30 days of invoices,
+    customers, mechanics and stock.
+  - Older invoices download in the background, newest first, and resume after a
+    restart with no gaps.
+  - While that runs:
+    - the Legacy invoice header shows server totals;
+    - the next invoice number also checks the server's maximum;
+    - Invoices, Customers and Reports show "Loading older invoices… x / y";
+    - the weekly full mirror, customer balance uploads and customer-linking
+      maintenance wait.
+- **SQL:** Phase 1 was extended with `jalasai_changes_since`,
+  `jalasai_recent_jobs` and `jalasai_jobs_before`. The row-history trigger now
+  also compares `record_data`. It's tested on local Postgres but **not run on
+  live**.
+- **Two-phone safety (roadmap Stage 2):**
+  - built and tested (outbox, server versions, field-by-field merge);
+  - then parked as `docs/parked/sync-v2-stage2.patch`, so the speed work lands
+    first.
+
+### Stage 0 safety fixes (merged from `hotfix/safari-invoices`)
+
+- Disconnect never wipes changes that exist only on this phone. It uploads them
+  first, or refuses and offers a backup download, and always asks before wiping.
+- If a device save fails, a red banner stays until the save succeeds. Closing
+  the tab while saves are failing asks for confirmation.
+
+### Invoices stopped vanishing on iPhones
+
+- Safari caps localStorage at 5 MB and counts compressed characters double. Once
+  the jobs list outgrew that, the save failed silently and a reload opened with
+  no invoices.
+- Business tables now live in IndexedDB `jalasai-data`; localStorage is the
+  fallback.
+- A device that opens with no jobs while signed in now downloads the whole jobs
+  table.
+- Also new: sync speed rows in Sync diagnostics, and the plans
+  `docs/FAST_CLOUD_LOAD_PLAN_2026_10.md` and
+  `docs/LONG_TERM_DATA_ROADMAP_2026_10.md`.
+
+### Tall modals on phones
+
+- Tall modals now stay within the visible screen on phones.
+
+## 2026-08-21
+
+### Job board by work lane
+
+- The board is grouped by lane (MCU/LV, Bandh, EV Service, Petrol, Unsorted),
+  oldest first.
+- A new `lane` field on jobs is set from chips on the job form or the card. It
+  rides in `record_data`, so no SQL change was needed.
+- The five open statuses collapsed to three that drive action.
+
+## 2026-07-14
+
+### Phone-first calm redesign (Legacy UI)
+
+- Single header band, one 4-cell stat strip, slimmer toolbars, and pinned thumb
+  action bars on every page.
+- Restyled cards and tables.
+- Quick Invoice puts the essentials first, with a "More" section.
+- Reports folds into a compact Growth Dashboard with collapsible insights.
+- Legacy UI only (`index.html` + `style.css`); every control calls the same
+  handlers as before.
 
 ## 2026-06-12
 

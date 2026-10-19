@@ -1,6 +1,6 @@
 # JalaSai Garage System — Operations Guide
 
-Last updated: 2026-05-08
+Last updated: 2026-10-19
 
 Project history and implementation journey:
 - [PROJECT_HISTORY.md](/Users/priyansh/Projects/JalaSai/docs/PROJECT_HISTORY.md)
@@ -224,10 +224,24 @@ Current cloud design uses shadow tables as the primary live source:
 - primary runtime sync: 10 mirrored shadow tables (`garage_customers`, `garage_jobs`, `garage_job_payments`, `garage_stock_items`, `garage_expenses`, `garage_income_entries`, `garage_parts_log`, `garage_audit_log`, `garage_stock_movements`, `garage_mechanics`), with 9 pulled back into app state (job payments are derived)
 - the legacy `garage_state` blob and the supplier-import tables were removed from the app on 2026-06-12 (`docs/CLEANUP_AND_HARDENING_2026_06_12.md`)
 
+Where the data lives on a phone:
+- business tables are stored in IndexedDB (`jalasai-data`) since 2026-10; localStorage keeps settings and is the fallback
+- if a save on the phone fails, a red banner stays at the top. Don't close the app; download a backup from Cloud Sync
+
 How sync works:
 - normal push writes only rows changed around the pending local edit to shadow tables
 - manual/full mirror paths remain available for intentional backup or recovery operations
-- automatic pull refreshes operational tables first; manual `Sync Now` can still perform a full pull
+- **downloads, once `supabase/2026-10-fast-sync-phase1.sql` has been run:**
+  - phones fetch only what changed since their last sync, by the server's clock, in one request, deletes included;
+  - `Sync Diagnostics → Download Mode` shows "Changes only (server clock)";
+  - before the SQL is run it shows "Full table reads", which is the old behaviour
+- `Sync Now` uploads pending changes and downloads only the changes
+- for a full re-download (a phone's data looks wrong), use `Sync Diagnostics → Repair: re-download everything`
+- **a new phone, or one whose data was cleared:**
+  - it shows open jobs and this month's invoices within seconds;
+  - older invoices download in the background and continue after the app is reopened;
+  - meanwhile Invoices, Customers and Reports show "Loading older invoices… x / y";
+  - totals that cover all history (customer dues, year reports) are complete once that note disappears
 - removed records are soft-deleted, never hard-deleted
 - explicit user deletes now push tombstone rows to cloud so other devices apply the delete instead of resurrecting the record (2026-06-12)
 - the reconnect/visibility sweep widens its window to cover the device's offline gap (up to 7 days) so deletes made while away are applied
@@ -239,12 +253,13 @@ Background sync behavior:
 - manual `Sync Now` downloads latest cloud data first, then pushes only if local pending changes remain
 - any device that has not pulled for more than 7 days performs pull-first recovery before uploading
 - when a device has no pending local edits, a FULL cloud pull replaces the local business cache; delta/critical-only/partially-failed pulls always merge instead (guard added 2026-06-12)
+- Disconnect (2026-10) checks for changes that exist only on this phone. It uploads them first; if it can't (offline, or the upload fails), it refuses to wipe and offers a backup download
 
 Realtime sync between devices:
 - all devices subscribe to `garage_sync_heartbeat` via Supabase Realtime on sign-in
 - when any device pushes successfully, all other signed-in devices receive the event and pull automatically after the realtime debounce/cooldown
 - no manual refresh or tab switch needed for multi-device updates
-- fallback: 30-second poll catches events missed due to phone sleep or network blip
+- fallback: the 5-minute background check catches events missed due to phone sleep or a network blip; on reconnect or reopening the app, a changes-only pull fills any gap
 - effective end-to-end sync latency between devices: ~5 seconds
 - requires one-time SQL run to add `garage_sync_heartbeat` table and enable realtime publication
 
@@ -254,12 +269,11 @@ Realtime sync between devices:
 - Nightly automated backup: GitHub Action `.github/workflows/nightly-backup.yml` runs `scripts/supabase-backup.mjs` at 03:00 IST, dumping every live table and pushing to a PRIVATE backup repository
 - The workflow skips gracefully (stays green) until these repo secrets are set: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE`, `BACKUP_REPO` (e.g. `priyansh1221/jalasai-backups`, must be private), `BACKUP_REPO_TOKEN` (fine-grained PAT, contents:write on the backup repo)
 - Never store dumps in the public app repo or as public-repo workflow artifacts
-5. Run `testBackupNow()` to verify Drive access works
-6. Run `testBlobWriteNow()` to verify blob write works
+- After `supabase/2026-10-fast-sync-phase1.sql` is run, every overwritten or deleted cloud row is also kept in `garage_row_history`, so a bad edit or sync can be restored by hand
 
 If diagnostics show a Table Sync Error:
-- blob remains readable as fallback for pull
-- rerun the latest [supabase/schema.sql](/Users/priyansh/Projects/JalaSai/supabase/schema.sql)
+- local data stays safe on the phone; uploads retry on their own
+- rerun the latest [supabase/schema.sql](/Users/priyansh/Projects/JalaSai/supabase/schema.sql) (and the fast-sync SQL, if it was run before)
 
 ### Supabase project unhealthy response
 

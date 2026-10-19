@@ -4,6 +4,11 @@ This file keeps operational incidents easy to find without mixing them into norm
 
 ## 2026
 
+- Invoices vanishing on iPhones - 2026-10-19
+  - Safari caps localStorage at 5 MB and counts compressed text double.
+  - Once the jobs list outgrew that, saves failed silently. After a reload the phone had no invoices, and because customers and stock still loaded, it never downloaded them again.
+  - Fixed by storing business tables in IndexedDB, forcing a full jobs download when a signed-in phone has none, and showing a red banner whenever a device save fails.
+  - See `docs/CHANGELOG.md` (2026-10-19).
 - [Supabase Project Unhealthy Incident - 2026-06-07](SUPABASE_PROJECT_UNHEALTHY_INCIDENT_2026_06_07.md)
   - Cloud login/sync failed because the Supabase project database connection path was unhealthy. Restarting the Supabase database restored Auth, PostgREST, Storage, and app sync.
 - [Cloud Off Local Cache Reference - 2026-06-07](CLOUD_OFF_LOCAL_CACHE_REFERENCE_2026_06_07.md)

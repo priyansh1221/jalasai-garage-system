@@ -1,9 +1,82 @@
 # Fast cloud load plan — newest first, older on demand, delta sync
 
-Status: **Approved 2026-10-19.** Phase 0 code done (download/upload speed rows in
-Sync diagnostics, `js/sync.js`, not yet deployed). Phase 1 SQL drafted in
-`supabase/2026-10-fast-sync-phase1.sql`: tested twice on a local Postgres, **not
-run on live Supabase yet**.
+Status: **Approved 2026-10-19.** Phases 0, 2 and 4 are built, plus local speed
+fixes. The Phase 1 SQL is extended. Everything is tested locally; **nothing is
+deployed and the SQL hasn't been run on live Supabase yet**. Details are in
+"Build status" below.
+
+### Build status (2026-10-19)
+
+**Local speed fixes** (work without any server change). Mac Chrome, synthetic
+1 lakh invoices; phones are 3–5× slower:
+
+| Screen | Before | After |
+|---|---:|---:|
+| Job board | 8.1 s | 65 ms |
+| Header stats | 8.0 s | 40 ms |
+| Reports | 6.0 s | 0.4–0.7 s |
+| Invoices | 2.6 s | 86 ms |
+| Mechanics | — | ~0.1 s |
+
+The causes:
+- `today()` built a new time-zone formatter on every call, 100,000 times per
+  render; now one formatter is reused.
+- `isLiveJob` re-ran the regex-heavy pollution check; the result is now worked
+  out in `normalizeJob` as `_nonWorkshop`.
+- `allRevenueEntries` rebuilt every payment ever made to show today's revenue;
+  `revenueEntriesForDate` now reads only the jobs that can have a payment on
+  that date.
+- `retentionSummary` scanned all jobs once per customer (customers × invoices);
+  it now makes one pass.
+- Mechanics resolved every job's mechanics once per mechanic card; it's now
+  once per render, with a cached `jobMechanicIds`.
+
+**Phase 2, changes-only sync:**
+- `jalasai_changes_since()` (SQL §E) reads all tables in one request.
+- Cursors use the server clock, one per table, with a 2-minute overlap. Deletes
+  are included, and paging is keyset, 500 rows per page.
+- Only the changed records are merged in, with the same merge rules as a full
+  pull.
+- Sync Now uses changes-only. "Repair: re-download everything" is in Sync
+  diagnostics.
+- The reconnect gap-fill uses the same path, so the 200-row cap is gone.
+- Until the SQL is run, the app keeps the old pull unchanged.
+
+**Phase 4, fresh phone loads newest first:**
+- `jalasai_recent_jobs()` / `jalasai_jobs_before()` (SQL §F).
+- The first screen gets open jobs, invoices since the earlier of the month start
+  or 30 days ago, customers, mechanics and stock.
+- Older invoices download in the background, 500 per page, newest first. The
+  saved position moves only after a page is saved, so a restart resumes without
+  gaps.
+- Expenses, income and the logs load after that.
+- While history is incomplete:
+  - the Legacy invoice header shows server totals;
+  - the next invoice number also checks the server's maximum;
+  - Invoices, Customers and Reports show a "Loading older invoices… x / y" note;
+  - the weekly full mirror, customer balance uploads and the customer-linking
+    maintenance wait.
+
+**Tested:** two simulated phones running the real `js/` files against local
+Postgres.
+- Edits, deletes and late uploads from an offline phone arrive via
+  changes-only.
+- 1,200 changes arrive in 3 requests.
+- When nothing has changed, a pull is 1 request.
+- A fresh phone starts with 123 of 3,000 invoices and finishes with all 3,000,
+  with no duplicates, including across a restart.
+- The old server path is unchanged.
+
+**Not built yet (still planned):**
+- Phase 3: saving only the changed records. A save still writes the whole table
+  to IndexedDB: 34 ms at 20k invoices, 220 ms at 1 lakh.
+- Phase 5: server report summaries for old ranges. Reports show the note
+  instead, and the history download fills the gap in the background.
+- "Load older invoices" on demand and a server-side search fallback. The
+  background download makes these less urgent.
+- Phase 6: the rolling window. Phones still keep full history, which is fine up
+  to ~20k invoices.
+- A duplicate invoice-number check against history that hasn't downloaded yet.
 Date: 2026-10-19 · Branch at time of writing: `ux-polish`
 Part of the long-term roadmap: this plan is **Stage 1** of
 `docs/LONG_TERM_DATA_ROADMAP_2026_10.md`. Stage 0 (data-loss safety net) should

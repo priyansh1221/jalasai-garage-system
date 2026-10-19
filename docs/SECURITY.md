@@ -1,6 +1,6 @@
 # Security and Public Release Notes
 
-Last updated: 2026-04-23
+Last updated: 2026-10-19
 
 ## Publishing Policy
 
@@ -11,6 +11,9 @@ Current posture to review before sharing a build:
 - browser-side deployment uses an anon-key client configuration in `js/cloud-config.js`
 - the nightly backup workflow uses the Supabase service-role key ONLY inside GitHub Actions secrets; dumps are pushed to a private repo and must never land in this public repo
 - local/sensitive artifacts should still be excluded through `.gitignore`
+- the fast-sync SQL functions (`jalasai_changes_since`, `jalasai_recent_jobs`, `jalasai_jobs_before`, `jalasai_invoice_totals`, `jalasai_max_invoice_no`) are `security invoker`: they run with the caller's own Row Level Security, so they expose nothing beyond what a signed-in user can already read
+- `garage_row_history` (old versions of every overwritten or deleted row) is readable by signed-in users and written only by its trigger
+- any signed-in user still has full table access (`isAdminUser` is open, and the Reports `1122` gate is checked on the device only); per-role RLS is roadmap Stage 6
 
 ## Required Private Handling
 

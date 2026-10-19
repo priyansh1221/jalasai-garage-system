@@ -1,5 +1,7 @@
 # JalaSai Project History
 
+> **Older copy.** The current, maintained version is [docs/PROJECT_HISTORY.md](docs/PROJECT_HISTORY.md) (updated 2026-10-19). This root file is kept for history only.
+
 Last updated: 2026-04-03
 
 ## Why This File Exists

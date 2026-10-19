@@ -1,6 +1,6 @@
 # JalaSai long-term data roadmap: fast, safe, never lose a rupee
 
-Status: **PLAN ONLY — waiting for approval. No code changed.**
+Status (2026-10-19, nothing deployed yet): Stage 0's L1/L2 fixes are built. Stage 1 (speed) is in progress. Stage 2 was built and tested, then **parked** as `docs/parked/sync-v2-stage2.patch` so Stage 1 lands first (see "Stage 2 status"). The Stage 0 nightly export and Stages 3–7 are still plans.
 Date: 2026-10-19 · Companion to `docs/FAST_CLOUD_LOAD_PLAN_2026_10.md` (Stage 1 below)
 
 ## Rule #1: no data loss, ever
@@ -174,6 +174,55 @@ invoices first, older on demand, server totals. Background backfill stops at the
   app today is plain HTML/JS with no build step. Its Safari support needs testing,
   and it's another service to pay for. **Decide with a 2-day spike** before
   starting Stage 2.
+
+#### Stage 2 status (2026-10-19): built, tested locally, then parked
+
+**Parked:** the whole change (app code + `supabase/2026-10-sync-v2-stage2.sql`)
+is saved as `docs/parked/sync-v2-stage2.patch`, made against the Stage 0 code, so
+the speed work (Stage 1) goes first. After Stage 1 lands, re-apply it with
+`git apply docs/parked/sync-v2-stage2.patch`. Expect to rework its download side,
+which overlaps Stage 1's changes-only sync, and re-run the two-phone tests.
+
+Built our own engine (no build step, no new service). PowerSync was not tried.
+
+- **Phone:** `js/sync-outbox.js`, wired into `js/sync.js` / `js/data.js`, loaded by
+  both UIs. After each save, every record is fingerprinted and changed ones go
+  into an IndexedDB outbox (`jalasai-sync`), with no timestamps involved. An
+  entry is removed only when the server confirms that exact content.
+- **Server:** `supabase/2026-10-sync-v2-stage2.sql` (needs Phase 1 first):
+  - `version` on every row, raised by a trigger;
+  - `jalasai_apply_changes()` compare-and-set, so resends are recognised;
+  - field-by-field merge using `garage_row_history` as the common base.
+    Lists with ids (payments, parts) merge item by item;
+  - every refused change is kept in `garage_sync_conflicts`.
+- **Different from the plan above:** the merge runs on the **server**, because it
+  already has every old version. The phone keeps only version numbers, not a
+  second copy of the data, which matters for the 50 MB phone budget. And ✓ isn't
+  shown: a record shows nothing once it's saved to the cloud (calm UI). It shows
+  ⏳ while waiting and ⚠ for 7 days after a two-phone conflict.
+- **Safe before the SQL is run:** the app detects the missing function and keeps
+  the old table sync. It also uploads exactly the queued records, so L7 is fixed
+  even on today's server.
+- **Tested** on local Postgres, with two simulated phones running the real `js/`
+  files. The checklist below, items 1, 2, 3, 4, 5, 8 and 9, all pass. Also tested:
+  an old-stamped edit (L7), no echo uploads after a download, a live upgrade
+  (queued change kept, versions learned, no conflict round trips afterwards), and
+  a phone still on the old app not being overwritten.
+- **Known limits:**
+  - Phones still on the old app keep plain upserts, so L3 stays possible for
+    their writes until every phone has updated.
+  - A delete beats an offline edit; the edit is kept in `garage_sync_conflicts`,
+    not on the invoice.
+  - Change capture is a full table pass in the background after saves (≈0.1 s
+    per 20k jobs on a Mac, chunked so the screen never freezes). Downloads only
+    check the records they touch.
+
+**Rollout order** (each step is safe on its own):
+1. Deploy the app (`./deploy.sh`). Phones keep using the old server path.
+2. Back up, then run `supabase/2026-10-fast-sync-phase1.sql`.
+3. Run `supabase/2026-10-sync-v2-stage2.sql`. Within 6 h, or on the next app
+   open, phones switch to v2 and do one full download to learn versions.
+4. Monthly: `select public.jalasai_prune_sync_bookkeeping();`
 
 ### Stage 3: Money as a ledger (Khatabook model)
 - New table `garage_ledger_entries`: `id, customer_id, job_id, kind (invoice |

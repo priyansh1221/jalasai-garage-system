@@ -1,5 +1,7 @@
 # Security and Public Release Notes
 
+> **Older copy.** The current, maintained version is [docs/SECURITY.md](docs/SECURITY.md) (updated 2026-10-19). This root file is kept for history only.
+
 Last updated: 2026-04-06
 
 ## Publishing Policy

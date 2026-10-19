@@ -1,19 +1,23 @@
 # System Data Map
 
-Last updated: 2026-04-23
+Last updated: 2026-10-19
 
 This file documents the practical business data currently handled by JalaSai, how that data is used, and how it behaves in local-first and cloud-sync mode.
 
 ## Current Runtime Sync State
 
-Current app/runtime behavior (2026-04-23):
+Current app/runtime behavior (2026-10-19):
 
 - shadow tables are the live source of truth
-- 15 shadow tables are mirrored on push; 14 tables are pulled into app state
+- 10 shadow tables are mirrored on push; 9 are pulled into app state (job payments are derived)
+- on each phone, business tables live in IndexedDB `jalasai-data`; localStorage holds settings and is the fallback
 - `garage_sync_heartbeat` drives realtime multi-device updates
-- background sync interval is 30 seconds and falls back to stale-check pulls when realtime misses an event
-- `garage_state` is a legacy backup target, not the live sync source
-- legacy blob backup is not auto-written by the app runtime; Admin and Apps Script can still maintain it as a backup path
+- background sync interval is 5 minutes and falls back to stale-check pulls when realtime misses an event
+- once `supabase/2026-10-fast-sync-phase1.sql` is run:
+  - downloads are changes-only by the server's clock (`server_updated_at`, deletes included);
+  - a fresh phone loads newest first, then older history in the background;
+  - every overwritten or deleted cloud row is kept in `garage_row_history`
+- the `garage_state` blob and Apps Script backups were removed on 2026-06-12; backups are the Admin JSON download and the nightly GitHub Action
 - date-sensitive defaults now follow `Asia/Kolkata`
 
 ## Purpose
@@ -410,7 +414,7 @@ These are operational notes, not accounting truth, but they are still important 
 
 Every save should behave like this:
 
-1. data saved locally first
+1. data saved locally first (IndexedDB; if that save fails, a red banner stays until it succeeds)
 2. sync metadata updated locally
 3. local recovery backup snapshot stored
 4. cloud sync attempted later if session and internet are available
@@ -425,8 +429,10 @@ Current protection metadata includes:
 - `lastPushAt`
 - `lastRemoteUpdatedAt`
 - `lastMergeSummary`
-- `lastBlobBackupAt`
 - `deviceId`
+- `deltaCursors`: per-table server-clock positions for changes-only pulls
+- `history`: progress of a fresh phone's background history download (`complete`, `jobsBefore`, `loadedInvoices`)
+- `serverTotals`: invoice count, billed, collected and highest invoice number from the server, used while history is incomplete
 
 Purpose:
 

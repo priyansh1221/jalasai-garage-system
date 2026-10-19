@@ -1,6 +1,6 @@
 # JalaSai Deployment
 
-Last updated: 2026-06-05
+Last updated: 2026-10-19
 
 For the full product/build history, see:
 - [PROJECT_HISTORY.md](/Users/priyansh/Projects/JalaSai/docs/PROJECT_HISTORY.md)
@@ -24,10 +24,15 @@ Required pieces:
    This creates the live shadow dataset tables, indexes, RLS policies, storage bucket,
    report views, and the additive `tenant_id` columns (2026-06-12 model — the legacy
    `garage_state` blob and import-pipeline tables are no longer created).
-3. Create owner/staff users in Supabase Auth.
-4. Configure Cloudflare Pages runtime variables for the deployment you are shipping.
+3. Fast sync (2026-10, additive, safe to run more than once):
+   - after taking a backup, run [supabase/2026-10-fast-sync-phase1.sql](/Users/priyansh/Projects/JalaSai/supabase/2026-10-fast-sync-phase1.sql) in the SQL editor;
+   - it enables changes-only downloads, newest-first loading for fresh phones, server invoice totals, and `garage_row_history`;
+   - read its "CHECK FIRST" and "VERIFY AFTER" blocks;
+   - the app works with or without it, so deploy the app first.
+4. Create owner/staff users in Supabase Auth.
+5. Configure Cloudflare Pages runtime variables for the deployment you are shipping.
    Production reads `/config.js` from a Pages Worker, which injects values from Cloudflare without committing them to git.
-5. If you are moving to a different Supabase project, update the Cloudflare Pages variables before deploy.
+6. If you are moving to a different Supabase project, update the Cloudflare Pages variables before deploy.
 
 Cloudflare Pages variables:
 
@@ -157,6 +162,7 @@ Behavior:
 - current AI assist is prompt-based and frontend-only, so there is no AI backend or extra deployment requirement yet
 - old and new UI modes share the same localStorage data and Supabase sync runtime
 - background cloud sync should not show a blocking full-screen blur after initial load
+- after running the fast-sync SQL, check `Cloud Sync → Sync Diagnostics → Download Mode`: it should read "Changes only (server clock)" on each phone (it rechecks within 6 hours or on the next app open)
 - New UI Home customer and due metrics are based on real workshop activity, not imported customer-master-only rows
 
 ## Kept Project Files

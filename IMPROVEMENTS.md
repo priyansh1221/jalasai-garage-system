@@ -1,5 +1,7 @@
 # Improvements and Evolution
 
+> **Older copy.** The current, maintained version is [docs/IMPROVEMENTS.md](docs/IMPROVEMENTS.md) (updated 2026-10-19). This root file is kept for history only.
+
 Last updated: 2026-04-06
 
 This document summarizes major improvements made to move JalaSai from a basic tracker to an operationally reliable garage workflow system.
