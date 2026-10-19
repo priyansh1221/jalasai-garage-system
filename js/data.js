@@ -1168,7 +1168,10 @@ function runDataMaintenanceCleanup(options = {}) {
       incomeEntries = incomeEntries.map(normalizeIncomeEntry);
     }
     const purgedVerificationJobs = purgeTemporaryVerificationJobs();
-    const tidied = tidyCustomerRecords();
+    // A phone without all history (rolling window) can't merge duplicate
+    // customers: older invoices it doesn't hold would stay on the duplicate.
+    const partialHistory = typeof localHistoryPartial === 'function' && localHistoryPartial();
+    const tidied = tidyCustomerRecords({ skipMerge: partialHistory });
     const tidiedCustomers = !!(tidied && (tidied.tombstoned || tidied.healed));
     const changed = !!(
       purgedVerificationJobs
@@ -1261,7 +1264,7 @@ function suggestedNextInvoiceNo() {
   // While older invoices are still downloading, the server's highest number
   // guards the suggestion too (newest invoices load first, so this rarely
   // differs).
-  const serverMax = typeof historyIncomplete === 'function' && historyIncomplete()
+  const serverMax = typeof localHistoryPartial === 'function' && localHistoryPartial()
     ? parseInt(syncMeta?.serverTotals?.maxInvoiceNo || 0, 10) || 0
     : 0;
   if (serverMax > bestNum) {
@@ -2004,7 +2007,7 @@ function normalizeStockMovement(entry) {
   return item;
 }
 
-function tidyCustomerRecords() {
+function tidyCustomerRecords(options = {}) {
   const stamp = nowISO();
   let tombstoned = 0;
   let healed = 0;
@@ -2052,7 +2055,7 @@ function tidyCustomerRecords() {
     identityBuckets.get(key).push(customer);
   });
   identityBuckets.forEach(bucket => {
-    if (bucket.length < 2) return;
+    if (bucket.length < 2 || options.skipMerge) return;
     bucket.sort((a, b) =>
       directCustomerJobCount(b) - directCustomerJobCount(a)
       || (b.vehicles || []).length - (a.vehicles || []).length

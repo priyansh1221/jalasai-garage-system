@@ -2724,6 +2724,9 @@ async function runHistoryBackfill() {
     let pagesSinceSave = 0;
     let loadedSinceSave = 0;
     let historyChangedIds = {};
+    // Lakh scale: download back to the rolling window's edge only; older
+    // records the phone must hold come from jalasai_jobs_keep below.
+    const windowFrom = String(syncMeta.window?.from || '') || await refreshRollingWindow(client);
     while (!syncMeta.history.jobsDone) {
       if (!cloudSessionActive || (typeof navigator !== 'undefined' && navigator.onLine === false)) return;
       const { data, error } = await client.rpc('jalasai_jobs_before', { p_date: cursor.date, p_id: cursor.id, p_limit: HISTORY_PAGE_LIMIT });
@@ -2734,8 +2737,12 @@ async function runHistoryBackfill() {
       loadedSinceSave += records.length;
       pagesSinceSave += 1;
       const last = rows[rows.length - 1];
-      const finished = rows.length < HISTORY_PAGE_LIMIT || !last;
       if (last) cursor = { date: String(last.job_date || '').slice(0, 10), id: String(last.id || '') };
+      const reachedWindow = !!(windowFrom && last && cursor.date && cursor.date < windowFrom && rows.length >= HISTORY_PAGE_LIMIT);
+      const finished = rows.length < HISTORY_PAGE_LIMIT || !last || reachedWindow;
+      // contiguousFrom: the phone holds every invoice from here on (older
+      // ones only if kept); "Load older invoices" continues from it.
+      if (reachedWindow) syncMeta.window = { ...(syncMeta.window || {}), from: windowFrom, partial: true, contiguousFrom: { ...cursor } };
       if (finished || pagesSinceSave >= HISTORY_SAVE_EVERY_PAGES) {
         saveAll({ preserveUpdatedAt: true, skipSync: true, domains: ['jobs'], exactTables: true, changed: historyChangedIds });
         historyChangedIds = {};
@@ -2750,11 +2757,29 @@ async function runHistoryBackfill() {
       }
       await historyBackfillYield();
     }
+    if (syncMeta.window?.partial && !syncMeta.history.keepDone) {
+      const { data, error } = await client.rpc('jalasai_jobs_keep', { p_before: syncMeta.window.from });
+      if (error) throw error;
+      mergeServerJobRows(data);
+      if (typeof whenTableSavesSettled === 'function') await whenTableSavesSettled();
+      syncMeta.history.keepDone = true;
+      persistSyncMeta();
+    }
     if (!syncMeta.history.laterDone) {
-      const later = await pullFromShadowTables(client, { tableKeys: [...HISTORY_LATER_TABLES] });
-      const failed = later?.meta?.partialPullFailures || [];
+      // With a rolling window the log-like tables (which can be huge) only
+      // come back to its edge; expenses and income are small and come in full
+      // (the trim pass drops their old rows once the cloud is confirmed).
+      const logTables = ['stockMovements', 'partsLog', 'auditLog'];
+      const windowed = !!syncMeta.window?.partial;
+      const laterSince = windowed ? `${syncMeta.window.from}T00:00:00.000Z` : undefined;
+      const fullKeys = HISTORY_LATER_TABLES.filter(key => !windowed || !logTables.includes(key));
+      const logKeys = windowed ? HISTORY_LATER_TABLES.filter(key => logTables.includes(key)) : [];
+      const later = await pullFromShadowTables(client, { tableKeys: fullKeys });
+      const laterLogs = logKeys.length ? await pullFromShadowTables(client, { tableKeys: logKeys, since: laterSince }) : null;
+      const failed = [...(later?.meta?.partialPullFailures || []), ...(laterLogs?.meta?.partialPullFailures || [])];
       const records = {};
-      HISTORY_LATER_TABLES.forEach(key => { if (!failed.includes(key)) records[key] = later[key]; });
+      fullKeys.forEach(key => { if (!failed.includes(key)) records[key] = later[key]; });
+      logKeys.forEach(key => { if (!failed.includes(key)) records[key] = laterLogs[key]; });
       const changed = applyChangedRecords(records);
       if (changed.length) {
         saveAll({ preserveUpdatedAt: true, skipSync: true, domains: changed });
@@ -2773,12 +2798,318 @@ async function runHistoryBackfill() {
     markDataChanged('history-complete');
     if (typeof scheduleDataMaintenanceCleanup === 'function') scheduleDataMaintenanceCleanup({ delayMs: 5000, reason: 'history-complete' });
     refreshRealtimePagesBatch(['jobs', 'expenses', 'incomeEntries'], ['jobs', 'invoices', 'customers', 'reminders', 'reports', 'expenses', 'income', 'mechanics', 'home']);
-    updateGSStatus('All older invoices downloaded.');
+    updateGSStatus(syncMeta.window?.partial ? 'Recent history downloaded; older invoices load on demand.' : 'All older invoices downloaded.');
+    scheduleRollingTrim(30000);
   } catch (err) {
     console.warn('history download paused; will resume', err);
     scheduleHistoryBackfill(30000);
   } finally {
     historyBackfillRunning = false;
+  }
+}
+
+// ─── Rolling window (fast-load Phase 6) ───────────────────
+// At lakhs of invoices a phone can't hold all history. It keeps about the
+// last year (fewer days if that would exceed ROLLING_WINDOW_MAX_INVOICES)
+// plus every older record that matters locally:
+//   * any invoice with money owing or an advance (customer balances),
+//   * each customer's latest job (reminders, "last visit"),
+//   * open jobs, unsaved/optimistic invoices.
+// Older records are dropped only after the cloud is confirmed to hold the
+// identical version (same source_hash, same delete state), and only when this
+// phone has nothing waiting to upload. Dropped records come back on demand:
+// "Load older invoices", search, opening a customer. Reports use cloud totals
+// for ranges before the window (serverReportSummary).
+const ROLLING_WINDOW_DAYS = 365;
+const ROLLING_WINDOW_MAX_INVOICES = 20000;
+const ROLLING_TRIM_EVERY_MS = 12 * 60 * 60 * 1000;
+const ROLLING_TRIM_BATCH = 300;
+const ROLLING_TRIM_TABLES = Object.freeze({
+  jobs: { table: 'garage_jobs', build: (records) => buildJobShadowRows({ jobs: records, mechanics }, null), day: job => (job?.doneAt || '').slice(0, 10) || job?.date || '' },
+  expenses: { table: 'garage_expenses', build: (records) => buildExpenseShadowRows({ expenses: records }, null), day: e => String(e?.date || '') },
+  incomeEntries: { table: 'garage_income_entries', build: (records) => buildIncomeEntryShadowRows({ incomeEntries: records, mechanics }, null), day: e => String(e?.date || '') },
+  stockMovements: { table: 'garage_stock_movements', build: (records) => buildStockMovementShadowRows({ stockMovements: records }, null), day: m => String(m?.createdAt || m?.date || '').slice(0, 10) },
+  partsLog: { table: 'garage_parts_log', build: (records) => buildPartsLogShadowRows({ partsLog: records }, null), day: p => String(p?.date || '') },
+  auditLog: { table: 'garage_audit_log', build: (records) => buildAuditLogShadowRows({ auditLog: records }, null), day: a => String(a?.at || '').slice(0, 10) },
+});
+let rollingTrimRunning = false;
+
+// True when this phone doesn't hold every record: history still downloading,
+// or older records left out by the rolling window.
+function localHistoryPartial() {
+  return historyIncomplete() || !!syncMeta?.window?.partial;
+}
+
+async function refreshRollingWindow(client) {
+  try {
+    const { data, error } = await client.rpc('jalasai_window_from', { p_days: ROLLING_WINDOW_DAYS, p_max: ROLLING_WINDOW_MAX_INVOICES });
+    if (error) throw error;
+    const from = String(Array.isArray(data) ? data[0] : data || '').slice(0, 10);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(from)) {
+      syncMeta.window = { ...(syncMeta.window || {}), from, checkedAt: nowISO() };
+    }
+  } catch (err) {
+    console.warn('rolling window unavailable', err);
+  }
+  return String(syncMeta?.window?.from || '');
+}
+
+// Customer key for "latest job per customer" — same identity the app uses
+// for balances when custId is missing.
+function rollingCustomerKey(job) {
+  const custId = String(job?.custId || '').trim();
+  if (custId) return `id:${custId}`;
+  const phone = typeof customerPhoneKey === 'function' ? customerPhoneKey(job?.phone || '') : String(job?.phone || '').trim();
+  return phone ? `ph:${phone}` : `job:${job?.id || ''}`;
+}
+
+function rollingJobKeepSet(list) {
+  const keep = new Set();
+  const latest = new Map();
+  list.forEach(job => {
+    if (!job || String(job.deletedAt || '').trim()) return;
+    const key = rollingCustomerKey(job);
+    const stamp = `${(job.doneAt || '').slice(0, 10) || job.date || ''}|${job.id || ''}`;
+    const prev = latest.get(key);
+    if (!prev || stamp > prev.stamp) latest.set(key, { stamp, id: job.id });
+  });
+  latest.forEach(entry => keep.add(entry.id));
+  return keep;
+}
+
+function rollingTrimCandidates(key, from) {
+  const config = ROLLING_TRIM_TABLES[key];
+  const access = DATA_TABLE_ACCESS[key];
+  const list = normaliseArray(access.get());
+  const optimistic = window.__JALASAI_OPTIMISTIC_INVOICES instanceof Set ? window.__JALASAI_OPTIMISTIC_INVOICES : new Set();
+  const keep = key === 'jobs' ? rollingJobKeepSet(list) : null;
+  return list.filter(record => {
+    const day = config.day(record);
+    if (!day || day >= from) return false;
+    if (key !== 'jobs') return true;
+    if (keep.has(record.id) || optimistic.has(record.id)) return false;
+    if (String(record.deletedAt || '').trim()) return true;
+    if (record.status !== 'done') return false;
+    return Math.abs(jobNetBalance(record)) < 0.01;
+  });
+}
+
+// Drops records older than the window that the cloud holds identically.
+async function trimToRollingWindow(options = {}) {
+  if (rollingTrimRunning || !cloudClient || !cloudSessionActive || cloudSyncBusy) return null;
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) return null;
+  if (historyIncomplete() || syncMeta.pendingSync) return null;
+  if (!options.force && syncAgeMs(syncMeta?.window?.trimmedAt) < ROLLING_TRIM_EVERY_MS) return null;
+  if (!(await checkDeltaServer(cloudClient))) return null;
+  rollingTrimRunning = true;
+  const client = cloudClient;
+  const result = { from: '', dropped: {}, kept: 0 };
+  try {
+    const from = await refreshRollingWindow(client);
+    if (!from) return null;
+    result.from = from;
+    for (const key of Object.keys(ROLLING_TRIM_TABLES)) {
+      const config = ROLLING_TRIM_TABLES[key];
+      const access = DATA_TABLE_ACCESS[key];
+      const candidates = rollingTrimCandidates(key, from);
+      const dropIds = new Set();
+      for (let i = 0; i < candidates.length; i += ROLLING_TRIM_BATCH) {
+        if (syncMeta.pendingSync) break; // a new local change: stop, try later
+        const batch = candidates.slice(i, i + ROLLING_TRIM_BATCH);
+        const localHash = new Map();
+        batch.forEach(record => {
+          const row = config.build([record])[0];
+          if (row?.id) localHash.set(String(row.id), { hash: String(row.source_hash || ''), deleted: !!row.deleted_at, record });
+        });
+        if (!localHash.size) continue;
+        const { data, error } = await client.rpc('jalasai_record_hashes', { p_table: config.table, p_ids: [...localHash.keys()] });
+        if (error) throw error;
+        normaliseArray(data).forEach(server => {
+          const local = localHash.get(String(server.id));
+          if (!local) return;
+          const same = local.deleted ? !!server.deleted : (!server.deleted && String(server.source_hash || '') === local.hash);
+          if (same) dropIds.add(String(access.key(local.record) || ''));
+        });
+        result.kept += localHash.size;
+        await historyBackfillYield();
+      }
+      if (!dropIds.size || syncMeta.pendingSync) continue;
+      const before = normaliseArray(access.get());
+      const next = before.filter(record => !dropIds.has(String(access.key(record) || '')));
+      if (next.length === before.length) continue;
+      access.set(next);
+      result.dropped[key] = before.length - next.length;
+      saveAll({ preserveUpdatedAt: true, skipSync: true, domains: [key], exactTables: true, changed: access.events ? undefined : { [key]: [...dropIds] } });
+    }
+    const droppedTotal = Object.values(result.dropped).reduce((sum, n) => sum + n, 0);
+    const previousFrom = syncMeta.window?.contiguousFrom;
+    syncMeta.window = {
+      ...(syncMeta.window || {}),
+      from,
+      trimmedAt: nowISO(),
+      partial: !!(syncMeta.window?.partial || droppedTotal > 0),
+      lastDropped: result.dropped,
+      contiguousFrom: result.dropped.jobs && (!previousFrom || String(previousFrom.date || '') < from)
+        ? { date: from, id: '' }
+        : previousFrom,
+    };
+    persistSyncMeta();
+    if (droppedTotal) {
+      markDataChanged('rolling-window');
+      refreshRealtimePagesBatch(Object.keys(result.dropped), ['jobs', 'invoices', 'customers', 'reminders', 'reports', 'expenses', 'income', 'home']);
+    }
+    return result;
+  } catch (err) {
+    console.warn('rolling window trim paused', err);
+    return null;
+  } finally {
+    rollingTrimRunning = false;
+  }
+}
+
+function scheduleRollingTrim(delayMs = 15000) {
+  setTimeout(() => { trimToRollingWindow().catch(err => console.warn('rolling trim failed', err)); }, delayMs);
+}
+
+// Merges server rows (jalasai_* row shape) into the jobs table and saves
+// only those records. Returns how many records changed.
+function mergeServerJobRows(rows) {
+  const jobsConfig = jobsShadowConfig();
+  const records = normaliseArray(rows).map(row => shadowRowToRecord(jobsConfig, row)).filter(Boolean);
+  if (!records.length) return 0;
+  const changedIds = {};
+  const changed = applyChangedRecords({ jobs: records }, changedIds);
+  if (!changed.length) return 0;
+  saveAll({ preserveUpdatedAt: true, skipSync: true, domains: ['jobs'], exactTables: true, changed: changedIds });
+  return changedIds.jobs ? changedIds.jobs.size : 0;
+}
+
+// "Load older invoices": the next page older than what the phone shows.
+const OLDER_PAGE_LIMIT = 100;
+const olderInvoices = { cursor: null, loading: false, done: false, search: { q: '', state: '', count: 0 } };
+
+// Where "Load older invoices" starts: the edge of the phone's unbroken
+// history (kept older invoices — dues, latest per customer — don't count).
+function oldestLocalInvoiceCursor() {
+  const contiguous = syncMeta?.window?.contiguousFrom;
+  if (contiguous && contiguous.date) return { date: String(contiguous.date).slice(0, 10), id: String(contiguous.id || '') };
+  if (historyIncomplete() && syncMeta.history?.jobsBefore?.date) return { ...syncMeta.history.jobsBefore };
+  const windowFrom = String(syncMeta?.window?.from || '');
+  if (windowFrom) return { date: windowFrom, id: '' };
+  let oldest = null;
+  normaliseArray(jobs).forEach(job => {
+    if (!isLiveJob(job) || job.status !== 'done' || !job.date) return;
+    if (!oldest || job.date < oldest.date || (job.date === oldest.date && String(job.id) < oldest.id)) {
+      oldest = { date: String(job.date).slice(0, 10), id: String(job.id || '') };
+    }
+  });
+  return oldest || { date: businessDate(1), id: '' };
+}
+
+async function loadOlderInvoices() {
+  if (olderInvoices.loading || !cloudClient || !cloudSessionActive) {
+    if (!cloudSessionActive) toast('Sign in to load older invoices', 2600);
+    return;
+  }
+  olderInvoices.loading = true;
+  renderOlderInvoicesFooter();
+  try {
+    const cursor = olderInvoices.cursor || oldestLocalInvoiceCursor();
+    const { data, error } = await cloudClient.rpc('jalasai_jobs_before', { p_date: cursor.date, p_id: cursor.id, p_limit: OLDER_PAGE_LIMIT });
+    if (error) throw error;
+    const rows = normaliseArray(data);
+    const last = rows[rows.length - 1];
+    if (last) olderInvoices.cursor = { date: String(last.job_date || '').slice(0, 10), id: String(last.id || '') };
+    if (rows.length < OLDER_PAGE_LIMIT) olderInvoices.done = true;
+    const added = mergeServerJobRows(rows);
+    toast(rows.length ? `Loaded ${rows.length} older invoices${added < rows.length ? ` (${rows.length - added} already here)` : ''}` : 'No older invoices', 2400);
+  } catch (err) {
+    console.warn('older invoices failed', err);
+    toast(syncErrMsg(err, 'Could not load older invoices'), 3600);
+  } finally {
+    olderInvoices.loading = false;
+    if (typeof markAppTabsStale === 'function') markAppTabsStale(['invoices', 'customers', 'reports']);
+    if (typeof currentPage !== 'undefined' && currentPage === 'invoices' && typeof renderInvoices === 'function') renderInvoices();
+    else renderOlderInvoicesFooter();
+  }
+}
+
+let olderSearchTimer = null;
+function queueServerInvoiceSearch(query) {
+  const q = String(query || '').trim();
+  if (olderInvoices.search.q === q) return;
+  olderInvoices.search = { q, state: q.length >= 2 ? 'waiting' : '', count: 0 };
+  clearTimeout(olderSearchTimer);
+  if (q.length < 2 || !cloudClient || !cloudSessionActive) return;
+  olderSearchTimer = setTimeout(async () => {
+    olderInvoices.search.state = 'searching';
+    renderOlderInvoicesFooter();
+    try {
+      const { data, error } = await cloudClient.rpc('jalasai_search_jobs', { p_query: q, p_limit: 50 });
+      if (error) throw error;
+      if (olderInvoices.search.q !== q) return;
+      const rows = normaliseArray(data);
+      mergeServerJobRows(rows);
+      olderInvoices.search = { q, state: 'done', count: rows.length };
+    } catch (err) {
+      console.warn('cloud invoice search failed', err);
+      if (olderInvoices.search.q === q) olderInvoices.search.state = 'failed';
+    }
+    if (typeof currentPage !== 'undefined' && currentPage === 'invoices' && typeof renderInvoices === 'function') renderInvoices();
+  }, 450);
+}
+
+// Footer under the Invoices list (both UIs call this from renderInvoices).
+function renderOlderInvoicesFooter(searchQuery) {
+  const list = typeof document !== 'undefined' ? document.getElementById('inv-list') : null;
+  if (!list || !list.parentNode) return;
+  let footer = document.getElementById('inv-older');
+  if (!localHistoryPartial()) {
+    if (footer) footer.hidden = true;
+    return;
+  }
+  if (!footer) {
+    footer = document.createElement('div');
+    footer.id = 'inv-older';
+    footer.className = 'inv-older';
+    footer.style.cssText = 'display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:center;padding:14px 8px;color:var(--mut);font-size:13px;';
+    list.parentNode.insertBefore(footer, list.nextSibling);
+  }
+  footer.hidden = false;
+  if (typeof searchQuery === 'string') queueServerInvoiceSearch(searchQuery);
+  const search = olderInvoices.search;
+  const searchText = !search.q || search.q.length < 2 ? ''
+    : search.state === 'searching' || search.state === 'waiting' ? 'Searching all invoices in cloud…'
+      : search.state === 'failed' ? 'Cloud search unavailable offline — showing invoices on this phone.'
+        : `Cloud search: ${search.count} match${search.count === 1 ? '' : 'es'}${search.count >= 50 ? ' (newest 50)' : ''}.`;
+  const from = String(syncMeta?.window?.from || '');
+  footer.innerHTML = `
+    ${searchText ? `<span>${searchText}</span>` : ''}
+    ${search.q ? '' : `<span>${from ? `This phone keeps invoices from ${fmtDate(from)}.` : 'Older invoices are still downloading.'}</span>`}
+    ${search.q || olderInvoices.done ? '' : `<button type="button" class="btn btn-g btn-sm" onclick="loadOlderInvoices()" ${olderInvoices.loading ? 'disabled' : ''}>${olderInvoices.loading ? 'Loading…' : 'Load older invoices'}</button>`}
+  `;
+}
+
+// Customer detail: bring that customer's older jobs onto the phone once per
+// session when the phone doesn't hold all history.
+const customerHistoryFetched = new Set();
+async function fetchCustomerJobsFromServer(customer) {
+  if (!customer || !localHistoryPartial() || !cloudClient || !cloudSessionActive) return 0;
+  const key = String(customer.id || customer.phone || '');
+  if (!key || customerHistoryFetched.has(key)) return 0;
+  customerHistoryFetched.add(key);
+  try {
+    const { data, error } = await cloudClient.rpc('jalasai_customer_jobs', { p_customer_id: customer.id || '', p_phone: customer.phone || '', p_limit: 500 });
+    if (error) throw error;
+    const added = mergeServerJobRows(data);
+    if (added && typeof currentPage !== 'undefined' && currentPage === 'customers' && typeof renderCurrentPage === 'function') {
+      renderCurrentPage({ forceRender: true });
+    }
+    return added;
+  } catch (err) {
+    customerHistoryFetched.delete(key);
+    console.warn('customer history fetch failed', err);
+    return 0;
   }
 }
 
@@ -2932,6 +3263,7 @@ async function pullGS(options = {}) {
         finishTiming('ok');
         updateGSStatus(delta.changedKeys.length ? 'Pulled latest changes from cloud.' : 'Up to date with cloud.');
         if (!options.quiet) toast(delta.changedKeys.length ? 'Pulled latest changes from cloud' : 'Up to date with cloud');
+        scheduleRollingTrim();
         return true;
       }
       // Too many changes since this phone last synced: full download below.

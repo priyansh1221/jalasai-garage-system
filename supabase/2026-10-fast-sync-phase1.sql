@@ -624,6 +624,154 @@ revoke all on function public.jalasai_rebuild_daily_totals() from public, anon, 
 
 select public.jalasai_rebuild_daily_totals();
 
+-- ── H. Lakh scale: rolling window, older invoices on demand, search ──
+-- Phones keep about the last year of invoices (capped at a number of
+-- invoices) and fetch older ones only when someone scrolls, searches or
+-- opens a customer. These functions return the same row shape as
+-- jalasai_changes_since, so the app merges them with the normal rules.
+
+-- First day a phone keeps: a year back, or later if that would be more than
+-- p_max invoices.
+create or replace function public.jalasai_window_from(p_days int default 365, p_max int default 20000)
+returns date
+language sql
+stable
+security invoker
+set search_path = public
+as $$
+  select greatest(
+    current_date - greatest(coalesce(p_days, 365), 30),
+    coalesce((select job_date from public.garage_jobs
+               where deleted_at is null and job_status = 'done' and job_date is not null
+               order by job_date desc, id desc
+              offset greatest(coalesce(p_max, 20000), 1000) - 1 limit 1), date '1900-01-01')
+  );
+$$;
+
+-- Older invoices a phone must still hold: anything with money owing or an
+-- advance (customer balances need it) and every customer's latest job
+-- (service reminders and "last visit" need it).
+create or replace function public.jalasai_jobs_keep(p_before date)
+returns jsonb
+language sql
+stable
+security invoker
+set search_path = public
+as $$
+  with live as (
+    select * from public.garage_jobs
+     where deleted_at is null and job_status = 'done' and job_date < p_before
+  ),
+  owing as (
+    select id from live where abs(coalesce(total_amount, 0) - coalesce(paid_amount, 0)) > 0.009
+  ),
+  latest as (
+    select distinct on (coalesce(nullif(customer_id, ''), nullif(phone, ''), id)) id
+      from public.garage_jobs
+     where deleted_at is null
+     order by coalesce(nullif(customer_id, ''), nullif(phone, ''), id), job_date desc nulls last, id desc
+  )
+  select coalesce(jsonb_agg(to_jsonb(s)), '[]'::jsonb)
+  from (
+    select id, record_data, source_updated_at, mirrored_at, deleted_at, server_updated_at,
+           customer_id, customer_name, phone, vehicle, registration_no, job_status, job_date,
+           invoice_no, mechanic_ids, mechanic_names, service_note, remarks,
+           to_char(server_updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as su
+      from live
+     where id in (select id from owing) or id in (select id from latest)
+  ) s;
+$$;
+
+-- Every job of one customer (by id and/or phone), newest first.
+create or replace function public.jalasai_customer_jobs(p_customer_id text, p_phone text, p_limit int default 500)
+returns jsonb
+language sql
+stable
+security invoker
+set search_path = public
+as $$
+  select coalesce(jsonb_agg(to_jsonb(s) order by s.job_date desc nulls last, s.id desc), '[]'::jsonb)
+  from (
+    select id, record_data, source_updated_at, mirrored_at, deleted_at, server_updated_at,
+           customer_id, customer_name, phone, vehicle, registration_no, job_status, job_date,
+           invoice_no, mechanic_ids, mechanic_names, service_note, remarks,
+           to_char(server_updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as su
+      from public.garage_jobs
+     where deleted_at is null
+       and ((coalesce(p_customer_id, '') <> '' and customer_id = p_customer_id)
+         or (coalesce(p_phone, '') <> '' and phone = p_phone))
+     order by job_date desc nulls last, id desc
+     limit least(greatest(coalesce(p_limit, 500), 1), 2000)
+  ) s;
+$$;
+
+-- Search all invoices on the server: invoice number, customer, phone,
+-- vehicle, registration. Uses a trigram index so "contains" search stays
+-- fast at lakhs of rows.
+create extension if not exists pg_trgm;
+
+create or replace function public.jalasai_job_search_text(invoice_no text, customer_name text, phone text, vehicle text, registration_no text)
+returns text
+language sql
+immutable
+as $$
+  select lower(concat_ws(' ', invoice_no, customer_name, phone, vehicle, registration_no));
+$$;
+
+create index if not exists garage_jobs_search_trgm_idx
+  on public.garage_jobs using gin (public.jalasai_job_search_text(invoice_no, customer_name, phone, vehicle, registration_no) gin_trgm_ops)
+  where deleted_at is null;
+
+create or replace function public.jalasai_search_jobs(p_query text, p_limit int default 50)
+returns jsonb
+language sql
+stable
+security invoker
+set search_path = public
+as $$
+  select coalesce(jsonb_agg(to_jsonb(s) order by s.job_date desc nulls last, s.id desc), '[]'::jsonb)
+  from (
+    select id, record_data, source_updated_at, mirrored_at, deleted_at, server_updated_at,
+           customer_id, customer_name, phone, vehicle, registration_no, job_status, job_date,
+           invoice_no, mechanic_ids, mechanic_names, service_note, remarks,
+           to_char(server_updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as su
+      from public.garage_jobs
+     where deleted_at is null
+       and length(trim(coalesce(p_query, ''))) >= 2
+       and public.jalasai_job_search_text(invoice_no, customer_name, phone, vehicle, registration_no)
+           like '%' || lower(trim(p_query)) || '%'
+     order by job_date desc nulls last, id desc
+     limit least(greatest(coalesce(p_limit, 50), 1), 200)
+  ) s;
+$$;
+
+-- Before a phone drops an old record it checks the cloud holds the same
+-- version (same source_hash, same delete state). Only these tables.
+drop function if exists public.jalasai_record_hashes(text, text[]);
+create or replace function public.jalasai_record_hashes(p_table text, p_ids jsonb)
+returns table (id text, source_hash text, deleted boolean)
+language plpgsql
+stable
+security invoker
+set search_path = public
+as $$
+begin
+  if p_table not in ('garage_jobs', 'garage_expenses', 'garage_income_entries', 'garage_stock_movements', 'garage_parts_log', 'garage_audit_log') then
+    raise exception 'table % not allowed', p_table;
+  end if;
+  return query execute format(
+    'select t.id, t.source_hash, (t.deleted_at is not null) from public.%I t where t.id = any($1)', p_table
+  ) using array(select jsonb_array_elements_text(coalesce(p_ids, '[]'::jsonb)));
+end;
+$$;
+
+grant execute on function public.jalasai_window_from(int, int) to authenticated;
+grant execute on function public.jalasai_jobs_keep(date) to authenticated;
+grant execute on function public.jalasai_customer_jobs(text, text, int) to authenticated;
+grant execute on function public.jalasai_search_jobs(text, int) to authenticated;
+grant execute on function public.jalasai_record_hashes(text, jsonb) to authenticated;
+
+
 
 
 -- ════════════════════════════════════════════════════════════════

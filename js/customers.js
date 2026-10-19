@@ -288,6 +288,9 @@ function setCustomerSort(value) {
 
 function viewCustomer(id) {
   const c = customers.find(x => x.id === id && isLiveCustomer(x));
+  // The phone may not hold this customer's older invoices (rolling window):
+  // fetch them once; the page re-renders when they land.
+  if (c && typeof fetchCustomerJobsFromServer === 'function') fetchCustomerJobsFromServer(c);
   if (!c) return;
   const cJobs  = jobs.filter(j => customerOwnsJob(c, j)).sort((a, b) => jobDateTimeValue(b) - jobDateTimeValue(a));
   const spent  = cJobs.filter(j=>j.status==='done').reduce((a,j)=>a+jobTotal(j),0);

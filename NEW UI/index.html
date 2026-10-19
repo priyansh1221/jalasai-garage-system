@@ -1915,6 +1915,9 @@ function renderInvoices() {
         (typeof historyLoadingNoteHtml === 'function' ? historyLoadingNoteHtml() : '');
   }
 
+  // Lakh scale: "Load older invoices" + cloud search when the phone doesn't
+  // hold every invoice (js/sync.js).
+  if (typeof renderOlderInvoicesFooter === 'function') renderOlderInvoicesFooter(invoiceSearch || '');
   const container = document.getElementById('inv-list');
   if (!container) return;
   if (!done.length) {

@@ -1750,7 +1750,7 @@ function renderInvoices() {
   const allDone    = jobs.filter(j => isLiveJob(j) && j.status === 'done');
   // All-time totals: from the server while older invoices are still
   // downloading (js/sync.js history download), local otherwise.
-  const serverTotals = typeof historyIncomplete === 'function' && historyIncomplete() ? syncMeta.serverTotals : null;
+  const serverTotals = typeof localHistoryPartial === 'function' && localHistoryPartial() ? syncMeta.serverTotals : null;
   const invCount   = serverTotals ? serverTotals.invoiceCount : allDone.length;
   const totAmt     = serverTotals ? serverTotals.billed : allDone.reduce((s,j) => s + jobTotal(j), 0);
   const totPaid    = serverTotals ? serverTotals.collected : allDone.reduce((s,j) => s + jobPaid(j), 0);
@@ -1768,6 +1768,9 @@ function renderInvoices() {
       : '';
   }
 
+  // Lakh scale: "Load older invoices" + cloud search when the phone doesn't
+  // hold every invoice (js/sync.js).
+  if (typeof renderOlderInvoicesFooter === 'function') renderOlderInvoicesFooter(invoiceSearch || '');
   const container = document.getElementById('inv-list');
   if (!container) return;
   if (!done.length) {

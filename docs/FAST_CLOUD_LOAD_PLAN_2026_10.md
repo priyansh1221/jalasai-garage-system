@@ -92,12 +92,32 @@ Postgres.
   ranges with messy data, before and after edits and deletes, and the running
   totals equal a full recompute.
 
+**Phase 6 + on-demand history, for lakhs of invoices (2026-10-20, SQL §H):**
+- Phones keep about the last year of invoices (`jalasai_window_from`: 365 days,
+  or fewer if that is more than 20,000 invoices). Every older record that
+  matters locally stays too: any invoice with money owing or an advance, each
+  customer's latest job, open jobs and unsaved invoices.
+- A fresh phone's background download stops at the window edge, then fetches
+  those keep-records (`jalasai_jobs_keep`). Audit log, parts log and stock
+  movements come back only to the edge; expenses and income come in full.
+- Older phones trim themselves every 12 hours (`trimToRollingWindow`). A
+  record is dropped only when the phone has nothing waiting to upload and
+  `jalasai_record_hashes` confirms the cloud holds the identical version.
+- Older invoices come back on demand: "Load older invoices" under the Invoices
+  list (both UIs), cloud search (`jalasai_search_jobs`, trigram index), and a
+  customer's full history when it is opened (`jalasai_customer_jobs`).
+- A phone without full history uses cloud totals for the Legacy invoice header,
+  the next invoice number and old report ranges. It skips merging duplicate
+  customers, because older invoices it doesn't hold would stay on the duplicate.
+- Tested with two phones against local Postgres: customer balances on a
+  windowed phone equal full history; trimming keeps everything owing and every
+  customer's latest job, refuses while changes wait, keeps records whose cloud
+  copy differs, deletes nothing in the cloud, and survives a restart; records a
+  phone downloaded trim just like its own (fingerprints match).
+
 **Not built yet (still planned):**
-- "Load older invoices" on demand and a server-side search fallback. The
-  background download makes these less urgent.
-- Phase 6: the rolling window. Phones still keep full history, which is fine up
-  to ~20k invoices.
-- A duplicate invoice-number check against history that hasn't downloaded yet.
+- A duplicate invoice-number check against history that hasn't downloaded yet
+  (roadmap Stage 4, server-issued numbers, replaces it).
 Date: 2026-10-19 · Branch at time of writing: `ux-polish`
 Part of the long-term roadmap: this plan is **Stage 1** of
 `docs/LONG_TERM_DATA_ROADMAP_2026_10.md`. Stage 0 (data-loss safety net) should
