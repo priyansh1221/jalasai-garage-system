@@ -1990,6 +1990,12 @@ async function refreshRecentCloudChanges(windowMs = VISIBILITY_GAP_FILL_MS, opti
   if (!beginRecentSyncWork()) return false;
   const since = new Date(Date.now() - (parseInt(windowMs, 10) || VISIBILITY_GAP_FILL_MS)).toISOString();
   recentRefreshBusy = true;
+  // This sweep reaches back at most MAX_GAP_FILL_MS and 200 rows per table.
+  // If it couldn't cover the whole gap it must not mark the phone as pulled,
+  // or the stale check never runs the full download the phone still needs.
+  const pulledAtBefore = syncMeta.lastPulledAt;
+  const remoteAtBefore = syncMeta.lastRemoteUpdatedAt;
+  let sweepIncomplete = syncAgeMs(pulledAtBefore) > MAX_GAP_FILL_MS;
   let changed = false;
   const changedKeys = new Set();
   const recentChangedIds = {};
@@ -2005,6 +2011,7 @@ async function refreshRecentCloudChanges(windowMs = VISIBILITY_GAP_FILL_MS, opti
         .order('source_updated_at', { ascending: true })
         .limit(200);
       if (error) throw error;
+      if ((data || []).length >= 200) sweepIncomplete = true;
       const rows = (data || []).filter(row => !(row.device_id && row.device_id === syncMeta.deviceId));
       for (let i = 0; i < rows.length; i += RECENT_REFRESH_CHUNK_SIZE) {
         const chunk = rows.slice(i, i + RECENT_REFRESH_CHUNK_SIZE);
@@ -2029,6 +2036,11 @@ async function refreshRecentCloudChanges(windowMs = VISIBILITY_GAP_FILL_MS, opti
       refreshRealtimePagesBatch(changedKeys, changedPages);
     }
     if (v2Applied && Object.keys(v2Applied).length) syncV2AdoptRemote(Object.keys(v2Applied), v2Applied);
+    if (sweepIncomplete) {
+      syncMeta.lastPulledAt = pulledAtBefore;
+      syncMeta.lastRemoteUpdatedAt = remoteAtBefore;
+      persistSyncMeta();
+    }
     if (changed && !options.quiet) updateGSStatus('Pulled recent cloud changes.');
     return changed;
   } catch (err) {
@@ -4032,7 +4044,20 @@ async function initGSSync() {
         return;
       }
       if (typeof checkSyncV2Server === 'function') await checkSyncV2Server(cloudClient);
-      if (warmUiSwitch && !localJobsMissing) {
+      // A phone with data that never switched to changes-only (no cursors
+      // yet), or that hasn't pulled for longer than the catch-up sweep can
+      // reach, needs one real download now. Otherwise "Local data ready" plus
+      // the 7-day / 200-row sweep left old phones stuck at an old invoice.
+      const deltaReadyAtStart = await checkDeltaServer(cloudClient);
+      const needsCatchUp = !localJobsMissing && localDataReady && (
+        (deltaReadyAtStart && !deltaCursorsReady(deltaPullConfigs(false)))
+        || syncAgeMs(syncMeta.lastPulledAt) > MAX_GAP_FILL_MS
+      );
+      if (needsCatchUp) {
+        updateGSStatus('Bringing this phone up to date with cloud...');
+        const caughtUp = await pullGS({ quiet: true, allowEmpty: true, force: true, automatic: true, criticalOnly: false });
+        if (caughtUp === 'local-newer' || syncMeta.pendingSync) queueAutoSync();
+      } else if (warmUiSwitch && !localJobsMissing) {
         updateGSStatus(syncMeta.pendingSync ? 'Local data ready. Cloud sync continues in background.' : 'Local data ready.');
         if (syncMeta.pendingSync) queueAutoSync();
       } else {
