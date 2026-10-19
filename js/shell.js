@@ -356,7 +356,8 @@ function prepareDoneModal(id, mode = 'create') {
   document.getElementById('done-payment').value      = mode === 'edit' ? (jobPaid(j) || '') : (due > 0 ? due : '');
   document.getElementById('done-discount').value     = jobDiscountAmount(j) || '';
   document.getElementById('done-notes').value        = j.notes || '';
-  document.getElementById('done-invoice-no').value   = j.invoiceNo || (mode === 'edit' ? '' : suggestedNextInvoiceNo());
+  if (j.invoiceNo || mode === 'edit') document.getElementById('done-invoice-no').value = j.invoiceNo || '';
+  else applyInvoiceNoField(document.getElementById('done-invoice-no'));
   document.getElementById('done-pay-method').value   = j.payMethod || getStoredPaymentMethod();
   if (typeof renderDonePaymentChips === 'function') renderDonePaymentChips(j.payMethod || getStoredPaymentMethod());
   const doneMechInput = document.getElementById('done-mech');
@@ -494,6 +495,9 @@ function confirmDone(nextAction = 'close') {
   if (duplicateInvoice) {
     toast(`Invoice number already exists: ${duplicateInvoice.invoiceNo || duplicateInvoice.id}`);
     return;
+  }
+  if (typedInvoiceNo && typedInvoiceNo !== j.invoiceNo && !isDraftInvoiceNo(typedInvoiceNo) && typeof warnIfInvoiceNoTakenInCloud === 'function') {
+    warnIfInvoiceNoTakenInCloud(typedInvoiceNo, j.id);
   }
   if (invoiceGrossTotal < 0) { toast('Enter valid invoice total'); return; }
   if (pay < 0) { toast('Enter valid payment'); return; }

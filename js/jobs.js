@@ -1060,7 +1060,7 @@ function restoreQuickInvoiceDraft() {
     document.getElementById('qi-discount').value = draft.discount || '';
     document.getElementById('qi-pay-method').value = draft.payMethod || getStoredPaymentMethod();
     renderQuickInvoicePaymentChips(draft.payMethod || getStoredPaymentMethod());
-    document.getElementById('qi-invoice-no').value = draft.invoiceNo || suggestedNextInvoiceNo();
+    applyInvoiceNoField(document.getElementById('qi-invoice-no'), draft.invoiceNo);
     document.getElementById('qi-invoice-date').value = draft.invoiceDate || today();
     document.getElementById('qi-notes').value = draft.notes || '';
     const prev = document.getElementById('qi-photo-preview');
@@ -1098,7 +1098,7 @@ function resetQuickInvoiceForm(options = {}) {
   const invoiceDateEl = document.getElementById('qi-invoice-date');
   if (invoiceDateEl) invoiceDateEl.value = today();
   const invoiceNoEl = document.getElementById('qi-invoice-no');
-  if (invoiceNoEl) invoiceNoEl.value = suggestedNextInvoiceNo();
+  applyInvoiceNoField(invoiceNoEl);
   const mechEl = document.getElementById('qi-mech');
   if (mechEl) mechEl.value = '';
   renderQuickInvoiceMechanicChips('');
@@ -1172,6 +1172,8 @@ function saveInvoiceAfterPaint(domain = 'invoice', refreshOptions = {}) {
   const changedJobIds = Array.isArray(refreshOptions.changedJobIds) ? refreshOptions.changedJobIds.filter(Boolean) : [];
   runAfterInvoiceSavePaint(() => {
     if (typeof saveAll === 'function') saveAll({ domain, changed: changedJobIds.length ? { jobs: changedJobIds } : undefined });
+    // Stage 4: swap a draft number for the real one right away when online.
+    if (typeof claimPendingInvoiceNumbers === 'function') claimPendingInvoiceNumbers();
     scheduleInvoiceSaveUiRefresh(refreshOptions);
   });
 }
@@ -1213,6 +1215,8 @@ function saveQuickInvoice(nextAction = 'close') {
     toast(`Invoice number already exists: ${duplicateInvoice.invoiceNo || duplicateInvoice.id}`);
     return;
   }
+  // Also checks history this phone doesn't hold (warns after the save).
+  if (!saveAsJobCard && manualInvoiceNo && typeof warnIfInvoiceNoTakenInCloud === 'function') warnIfInvoiceNoTakenInCloud(manualInvoiceNo, '');
 
   let finalCustId = custId;
   if (!finalCustId) {
@@ -2127,7 +2131,7 @@ function openNewJob(options = {}) {
     const el = document.getElementById(i);
     if (el) el.value = '';
   });
-  document.getElementById('jm-invoice-no').value = suggestedNextInvoiceNo();
+  applyInvoiceNoField(document.getElementById('jm-invoice-no'));
   document.getElementById('jm-cust-sel').value     = '';
   document.getElementById('jm-status').value   = 'in-shop';
   document.getElementById('jm-delivery').value = '';
@@ -2229,6 +2233,7 @@ function saveJob(options = {}) {
     toast(`Invoice number already exists: ${duplicateInvoice.invoiceNo || duplicateInvoice.id}`);
     return;
   }
+  if (manualInvoiceNo && typeof warnIfInvoiceNoTakenInCloud === 'function') warnIfInvoiceNoTakenInCloud(manualInvoiceNo, editJobId || '');
 
   // Auto-create / match customer
   let finalCustId = custId;

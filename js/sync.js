@@ -3231,6 +3231,114 @@ async function fetchCustomerJobsFromServer(customer) {
   }
 }
 
+// ─── Invoice numbers from the server (roadmap Stage 4) ────
+// syncMeta.invoiceSeriesReady is kept across restarts, so an offline phone
+// still knows to hand out draft numbers instead of guessing the next one.
+const INVOICE_SERIES_CHECK_MS = 6 * 60 * 60 * 1000;
+let invoiceSeriesCheckedAt = 0;
+let invoiceClaimRunning = false;
+let invoiceClaimAgain = false;
+
+async function checkInvoiceSeriesServer(client, options = {}) {
+  if (!client) return serverIssuesInvoiceNumbers();
+  if (!options.force && typeof syncMeta.invoiceSeriesReady === 'boolean' && Date.now() - invoiceSeriesCheckedAt < INVOICE_SERIES_CHECK_MS) {
+    return syncMeta.invoiceSeriesReady;
+  }
+  try {
+    const { error } = await client.rpc('jalasai_invoice_no_taken', { p_no: '__probe__', p_job_id: '' });
+    if (error) throw error;
+    syncMeta.invoiceSeriesReady = true;
+  } catch (err) {
+    // Only "function doesn't exist" means the SQL isn't installed.
+    if (isMissingRpcError(err)) syncMeta.invoiceSeriesReady = false;
+    else return serverIssuesInvoiceNumbers();
+  }
+  invoiceSeriesCheckedAt = Date.now();
+  persistSyncMeta();
+  return syncMeta.invoiceSeriesReady === true;
+}
+
+// Swaps every draft number on this phone (its own, or one downloaded from a
+// phone that went offline) for the real number. Oldest invoices first, so
+// numbers follow the order invoices were made where possible.
+async function claimPendingInvoiceNumbers() {
+  if (invoiceClaimRunning) { invoiceClaimAgain = true; return 0; }
+  if (!cloudClient || !cloudSessionActive) return 0;
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) return 0;
+  const hasDrafts = () => normaliseArray(jobs).some(job => isLiveJob(job) && job.status === 'done' && isDraftInvoiceNo(job.invoiceNo));
+  if (!hasDrafts()) return 0;
+  if (!(await checkInvoiceSeriesServer(cloudClient))) return 0;
+  invoiceClaimRunning = true;
+  const claimed = [];
+  try {
+    do {
+      invoiceClaimAgain = false;
+      const drafts = normaliseArray(jobs)
+        .filter(job => isLiveJob(job) && job.status === 'done' && isDraftInvoiceNo(job.invoiceNo))
+        // Oldest first; drafts made in the same moment keep their draft order.
+        .sort((a, b) => String(a.doneAt || a.createdAt || '').localeCompare(String(b.doneAt || b.createdAt || ''))
+          || (parseInt(String(a.invoiceNo).split('-').pop(), 10) || 0) - (parseInt(String(b.invoiceNo).split('-').pop(), 10) || 0));
+      for (const draft of drafts) {
+        const { data, error } = await cloudClient.rpc('jalasai_claim_invoice_no', { p_job_id: draft.id });
+        if (error) throw error;
+        const number = String(Array.isArray(data) ? data[0] : data || '').trim();
+        if (!number) continue;
+        const index = jobs.findIndex(job => job.id === draft.id);
+        if (index === -1 || !isDraftInvoiceNo(jobs[index].invoiceNo)) continue;
+        const draftNo = jobs[index].invoiceNo;
+        const next = normalizeJob({ ...jobs[index], invoiceNo: number, draftInvoiceNo: draftNo, updatedAt: nowISO() });
+        jobs = jobs.slice();
+        jobs[index] = next;
+        claimed.push({ id: draft.id, number, draftNo });
+        logAction('update', 'invoice', draft.id, { invoiceNo: number, draftInvoiceNo: draftNo, source: 'server-number' });
+      }
+    } while (invoiceClaimAgain && hasDrafts());
+  } catch (err) {
+    console.warn('invoice number claim paused; draft kept', err);
+  } finally {
+    invoiceClaimRunning = false;
+  }
+  if (claimed.length) {
+    saveAll({ domain: 'invoices', changed: { jobs: claimed.map(item => item.id) } });
+    if (typeof markAppTabsStale === 'function') markAppTabsStale(['jobs', 'invoices', 'customers', 'reports', 'home']);
+    if (typeof currentPage !== 'undefined' && typeof renderCurrentPage === 'function') {
+      try { renderCurrentPage({ forceRender: true }); } catch (_) {}
+    }
+    const open = typeof _currentInvoiceJobId !== 'undefined' ? _currentInvoiceJobId : '';
+    if (open && claimed.some(item => item.id === open) && typeof openInvoice === 'function') {
+      try { openInvoice(open); } catch (_) {}
+    }
+    toast(claimed.length === 1
+      ? `Invoice number ${claimed[0].number} assigned (was ${claimed[0].draftNo})`
+      : `${claimed.length} invoice numbers assigned from cloud`, 3200);
+  }
+  return claimed.length;
+}
+
+// A number typed by hand may be used by an invoice this phone doesn't hold
+// (older history in the cloud). Warns after the save; the phone's own check
+// already ran before it.
+async function warnIfInvoiceNoTakenInCloud(invoiceNo, jobId = '') {
+  const value = String(invoiceNo || '').trim();
+  if (!value || isDraftInvoiceNo(value) || !cloudClient || !cloudSessionActive) return null;
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) return null;
+  if (!(await checkInvoiceSeriesServer(cloudClient))) return null;
+  try {
+    const { data, error } = await cloudClient.rpc('jalasai_invoice_no_taken', { p_no: value, p_job_id: jobId || '' });
+    if (error) throw error;
+    const otherId = String(Array.isArray(data) ? data[0] || '' : data || '').trim();
+    // The invoice being saved right now may already be in the cloud under its
+    // own id; only another job counts.
+    if (otherId && otherId !== jobId) {
+      toast(`Invoice number ${value} is also used by ${otherId} in the cloud. Please change one of them.`, 6000);
+      return otherId;
+    }
+  } catch (err) {
+    console.warn('cloud invoice-number check failed', err);
+  }
+  return null;
+}
+
 // Short status for screens that total all history while it's still loading.
 // ─── Server report totals (fast-load Phase 5) ─────────────
 // A report range the phone doesn't fully hold — older invoices still
@@ -3547,6 +3655,10 @@ async function pushGS(options = {}) {
     return false;
   }
 
+  // Stage 4: real numbers before the upload, so the cloud never keeps a draft
+  // longer than it has to.
+  if (typeof claimPendingInvoiceNumbers === 'function') await claimPendingInvoiceNumbers();
+
   if (shouldPullBeforePush(options)) {
     return syncLatestThenPush({
       ...options,
@@ -3803,6 +3915,9 @@ async function initGSSync() {
       }
       startRealtimeSync(cloudClient);
       if (historyIncomplete()) scheduleHistoryBackfill(3000);
+      // Stage 4: learn whether the server issues invoice numbers, then turn
+      // any drafts (made offline, here or on another phone) into real ones.
+      checkInvoiceSeriesServer(cloudClient).then(() => claimPendingInvoiceNumbers()).catch(err => console.warn('invoice numbers check failed', err));
       // First run against the v2 server: one full download so this phone
       // learns the server version of every record. Not on a phone that keeps
       // only recent history (it would download everything): there versions
@@ -3850,6 +3965,7 @@ async function initGSSync() {
         ? 'Internet restored. Syncing local changes...'
         : 'Internet restored.');
       if (cloudClient && cloudSessionActive) startRealtimeSync(cloudClient);
+      if (typeof claimPendingInvoiceNumbers === 'function') claimPendingInvoiceNumbers();
       if (syncMeta.pendingSync) queueAutoSync();
       if (historyIncomplete()) scheduleHistoryBackfill(2000);
     });
@@ -3871,6 +3987,7 @@ async function initGSSync() {
           ? 'Internet restored. Syncing local changes...'
           : 'Internet restored.');
         if (cloudClient && cloudSessionActive) startRealtimeSync(cloudClient);
+        if (typeof claimPendingInvoiceNumbers === 'function') claimPendingInvoiceNumbers();
         if (syncMeta.pendingSync) queueAutoSync();
       });
       window.addEventListener('offline', () => {

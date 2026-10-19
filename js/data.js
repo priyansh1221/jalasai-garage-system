@@ -1221,8 +1221,47 @@ function scheduleDataMaintenanceCleanup(options = {}) {
   else scheduleIdle();
 }
 
+// ─── Invoice numbers (roadmap Stage 4) ────────────────────
+// With supabase/2026-10-invoice-numbers-stage4.sql installed the server hands
+// out numbers (jalasai_claim_invoice_no), so two phones never issue the same
+// one. A new invoice first gets a draft number unique to this phone
+// (D-AB12-3); claimPendingInvoiceNumbers() in js/sync.js swaps it for the
+// real number as soon as the phone is online — any phone can do that, so a
+// draft never gets stuck. A number typed by hand is used as typed.
+const DRAFT_INVOICE_RE = /^D-[A-Z0-9]{2,8}-\d+$/;
+const DRAFT_INVOICE_SEQ_KEY = 'js_draft_invoice_seq';
+
+function isDraftInvoiceNo(value) {
+  return DRAFT_INVOICE_RE.test(String(value || '').trim().toUpperCase());
+}
+
+function serverIssuesInvoiceNumbers() {
+  return !!syncMeta && syncMeta.invoiceSeriesReady === true;
+}
+
+function nextDraftInvoiceNo() {
+  let seq = 0;
+  try { seq = parseInt(localStorage.getItem(DRAFT_INVOICE_SEQ_KEY) || '0', 10) || 0; } catch (_) {}
+  seq += 1;
+  try { localStorage.setItem(DRAFT_INVOICE_SEQ_KEY, String(seq)); } catch (_) {}
+  return `D-${deviceShortId()}-${seq}`;
+}
+
+// What the invoice-number box starts with: empty ("Auto") when the server
+// issues numbers, otherwise the old suggestion.
+function invoiceNoPrefill() {
+  return serverIssuesInvoiceNumbers() ? '' : suggestedNextInvoiceNo();
+}
+
+function applyInvoiceNoField(el, value) {
+  if (!el) return;
+  el.value = value !== undefined && value !== null && value !== '' ? value : invoiceNoPrefill();
+  if (serverIssuesInvoiceNumbers()) el.placeholder = 'Auto — next number from cloud';
+}
+
 function nextInvoiceNo(manual) {
   if (manual && manual.trim()) return manual.trim();
+  if (serverIssuesInvoiceNumbers()) return nextDraftInvoiceNo();
   const no = 'INV-' + String(invoiceCtr).padStart(4, '0');
   invoiceCtr++;
   localStorage.setItem(SK.invoiceCtr, invoiceCtr);

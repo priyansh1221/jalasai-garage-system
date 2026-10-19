@@ -376,7 +376,7 @@ function openInvoice(id, options = {}) {
         </div>
       </div>
       <div style="text-align:right;">
-        <div class="inv-num">Invoice #${j.invoiceNo || j.id}</div>
+        <div class="inv-num">Invoice #${j.invoiceNo || j.id}${typeof isDraftInvoiceNo === 'function' && isDraftInvoiceNo(j.invoiceNo) ? ' <span style="font-size:11px;font-weight:500;">(draft — final number when online)</span>' : ''}</div>
         <div class="inv-date">Date: ${fmtDate(stamp)} · ${new Date(stamp).toLocaleTimeString('en-IN', { hour:'2-digit', minute:'2-digit' })}</div>
         ${j.delivery ? `<div class="inv-date">Delivery: ${fmtDate(j.delivery)}</div>` : ''}
       </div>
