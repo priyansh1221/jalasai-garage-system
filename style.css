@@ -1708,3 +1708,20 @@ nav {
   .stats .sc-val { font-size: 18px; }
   .stats .sc { padding: 11px 4px; }
 }
+
+/* ─── Modals fit the visible screen on phones ─────────────────────────
+   On iOS, 100vh includes the strip behind the browser toolbar, so tall
+   modals (Quick Invoice) ran past the screen and the Save buttons could
+   not be reached. Size to the dynamic viewport, and let the overlay
+   scroll as a fallback where dvh is unsupported. */
+.ovl { overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+.ovl.open { align-items: flex-start; }
+.ovl > .modal { margin: auto; max-height: calc(100dvh - 32px); }
+@media (max-width: 600px) {
+  .ovl > .modal { max-height: calc(100dvh - 18px); }
+}
+
+/* iOS draws date inputs at their own intrinsic width, wider than the column */
+input[type="date"].finp { -webkit-appearance: none; appearance: none; display: block; min-width: 0; min-height: 44px; text-align: left; }
+input[type="date"].finp::-webkit-date-and-time-value { text-align: left; }
+.f2 > .frow { min-width: 0; }
