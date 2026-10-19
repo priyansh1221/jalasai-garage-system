@@ -349,6 +349,9 @@ function renderSyncDiagnostics() {
     ['Local Updated', syncMeta.updatedAt ? fmtDateTime(syncMeta.updatedAt) : '—'],
     ['Last Pull', syncMeta.lastPulledAt ? fmtDateTime(syncMeta.lastPulledAt) : '—'],
     ['Last Push', syncMeta.lastPushedAt ? fmtDateTime(syncMeta.lastPushedAt) : '—'],
+    syncMeta.lastPullTiming ? ['Last Download Speed', `${syncTimingSummary(syncMeta.lastPullTiming)} · ${fmtDateTime(syncMeta.lastPullTiming.at)}`] : null,
+    syncMeta.lastPullTiming?.tables ? ['Download By Table', syncTableTimingSummary(syncMeta.lastPullTiming.tables)] : null,
+    syncMeta.lastPushTiming ? ['Last Upload Speed', `${syncTimingSummary(syncMeta.lastPushTiming)} · ${fmtDateTime(syncMeta.lastPushTiming.at)}`] : null,
     ['Pending Local Changes', syncMeta.pendingSync ? `Yes${syncMeta.pendingSince ? ' · since ' + fmtDateTime(syncMeta.pendingSince) : ''}` : 'No'],
     ['Local Backup', syncMeta.localBackupAt ? fmtDateTime(syncMeta.localBackupAt) : '—'],
     syncMeta.lastSyncError ? ['Last Sync Error', syncMeta.lastSyncError] : null,
@@ -539,6 +542,74 @@ function snapshotStamp(payload) {
 function syncAgeMs(value = '') {
   const stamp = Date.parse(value || 0) || 0;
   return stamp ? Date.now() - stamp : Number.POSITIVE_INFINITY;
+}
+
+function syncNowMs() {
+  return typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now();
+}
+
+// Bytes Supabase sent for requests started since `sinceMs` (performance.now
+// clock). Browsers report 0 for cross-origin responses without a
+// Timing-Allow-Origin header, so null means "not reported", not "nothing".
+function cloudBytesSince(sinceMs) {
+  if (typeof performance === 'undefined' || !performance.getEntriesByType || !gsUrl) return null;
+  let host = '';
+  try { host = new URL(gsUrl).host; } catch (_) { return null; }
+  let transfer = 0;
+  let decoded = 0;
+  performance.getEntriesByType('resource').forEach(entry => {
+    if (entry.startTime < sinceMs || !String(entry.name || '').includes(host)) return;
+    transfer += entry.transferSize || 0;
+    decoded += entry.decodedBodySize || 0;
+  });
+  return transfer || decoded ? { transfer, decoded } : null;
+}
+
+// Phase 0 of docs/FAST_CLOUD_LOAD_PLAN_2026_10.md: keep the last pull/push
+// timings so real-device numbers show in Sync diagnostics.
+function recordSyncTiming(kind, timing) {
+  syncMeta[kind === 'push' ? 'lastPushTiming' : 'lastPullTiming'] = { at: nowISO(), ...timing };
+}
+
+function fmtSyncMs(ms) {
+  const value = Math.max(0, Math.round(ms || 0));
+  return value >= 1000 ? `${(value / 1000).toFixed(1)} s` : `${value} ms`;
+}
+
+function fmtSyncBytes(bytes) {
+  const value = Math.max(0, bytes || 0);
+  if (value >= 1048576) return `${(value / 1048576).toFixed(1)} MB`;
+  return `${Math.round(value / 1024)} KB`;
+}
+
+function syncCountLabel(count, noun) {
+  const value = Number(count || 0);
+  return `${value.toLocaleString('en-IN')} ${noun}${value === 1 ? '' : 's'}`;
+}
+
+function syncTimingSummary(timing) {
+  if (!timing || typeof timing !== 'object') return '';
+  const parts = [];
+  if (timing.mode) parts.push(timing.mode);
+  if (Number.isFinite(timing.rows)) parts.push(syncCountLabel(timing.rows, 'row'));
+  if (Number.isFinite(timing.requests)) parts.push(syncCountLabel(timing.requests, 'request'));
+  if (Number.isFinite(timing.fetchMs)) parts.push(`download ${fmtSyncMs(timing.fetchMs)}`);
+  if (Number.isFinite(timing.applyMs)) parts.push(`apply ${fmtSyncMs(timing.applyMs)}`);
+  if (Number.isFinite(timing.totalMs)) parts.push(`total ${fmtSyncMs(timing.totalMs)}`);
+  if (timing.bytes) {
+    parts.push(timing.bytes.transfer
+      ? `${fmtSyncBytes(timing.bytes.transfer)} over network (${fmtSyncBytes(timing.bytes.decoded)} unpacked)`
+      : `${fmtSyncBytes(timing.bytes.decoded)} unpacked`);
+  }
+  if (timing.result && timing.result !== 'ok') parts.push(timing.result);
+  return parts.join(' · ');
+}
+
+function syncTableTimingSummary(tableTimings) {
+  if (!tableTimings || typeof tableTimings !== 'object') return '';
+  return Object.entries(tableTimings)
+    .map(([key, t]) => `${key}: ${syncCountLabel(t?.rows, 'row')} in ${syncCountLabel(t?.pages, 'request')}, ${fmtSyncMs(t?.ms)}${t?.failed ? ' (failed)' : ''}`)
+    .join(' · ');
 }
 
 function shouldThrottleAutomaticPull(options = {}) {
@@ -2096,9 +2167,12 @@ async function pullFromShadowTables(client, options = {}) {
   const pullTables = options.criticalOnly
     ? SHADOW_PULL_TABLES.filter(config => SHADOW_PULL_PRIORITY.includes(config.key))
     : SHADOW_PULL_TABLES;
+  const tableTimings = {};
   for (const config of pullTables) {
     const rows = [];
     let from = 0;
+    let pages = 0;
+    const tableStartedAt = syncNowMs();
     const selectColumns = config.key === 'jobs'
       ? 'record_data,source_updated_at,mirrored_at,customer_id,customer_name,phone,vehicle,registration_no,job_status,job_date,invoice_no,mechanic_ids,mechanic_names,service_note,remarks'
       : config.key === 'incomeEntries'
@@ -2115,6 +2189,7 @@ async function pullFromShadowTables(client, options = {}) {
         if (options?.since) tableQuery = tableQuery.gt('source_updated_at', options.since);
         const { data, error } = await tableQuery.range(from, to);
         if (error) throw error;
+        pages += 1;
         (data || []).forEach(row => {
           const rowUpdatedAt = shadowTimestamp(row?.source_updated_at || row?.mirrored_at || '');
           if (rowUpdatedAt && (!newestRemoteUpdatedAt || Date.parse(rowUpdatedAt) > Date.parse(newestRemoteUpdatedAt))) {
@@ -2178,7 +2253,9 @@ async function pullFromShadowTables(client, options = {}) {
         from += SHADOW_BATCH_SIZE;
       }
       payload[config.key] = rows;
+      tableTimings[config.key] = { rows: rows.length, pages, ms: Math.round(syncNowMs() - tableStartedAt) };
     } catch (err) {
+      tableTimings[config.key] = { rows: 0, pages, ms: Math.round(syncNowMs() - tableStartedAt), failed: true };
       if (SHADOW_PULL_REQUIRED.includes(config.key)) throw err;
       console.warn(`Cloud pull skipped ${config.table}; keeping local ${config.key}`, err);
       pullFailures.push(config.key);
@@ -2194,6 +2271,7 @@ async function pullFromShadowTables(client, options = {}) {
     adminEmails: adminEmails(),
     exportedAt: nowISO(),
     partialPullFailures: pullFailures,
+    tableTimings,
   };
   const allPulledRows = [
     ...(payload.jobs || []),
@@ -2236,6 +2314,16 @@ async function pullGS(options = {}) {
   cloudSyncBusy = true;
   updateGSStatus('Pulling latest data from cloud tables...');
 
+  const pullStartedAt = syncNowMs();
+  const timing = { mode: '', rows: 0, requests: 0, fetchMs: 0, result: 'failed' };
+  const finishTiming = (result) => {
+    timing.result = result;
+    timing.totalMs = Math.round(syncNowMs() - pullStartedAt);
+    timing.bytes = cloudBytesSince(pullStartedAt);
+    recordSyncTiming('pull', timing);
+    try { localStorage.setItem(SK.syncMeta, JSON.stringify(syncMeta)); } catch (_) {}
+    renderSyncDiagnostics();
+  };
   try {
     // Primary: read from shadow tables
     let remoteData = null;
@@ -2249,6 +2337,7 @@ async function pullGS(options = {}) {
     const pullOptions = isFullPull
       ? { criticalOnly: !!options.criticalOnly }
       : { criticalOnly: !!options.criticalOnly, since: lastPullAt };
+    timing.mode = `${isFullPull ? 'Full' : 'Changes only'}${options.criticalOnly ? ' (main tables)' : ' (all tables)'}`;
     try {
       if (isFullPull) clearLastPullAt();
       remoteData = await pullFromShadowTables(client, pullOptions);
@@ -2257,6 +2346,12 @@ async function pullGS(options = {}) {
       tablePullError = tableErr;
       console.warn('Table-wise pull failed', tableErr);
     }
+    timing.fetchMs = Math.round(syncNowMs() - pullStartedAt);
+    timing.tables = remoteData?.meta?.tableTimings || null;
+    Object.values(timing.tables || {}).forEach(t => {
+      timing.rows += t.rows || 0;
+      timing.requests += t.pages || 0;
+    });
 
     // The table-wise dataset is the only cloud source of truth.
     if (tablePullError) {
@@ -2266,6 +2361,7 @@ async function pullGS(options = {}) {
     if (!remoteData || !hasAnyRecords(remoteData)) {
       updateGSStatus('Cloud table sync is connected, but no table data is stored yet.');
       if (!options.quiet) toast('Cloud tables are empty right now');
+      finishTiming('empty');
       return 'empty';
     }
 
@@ -2276,6 +2372,7 @@ async function pullGS(options = {}) {
     const cloudHasMissingInvoices = hasRemoteInvoicesMissingLocally(remoteData?.jobs, jobs);
     if (!options.force && localStamp && remoteStamp && localStamp > remoteStamp && !cloudHasNewerInvoices && !cloudHasMissingInvoices) {
       updateGSStatus('Local data is newer than cloud. A push is ready.');
+      finishTiming('local newer');
       return 'local-newer';
     }
 
@@ -2288,9 +2385,12 @@ async function pullGS(options = {}) {
       && remoteData.meta.partialPullFailures.length > 0;
     const safeToReplaceLocal = isFullPull && !options.criticalOnly && !partialPull;
     const requestedReplaceLocal = options.replaceLocal ?? !syncMeta.pendingSync;
+    const applyStartedAt = syncNowMs();
     applyRemoteSnapshot(remoteData, remoteData?.meta?.updatedAt || nowISO(), {
       replaceLocal: requestedReplaceLocal && safeToReplaceLocal,
     });
+    timing.applyMs = Math.round(syncNowMs() - applyStartedAt);
+    finishTiming('ok');
     updateGSStatus('Pulled latest data from cloud.');
     if (!options.quiet) {
       toast(syncMeta.lastMergeSummary
@@ -2301,6 +2401,7 @@ async function pullGS(options = {}) {
   } catch (err) {
     console.warn('Cloud pull failed', err);
     const msg = syncErrMsg(err, 'Cloud pull failed');
+    finishTiming('failed');
     updateGSStatus(msg);
     if (!options.quiet) toast(msg, 4200);
     return false;
@@ -2349,6 +2450,14 @@ async function pushGS(options = {}) {
   cloudSyncBusy = true;
   updateGSStatus('Sending latest data to cloud tables...');
 
+  const pushStartedAt = syncNowMs();
+  const pushTiming = { mode: '', rows: 0, result: 'failed' };
+  const finishPushTiming = (result) => {
+    pushTiming.result = result;
+    pushTiming.totalMs = Math.round(syncNowMs() - pushStartedAt);
+    pushTiming.bytes = cloudBytesSince(pushStartedAt);
+    recordSyncTiming('push', pushTiming);
+  };
   try {
     await yieldRecentRefreshChunk();
     // Primary write path: shadow tables
@@ -2384,6 +2493,9 @@ async function pushGS(options = {}) {
     const scopedAutoPush = !options.fullMirror
       && Array.isArray(options.tableKeys) && options.tableKeys.length > 0;
     const runFullMirror = fullMirrorDue && !scopedAutoPush;
+    pushTiming.mode = runFullMirror
+      ? 'Full check of all tables'
+      : scopedAutoPush ? `Recent changes (${options.tableKeys.join(', ')})` : 'Recent changes (all tables)';
     let shadowResult = null;
     try {
       shadowResult = await mirrorPayloadToShadowTables(client, localPayload, session, {
@@ -2409,6 +2521,8 @@ async function pushGS(options = {}) {
       throw shadowErr;
     }
 
+    pushTiming.rows = (shadowResult?.results || []).reduce((sum, item) => sum + (item.changed || 0) + (item.deleted || 0), 0);
+    finishPushTiming('ok');
     const pushedAt = nowISO();
     const newerLocalChange = (Date.parse(syncMeta.updatedAt || 0) || 0) > (Date.parse(localPayload.meta.updatedAt || 0) || 0);
     if (runFullMirror) syncMeta.shadowLastFullMirrorAt = pushedAt;
@@ -2454,6 +2568,7 @@ async function pushGS(options = {}) {
   } catch (err) {
     console.warn('Cloud push failed', err);
     const msg = syncErrMsg(err, 'Cloud push failed');
+    finishPushTiming('failed');
     syncMeta.pendingSync = true;
     syncMeta.pendingSince = syncMeta.pendingSince || syncMeta.updatedAt || nowISO();
     syncMeta.lastSyncError = msg;
