@@ -668,6 +668,9 @@ function flushTableSaves() {
       // The localStorage copy is now stale and only eats Safari's 5 MB.
       try { localStorage.removeItem(SK[key]); } catch (_) {}
       noteTableSaveResult(key, true);
+      // An earlier failed localStorage write of this table no longer
+      // matters once the table is safely in IndexedDB.
+      if (typeof noteLocalSaveResult === 'function') noteLocalSaveResult(SK[key], true);
     });
     try { localStorage.setItem(DATA_IDB_MARKER_KEY, '1'); } catch (_) {}
   }).catch(err => {
