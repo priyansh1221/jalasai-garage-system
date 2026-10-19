@@ -1,9 +1,8 @@
 # Fast cloud load plan — newest first, older on demand, delta sync
 
-Status: **Approved 2026-10-19.** Phases 0, 2 and 4 are built, plus local speed
-fixes. The Phase 1 SQL is extended. Everything is tested locally; **nothing is
-deployed and the SQL hasn't been run on live Supabase yet**. Details are in
-"Build status" below.
+Status (2026-10-20): **all phases built and tested locally** (0, 2, 3, 4, 5,
+6 and on-demand history) on `ux-polish`. Not deployed; the SQL has not been run
+on live Supabase. Rollout order: `docs/ROLLOUT_2026_10.md`.
 
 ### Build status (2026-10-19)
 
