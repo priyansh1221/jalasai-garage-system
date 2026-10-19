@@ -312,6 +312,25 @@ nav {
   box-shadow: 0 0 0 4px rgba(210,138,66,.12);
   flex: 0 0 auto;
 }
+/* Sync v2 per-record status (js/sync-outbox.js syncStatusBadgeHtml). Shown
+   only while a record waits to upload or after a two-phone conflict. */
+.sync-rec-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.4;
+  white-space: nowrap;
+  flex: 0 0 auto;
+  align-self: flex-start;
+}
+.sync-rec-pending  { color: var(--mut); background: rgba(138,143,158,.12); border-color: rgba(138,143,158,.28); }
+.sync-rec-conflict { color: var(--warn); background: rgba(245,187,61,.12); border-color: rgba(245,187,61,.32); }
+.sync-rec-error    { color: var(--dan); background: rgba(255,95,95,.1); border-color: rgba(255,95,95,.3); }
 
 @keyframes skeletonShimmer {
   from { background-position: 200% 0; }

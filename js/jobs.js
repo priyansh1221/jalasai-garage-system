@@ -1697,6 +1697,7 @@ function jobCard(j) {
         <div class="jcust">${customerLabel}</div>
         <div class="jveh">${vehicleLabel}</div>
       </div>
+      ${typeof syncStatusBadgeHtml === 'function' ? syncStatusBadgeHtml('jobs', j) : ''}
     </div>
     <div class="jprob">${workLabel}</div>
     ${FAST_ENTRY_UI.dashboardRemarks && j.notes ? `<div style="font-size:11px;color:var(--mut);margin:6px 0 2px;">Note: ${j.notes}</div>` : ''}

@@ -1029,6 +1029,9 @@ function saveAll(options = {}) {
       }
     }
     if (typeof renderSyncDiagnostics === 'function') renderSyncDiagnostics();
+    // Queue changed records for upload (js/sync-outbox.js) shortly after
+    // this burst of saves.
+    if (!options.skipSync && typeof scheduleSyncV2Capture === 'function') scheduleSyncV2Capture();
     if (!options.skipSync && typeof queueAutoSync === 'function') {
       queueAutoSync({ domain: options.domain, domains: options.domains });
     }
@@ -1105,6 +1108,8 @@ function clearLocalDeviceDataAfterSignOut() {
   } catch (_) {}
 
   if (typeof clearDataTablesInIdb === 'function') clearDataTablesInIdb();
+  // Disconnect only gets here once the upload queue is empty (disconnectGS).
+  if (typeof clearSyncV2Store === 'function') clearSyncV2Store();
 
   jobs = [];
   stock = [];

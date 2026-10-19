@@ -359,6 +359,7 @@ function renderSyncDiagnostics() {
       : deltaServerReady === false
         ? 'Full table reads (run the fast-sync SQL to enable changes only)'
         : 'Not checked yet'],
+    ...(typeof syncV2DiagnosticsRows === 'function' ? syncV2DiagnosticsRows() : []),
     ['Local Backup', syncMeta.localBackupAt ? fmtDateTime(syncMeta.localBackupAt) : '—'],
     deviceSaveError ? ['Device Save', `<span style="color:#e5484d;font-weight:600;">${deviceSaveError}</span>`] : null,
     syncMeta.lastSyncError && syncMeta.lastSyncError !== deviceSaveError ? ['Last Sync Error', syncMeta.lastSyncError] : null,
@@ -770,6 +771,11 @@ function recordStamp(record) {
 function mergeByKey(remoteList, localList, keyFn, normalizeFn, options = {}) {
   const preferLocal = !!options.preferLocal;
   const localNewerSnapshot = !!options.localNewerSnapshot;
+  // Sync v2: the server is the judge. Its copy wins; a record with changes
+  // still waiting in this phone's upload queue keeps the local copy (the
+  // upload then merges it field by field on the server). No clocks involved.
+  const serverWins = !!options.serverWins;
+  const pendingIds = options.pendingIds || null;
   const map = new Map();
   const upsert = (item, source) => {
     if (!item) return;
@@ -778,6 +784,10 @@ function mergeByKey(remoteList, localList, keyFn, normalizeFn, options = {}) {
     const normalized = normalizeFn ? normalizeFn(item) : item;
     if (!map.has(key)) {
       map.set(key, normalized);
+      return;
+    }
+    if (serverWins) {
+      if (source === 'local' && pendingIds && pendingIds.has(String(key))) map.set(key, normalized);
       return;
     }
     const existing = map.get(key);
@@ -862,17 +872,23 @@ function mergedSyncPayload(remoteData, localData, options = {}) {
   const remoteStamp = snapshotStamp(remoteData);
   const localNewerSnapshot = localStamp >= remoteStamp;
   const preferLocal = options.preferLocal ?? localNewerSnapshot;
-  const jobPaymentIndex = buildJobPaymentUnionIndex(remoteData.jobs, localData.jobs);
+  const v2 = !!options.v2;
+  const opts = key => (v2
+    ? { serverWins: true, pendingIds: syncV2PendingIds(key) }
+    : { preferLocal, localNewerSnapshot });
+  const mergedJobs = mergeByKey(remoteData.jobs, localData.jobs, item => item.id, normalizeJob, opts('jobs'));
   const payload = {
-    jobs: applyJobPaymentUnion(
-      mergeByKey(remoteData.jobs, localData.jobs, item => item.id, normalizeJob, { preferLocal, localNewerSnapshot }),
-      jobPaymentIndex
+    // v2: payments are merged item by item on the server, so the local union
+    // (which can bring back a payment removed on another phone) is skipped.
+    jobs: (v2
+      ? mergedJobs
+      : applyJobPaymentUnion(mergedJobs, buildJobPaymentUnionIndex(remoteData.jobs, localData.jobs))
     ).map(normalizeJob),
-    stock: mergeByKey(remoteData.stock, localData.stock, item => item.id || item.sku, normalizeStockItem, { preferLocal, localNewerSnapshot }),
-    customers: mergeByKey(remoteData.customers, localData.customers, item => item.id || item.phone || item.name, normalizeCustomer, { preferLocal, localNewerSnapshot }),
-    mechanics: mergeByKey(remoteData.mechanics, localData.mechanics, item => item.id || item.phone || item.name, normalizeMechanic, { preferLocal, localNewerSnapshot }),
-    expenses: mergeByKey(remoteData.expenses, localData.expenses, item => item.id, normalizeExpense, { preferLocal, localNewerSnapshot }),
-    incomeEntries: mergeByKey(remoteData.incomeEntries, localData.incomeEntries, item => item.id, normalizeIncomeEntry, { preferLocal, localNewerSnapshot }),
+    stock: mergeByKey(remoteData.stock, localData.stock, item => item.id || item.sku, normalizeStockItem, opts('stock')),
+    customers: mergeByKey(remoteData.customers, localData.customers, item => item.id || item.phone || item.name, normalizeCustomer, opts('customers')),
+    mechanics: mergeByKey(remoteData.mechanics, localData.mechanics, item => item.id || item.phone || item.name, normalizeMechanic, opts('mechanics')),
+    expenses: mergeByKey(remoteData.expenses, localData.expenses, item => item.id, normalizeExpense, opts('expenses')),
+    incomeEntries: mergeByKey(remoteData.incomeEntries, localData.incomeEntries, item => item.id, normalizeIncomeEntry, opts('incomeEntries')),
     partsLog: mergeEventLists(remoteData.partsLog, localData.partsLog, item => `${item.date || ''}|${item.time || ''}|${item.sku || ''}|${item.part || ''}`),
     auditLog: mergeEventLists(remoteData.auditLog, localData.auditLog, item => item.id || `${item.at || ''}|${item.entity || ''}|${item.entityId || ''}|${item.action || ''}`),
     stockMovements: mergeByKey(remoteData.stockMovements, localData.stockMovements, item => item.id || `${item.stockId || ''}|${item.createdAt || ''}|${item.type || ''}|${item.qty || ''}`, normalizeStockMovement, { preferLocal, localNewerSnapshot }),
@@ -1558,7 +1574,7 @@ function applyRemoteSnapshot(data, remoteUpdatedAt = '', options = {}) {
   const localMergePayload = options.replaceLocal
     ? { meta: { deviceId: syncMeta.deviceId || localPayload?.meta?.deviceId || '' } }
     : localPayload;
-  const merged = mergedSyncPayload(data || {}, localMergePayload, { preferLocal: false });
+  const merged = mergedSyncPayload(data || {}, localMergePayload, { preferLocal: false, v2: !!options.v2 });
   const mergeSummary = options.replaceLocal
     ? 'Local cache refreshed from cloud'
     : buildMergeSummary(data || {}, localPayload, merged);
@@ -1923,7 +1939,16 @@ function handleRealtimeShadowChange(config, payload, options = {}) {
   if (!config || !payload) return false;
   const row = payload.new || payload.old || {};
   if (row.device_id && row.device_id === syncMeta.deviceId) return true;
-  if (syncMeta.pendingSync) return false;
+  // v2 (callers capture local edits first and pass v2Applied): only a record
+  // with changes waiting on this phone keeps its local copy; everything else
+  // takes the cloud copy at once.
+  const v2Applied = options.v2Applied || null;
+  const v2Id = String(payload.new?.id || payload.old?.id || '');
+  if (v2Applied) {
+    if (v2Id && syncV2.outbox.has(syncV2Key(config.key, v2Id))) return true;
+  } else if (syncMeta.pendingSync) {
+    return false;
+  }
   const deletedAt = payload.new?.deleted_at || (payload.eventType === 'DELETE' ? nowISO() : '');
   const id = payload.new?.id || payload.old?.id || payload.new?.record_data?.id || payload.old?.record_data?.id || '';
   const applyOptions = { deferDataChanged: !!options.deferSideEffects };
@@ -1936,6 +1961,11 @@ function handleRealtimeShadowChange(config, payload, options = {}) {
       ? options.changedIds[config.key]
       : (options.changedIds[config.key] = new Set());
     set.add(String(id));
+  }
+  if (v2Applied && v2Id) {
+    if (payload.new?.version !== undefined) syncV2NoteVersion(config.key, v2Id, payload.new.version);
+    if (!v2Applied[config.key]) v2Applied[config.key] = new Set();
+    v2Applied[config.key].add(v2Id);
   }
   const remoteStamp = shadowTimestamp(row.source_updated_at || row.mirrored_at || '');
   if (remoteStamp) {
@@ -1964,11 +1994,13 @@ async function refreshRecentCloudChanges(windowMs = VISIBILITY_GAP_FILL_MS, opti
   const changedKeys = new Set();
   const recentChangedIds = {};
   const changedPages = new Set();
+  const v2 = typeof syncV2ServerMode === 'function' && syncV2ServerMode();
+  const v2Applied = v2 ? {} : null;
   try {
     for (const config of REALTIME_SHADOW_TABLES) {
       const { data, error } = await cloudClient
         .from(config.table)
-        .select('id,record_data,source_updated_at,mirrored_at,device_id,deleted_at')
+        .select(`id,record_data,source_updated_at,mirrored_at,device_id,deleted_at${v2 ? ',version' : ''}`)
         .gte('source_updated_at', since)
         .order('source_updated_at', { ascending: true })
         .limit(200);
@@ -1976,13 +2008,19 @@ async function refreshRecentCloudChanges(windowMs = VISIBILITY_GAP_FILL_MS, opti
       const rows = (data || []).filter(row => !(row.device_id && row.device_id === syncMeta.deviceId));
       for (let i = 0; i < rows.length; i += RECENT_REFRESH_CHUNK_SIZE) {
         const chunk = rows.slice(i, i + RECENT_REFRESH_CHUNK_SIZE);
+        if (v2Applied && chunk.length) captureSyncV2Ids({ [config.key]: chunk.map(row => String(row.id || '')) });
         chunk.forEach(row => {
-          if (handleRealtimeShadowChange(config, { eventType: row.deleted_at ? 'DELETE' : 'UPDATE', new: row }, { deferSideEffects: true, changedIds: recentChangedIds })) {
+          if (handleRealtimeShadowChange(config, { eventType: row.deleted_at ? 'DELETE' : 'UPDATE', new: row }, { deferSideEffects: true, changedIds: recentChangedIds, v2Applied })) {
             changed = true;
             changedKeys.add(config.key);
             (config.pages || []).forEach(page => changedPages.add(page));
           }
         });
+        // Before yielding: the next capture must see these as cloud data.
+        if (v2Applied && v2Applied[config.key]) {
+          syncV2AdoptRemote([config.key], v2Applied);
+          delete v2Applied[config.key];
+        }
         if (i + RECENT_REFRESH_CHUNK_SIZE < rows.length) await yieldRecentRefreshChunk();
       }
     }
@@ -1990,6 +2028,7 @@ async function refreshRecentCloudChanges(windowMs = VISIBILITY_GAP_FILL_MS, opti
       saveAll({ preserveUpdatedAt: true, skipSync: true, domains: [...changedKeys], exactTables: true, changed: recentChangedIds });
       refreshRealtimePagesBatch(changedKeys, changedPages);
     }
+    if (v2Applied && Object.keys(v2Applied).length) syncV2AdoptRemote(Object.keys(v2Applied), v2Applied);
     if (changed && !options.quiet) updateGSStatus('Pulled recent cloud changes.');
     return changed;
   } catch (err) {
@@ -2044,8 +2083,18 @@ function startRealtimeSync(client) {
     const changedKeys = new Set();
     const changedPages = new Set();
     const changedIds = {};
+    const v2Applied = typeof syncV2ServerMode === 'function' && syncV2ServerMode() ? {} : null;
+    if (v2Applied) {
+      const idsByTable = {};
+      batch.forEach(({ config, payload }) => {
+        const id = String(payload?.new?.id || payload?.old?.id || '');
+        if (!id) return;
+        (idsByTable[config.key] || (idsByTable[config.key] = [])).push(id);
+      });
+      captureSyncV2Ids(idsByTable);
+    }
     batch.forEach(({ config, payload }) => {
-      if (!handleRealtimeShadowChange(config, payload, { deferSideEffects: true, changedIds })) {
+      if (!handleRealtimeShadowChange(config, payload, { deferSideEffects: true, changedIds, v2Applied })) {
         needsPull = true;
         return;
       }
@@ -2058,6 +2107,7 @@ function startRealtimeSync(client) {
       saveAll({ preserveUpdatedAt: true, skipSync: true, domains: [...changedKeys], exactTables: true, changed: changedIds });
       refreshRealtimePagesBatch([...changedKeys], [...changedPages]);
     }
+    if (v2Applied && Object.keys(v2Applied).length) syncV2AdoptRemote(Object.keys(v2Applied), v2Applied);
     if (needsPull) scheduleRealtimePull();
   };
   REALTIME_SHADOW_TABLES.forEach(config => {
@@ -2166,7 +2216,10 @@ async function disconnectGS() {
     closeM('m-gs');
     return;
   }
-  const hasLocalOnlyChanges = !!syncMeta.pendingSync;
+  // Queue any edit from the last moment so the check below sees it.
+  if (typeof captureSyncV2Now === 'function') captureSyncV2Now(null);
+  const hasLocalOnlyChanges = !!syncMeta.pendingSync
+    || (typeof syncV2Active === 'function' && syncV2Active() && syncV2.outbox.size > 0);
   const confirmMsg = hasLocalOnlyChanges
     ? 'This phone has changes that are not in the cloud yet.\n\nDisconnect will upload them first, then sign out and remove all garage data from this phone.\n\nContinue?'
     : 'Disconnect will sign out and remove all garage data from this phone. The cloud copy stays.\n\nContinue?';
@@ -2185,7 +2238,7 @@ async function disconnectGS() {
       console.warn('Upload before disconnect failed', err);
       pushed = false;
     }
-    if (pushed !== true || syncMeta.pendingSync) {
+    if (pushed !== true || syncMeta.pendingSync || (typeof syncV2Active === 'function' && syncV2Active() && syncV2.outbox.size > 0)) {
       const why = pushed === 'busy'
         ? 'A sync is already running. Wait for it to finish, then try Disconnect again.'
         : `Upload failed${syncMeta.lastSyncError ? ` (${syncMeta.lastSyncError})` : ''}, so Disconnect was cancelled.`;
@@ -2297,32 +2350,62 @@ async function pullFromShadowTables(client, options = {}) {
       ? SHADOW_PULL_TABLES.filter(config => SHADOW_PULL_PRIORITY.includes(config.key))
       : SHADOW_PULL_TABLES;
   const tableTimings = {};
+  // Sync v2 server: every row carries its server version, and the delta
+  // cursor is the server's own clock (server_updated_at, per table), so a
+  // phone with a wrong date can't make others miss its changes. Delta pulls
+  // include deletes.
+  const v2 = !!options.v2;
+  const v2Cursors = v2 ? { ...(syncMeta.syncV2Cursors || {}) } : null;
+  const v2Versions = [];
   for (const config of pullTables) {
     const rows = [];
     let from = 0;
     let pages = 0;
     const tableStartedAt = syncNowMs();
-    const selectColumns = config.key === 'jobs'
+    const v2Since = v2 && !options.v2Full ? (v2Cursors[config.key] || '') : '';
+    let newestServerAt = v2 ? (v2Cursors[config.key] || '') : '';
+    const selectColumns = (config.key === 'jobs'
       ? 'record_data,source_updated_at,mirrored_at,customer_id,customer_name,phone,vehicle,registration_no,job_status,job_date,invoice_no,mechanic_ids,mechanic_names,service_note,remarks'
       : config.key === 'incomeEntries'
         ? 'record_data,source_updated_at,mirrored_at,entry_date,income_kind,category,amount,method,invoice_no,note,mechanic_id,mechanic_name'
-        : 'record_data,source_updated_at,mirrored_at';
+        : 'record_data,source_updated_at,mirrored_at')
+      + (v2 ? ',id,version,server_updated_at,deleted_at' : '');
     try {
       while (true) {
         const to = from + SHADOW_BATCH_SIZE - 1;
-        let tableQuery = client
-          .from(config.table)
-          .select(selectColumns)
-          .is('deleted_at', null)
-          .order('source_updated_at', { ascending: false });
-        if (options?.since) tableQuery = tableQuery.gt('source_updated_at', options.since);
+        let tableQuery = client.from(config.table).select(selectColumns);
+        if (v2Since) {
+          tableQuery = tableQuery
+            .gt('server_updated_at', v2Since)
+            .order('server_updated_at', { ascending: true })
+            .order('id', { ascending: true });
+        } else {
+          tableQuery = tableQuery
+            .is('deleted_at', null)
+            .order('source_updated_at', { ascending: false });
+          if (!v2 && options?.since) tableQuery = tableQuery.gt('source_updated_at', options.since);
+        }
         const { data, error } = await tableQuery.range(from, to);
         if (error) throw error;
         pages += 1;
+        // Versions are recorded only when this data is applied: an edit
+        // captured before then must keep the version it was really based on.
+        if (v2) (data || []).forEach(row => { if (row?.id) v2Versions.push([config.key, String(row.id), row.version]); });
         (data || []).forEach(row => {
           const rowUpdatedAt = shadowTimestamp(row?.source_updated_at || row?.mirrored_at || '');
           if (rowUpdatedAt && (!newestRemoteUpdatedAt || Date.parse(rowUpdatedAt) > Date.parse(newestRemoteUpdatedAt))) {
             newestRemoteUpdatedAt = rowUpdatedAt;
+          }
+          if (v2 && row?.server_updated_at && (!newestServerAt || Date.parse(row.server_updated_at) > Date.parse(newestServerAt))) {
+            newestServerAt = row.server_updated_at;
+          }
+          if (v2 && row?.deleted_at && row?.record_data) {
+            // Tombstone: apply the delete, nothing else.
+            const tomb = { ...(row.record_data || {}) };
+            tomb.deletedAt = shadowTimestamp(row.deleted_at) || nowISO();
+            if (!tomb.id && row.id) tomb.id = row.id;
+            rows.push(tomb);
+            return;
           }
           const base = shadowRowToRecord(config, row);
           if (!base) return;
@@ -2333,6 +2416,7 @@ async function pullFromShadowTables(client, options = {}) {
       }
       payload[config.key] = rows;
       tableTimings[config.key] = { rows: rows.length, pages, ms: Math.round(syncNowMs() - tableStartedAt) };
+      if (v2 && newestServerAt) v2Cursors[config.key] = newestServerAt;
     } catch (err) {
       tableTimings[config.key] = { rows: 0, pages, ms: Math.round(syncNowMs() - tableStartedAt), failed: true };
       if (SHADOW_PULL_REQUIRED.includes(config.key)) throw err;
@@ -2351,6 +2435,9 @@ async function pullFromShadowTables(client, options = {}) {
     exportedAt: nowISO(),
     partialPullFailures: pullFailures,
     tableTimings,
+    // Saved by pullGS only after the pulled data has been applied.
+    v2Cursors,
+    v2Versions,
   };
   const allPulledRows = [
     ...(payload.jobs || []),
@@ -2467,6 +2554,7 @@ async function fetchChangesSince(client, configs) {
       const config = byTable.get(table);
       if (!config) return;
       const rows = Array.isArray(info?.rows) ? info.rows : [];
+      if (typeof syncV2NoteRowVersions === 'function') syncV2NoteRowVersions(config.key, rows);
       const list = recordsByKey[config.key] || (recordsByKey[config.key] = []);
       rows.forEach(row => {
         const record = shadowRowToRecord(config, row);
@@ -2498,6 +2586,23 @@ const DELTA_APPLY_ORDER = Object.freeze(['mechanics', 'customers', 'jobs', 'stoc
 function applyChangedRecords(recordsByKey, changedIds = null) {
   const changed = [];
   const localNewerSnapshot = !!syncMeta.pendingSync;
+  // Sync v2 (js/sync-outbox.js): capture any local edit to these records
+  // first (same task, so nothing slips between capture and apply). A record
+  // with changes waiting on this phone keeps its local copy; on a v2 server
+  // every other record takes the cloud copy as is (the server already merged
+  // it), and the applied records are marked as matching the cloud so they
+  // aren't uploaded back.
+  const v2On = typeof syncV2Active === 'function' && syncV2Active();
+  const v2Server = v2On && typeof syncV2ServerMode === 'function' && syncV2ServerMode();
+  const v2Adopted = {};
+  if (v2On && typeof captureSyncV2Ids === 'function') {
+    const ids = {};
+    Object.keys(recordsByKey || {}).forEach(key => {
+      const cfg = SYNC_V2_TABLES[key];
+      if (cfg) ids[key] = normaliseArray(recordsByKey[key]).map(record => cfg.idOf(record)).filter(Boolean);
+    });
+    captureSyncV2Ids(ids);
+  }
   DELTA_APPLY_ORDER.forEach(key => {
     const incoming = normaliseArray(recordsByKey[key]);
     const access = typeof DATA_TABLE_ACCESS !== 'undefined' ? DATA_TABLE_ACCESS[key] : null;
@@ -2511,9 +2616,14 @@ function applyChangedRecords(recordsByKey, changedIds = null) {
     let next = null;
     const added = [];
     const touched = new Set();
+    const v2Config = v2On ? SYNC_V2_TABLES[key] : null;
+    const v2Pending = v2Config ? syncV2PendingIds(key) : null;
     incoming.forEach(remote => {
       const id = access.key(remote);
       if (!id) return;
+      const v2Id = v2Config ? v2Config.idOf(remote) : '';
+      if (v2Pending && v2Id && v2Pending.has(v2Id)) return;
+      if (v2Config && v2Id) (v2Adopted[key] || (v2Adopted[key] = new Set())).add(v2Id);
       const deleted = !!String(remote.deletedAt || '').trim();
       const at = index.has(id) ? index.get(id) : -1;
       if (access.events) {
@@ -2533,8 +2643,10 @@ function applyChangedRecords(recordsByKey, changedIds = null) {
         return;
       }
       const local = at < list.length ? list[at] : added[at - list.length];
-      let winner = mergeByKey([remote], [local], access.key, access.normalize, { preferLocal: false, localNewerSnapshot })[0];
-      if (key === 'jobs' && winner) {
+      let winner = v2Server
+        ? (access.normalize ? access.normalize(remote) : remote)
+        : mergeByKey([remote], [local], access.key, access.normalize, { preferLocal: false, localNewerSnapshot })[0];
+      if (key === 'jobs' && winner && !v2Server) {
         winner = normalizeJob(applyJobPaymentUnion([winner], buildJobPaymentUnionIndex([remote], [local]))[0]);
       }
       if (!winner || shadowStableStringify(winner) === shadowStableStringify(local)) return;
@@ -2556,6 +2668,9 @@ function applyChangedRecords(recordsByKey, changedIds = null) {
       touched.forEach(id => set.add(String(id)));
     }
   });
+  if (v2On && typeof syncV2AdoptRemote === 'function' && Object.keys(v2Adopted).length) {
+    syncV2AdoptRemote(Object.keys(v2Adopted), v2Adopted);
+  }
   return changed;
 }
 
@@ -2658,6 +2773,7 @@ async function loadNewestFirst(client) {
   const { data: recentRows, error } = await client.rpc('jalasai_recent_jobs', { p_since: since });
   if (error) throw error;
   const jobsConfig = jobsShadowConfig();
+  if (typeof syncV2NoteRowVersions === 'function') syncV2NoteRowVersions('jobs', normaliseArray(recentRows));
   const recentJobs = normaliseArray(recentRows).map(row => shadowRowToRecord(jobsConfig, row)).filter(Boolean);
   const first = await pullFromShadowTables(client, { tableKeys: [...HISTORY_FIRST_TABLES] });
   const firstFailed = first?.meta?.partialPullFailures || [];
@@ -2732,6 +2848,7 @@ async function runHistoryBackfill() {
       const { data, error } = await client.rpc('jalasai_jobs_before', { p_date: cursor.date, p_id: cursor.id, p_limit: HISTORY_PAGE_LIMIT });
       if (error) throw error;
       const rows = normaliseArray(data);
+      if (typeof syncV2NoteRowVersions === 'function') syncV2NoteRowVersions('jobs', rows);
       const records = rows.map(row => shadowRowToRecord(jobsConfig, row)).filter(Boolean);
       if (records.length) applyChangedRecords({ jobs: records }, historyChangedIds);
       loadedSinceSave += records.length;
@@ -2975,6 +3092,7 @@ function scheduleRollingTrim(delayMs = 15000) {
 // only those records. Returns how many records changed.
 function mergeServerJobRows(rows) {
   const jobsConfig = jobsShadowConfig();
+  if (typeof syncV2NoteRowVersions === 'function') syncV2NoteRowVersions('jobs', normaliseArray(rows));
   const records = normaliseArray(rows).map(row => shadowRowToRecord(jobsConfig, row)).filter(Boolean);
   if (!records.length) return 0;
   const changedIds = {};
@@ -3281,14 +3399,15 @@ async function pullGS(options = {}) {
     let remoteStamp = 0;
     let tablePullError = null;
     const lastPullAt = getLastPullAt();
+    const v2 = typeof syncV2ServerMode === 'function' && syncV2ServerMode();
     const isFullPull =
       options?.full === true ||
       options?.manual === true ||
       deltaReady ||
       !lastPullAt;
     const pullOptions = isFullPull
-      ? { criticalOnly: !!options.criticalOnly }
-      : { criticalOnly: !!options.criticalOnly, since: lastPullAt };
+      ? { criticalOnly: !!options.criticalOnly, v2, v2Full: v2 }
+      : { criticalOnly: !!options.criticalOnly, since: lastPullAt, v2 };
     timing.mode = `${isFullPull ? 'Full' : 'Changes only'}${options.criticalOnly ? ' (main tables)' : ' (all tables)'}`;
     try {
       if (isFullPull) clearLastPullAt();
@@ -3322,10 +3441,10 @@ async function pullGS(options = {}) {
     const localMaxInvoice = maxInvoiceNumberFromJobs(jobs);
     const cloudHasNewerInvoices = remoteMaxInvoice > localMaxInvoice;
     const cloudHasMissingInvoices = hasRemoteInvoicesMissingLocally(remoteData?.jobs, jobs);
-    // (Not on a changes-only server: skipping the apply would also skip
-    // setting the cursors, and the per-record merge already keeps newer
-    // local records.)
-    if (!deltaReady && !options.force && localStamp && remoteStamp && localStamp > remoteStamp && !cloudHasNewerInvoices && !cloudHasMissingInvoices) {
+    // (Not on a changes-only or v2 server: skipping the apply would also skip
+    // setting the cursors; the per-record merge keeps newer local records and
+    // v2 keeps records with changes waiting on this phone.)
+    if (!deltaReady && !v2 && !options.force && localStamp && remoteStamp && localStamp > remoteStamp && !cloudHasNewerInvoices && !cloudHasMissingInvoices) {
       updateGSStatus('Local data is newer than cloud. A push is ready.');
       finishTiming('local newer');
       return 'local-newer';
@@ -3341,8 +3460,15 @@ async function pullGS(options = {}) {
     const safeToReplaceLocal = isFullPull && !options.criticalOnly && !partialPull;
     const requestedReplaceLocal = options.replaceLocal ?? !syncMeta.pendingSync;
     const applyStartedAt = syncNowMs();
+    const pulledKeys = Object.keys(remoteData?.meta?.tableTimings || {})
+      .filter(key => !(remoteData?.meta?.partialPullFailures || []).includes(key));
+    // Capture any edit not yet queued, in the same task as the apply, so the
+    // cloud copy can't replace it unnoticed.
+    const pulledIds = typeof syncV2PayloadIds === 'function' ? syncV2PayloadIds(remoteData, pulledKeys) : null;
+    if (typeof captureSyncV2Ids === 'function') captureSyncV2Ids(pulledIds);
     applyRemoteSnapshot(remoteData, remoteData?.meta?.updatedAt || nowISO(), {
-      replaceLocal: requestedReplaceLocal && safeToReplaceLocal,
+      replaceLocal: requestedReplaceLocal && safeToReplaceLocal && !(v2 && syncV2.outbox.size),
+      v2,
     });
     if (deltaStartAt) {
       const failed = remoteData?.meta?.partialPullFailures || [];
@@ -3362,6 +3488,15 @@ async function pullGS(options = {}) {
         scheduleHistoryBackfill(3000);
       }
       persistSyncMeta();
+    }
+    if (v2) {
+      (remoteData?.meta?.v2Versions || []).forEach(([key, id, version]) => syncV2NoteVersion(key, id, version));
+      syncV2AdoptRemote(pulledKeys, pulledIds);
+      syncMeta.syncV2Cursors = remoteData?.meta?.v2Cursors || syncMeta.syncV2Cursors || {};
+      if (isFullPull && !options.criticalOnly && !partialPull) syncMeta.syncV2FullPullAt = nowISO();
+      try { localStorage.setItem(SK.syncMeta, JSON.stringify(syncMeta)); } catch (_) {}
+    } else if (typeof syncV2AdoptRemote === 'function' && typeof syncV2Active === 'function' && syncV2Active()) {
+      syncV2AdoptRemote(pulledKeys, pulledIds);
     }
     timing.applyMs = Math.round(syncNowMs() - applyStartedAt);
     finishTiming('ok');
@@ -3462,23 +3597,50 @@ async function pushGS(options = {}) {
     // Never run it inside the scoped auto-push that follows a data entry —
     // do the quick scoped push now and schedule the full mirror for a quiet
     // moment instead, so logging entries stays smooth.
-    const fullMirrorDue = !!options.fullMirror
-      || syncAgeMs(syncMeta.shadowLastFullMirrorAt) > FULL_MIRROR_REFRESH_MS;
+    // Sync v2 server: the upload queue says exactly which records changed,
+    // and the server checks versions, so neither the recent-changes window
+    // nor the weekly full mirror is needed.
+    const v2Server = typeof checkSyncV2Server === 'function' && await checkSyncV2Server(client);
+    const fullMirrorDue = !v2Server && (!!options.fullMirror
+      || syncAgeMs(syncMeta.shadowLastFullMirrorAt) > FULL_MIRROR_REFRESH_MS);
     const scopedAutoPush = !options.fullMirror
       && Array.isArray(options.tableKeys) && options.tableKeys.length > 0;
     // Not while older invoices are still downloading: the full mirror compares
     // every table with the cloud and computes customer balances from local
     // jobs. It runs once the history download finishes.
     const runFullMirror = fullMirrorDue && !scopedAutoPush && !historyIncomplete();
-    pushTiming.mode = runFullMirror
-      ? 'Full check of all tables'
-      : scopedAutoPush ? `Recent changes (${options.tableKeys.join(', ')})` : 'Recent changes (all tables)';
+    pushTiming.mode = v2Server
+      ? 'Upload queue (server checks versions)'
+      : runFullMirror
+        ? 'Full check of all tables'
+        : scopedAutoPush ? `Recent changes (${options.tableKeys.join(', ')})` : 'Recent changes (all tables)';
     let shadowResult = null;
     try {
-      shadowResult = await mirrorPayloadToShadowTables(client, localPayload, session, {
-        fullMirror: runFullMirror,
-        tableKeys: options.tableKeys,
-      });
+      if (v2Server) {
+        const v2Result = await pushSyncV2Outbox(client, session);
+        const parts = [
+          `${v2Result.applied} saved`,
+          v2Result.merged ? `${v2Result.merged} merged with another phone's edit` : '',
+          v2Result.conflicts ? `${v2Result.conflicts} changed on two phones` : '',
+          v2Result.errors ? `${v2Result.errors} refused` : '',
+          syncV2.outbox.size ? `${syncV2.outbox.size} still waiting` : '',
+        ].filter(Boolean);
+        shadowResult = {
+          ok: true,
+          summary: v2Result.sent ? parts.join(' · ') : 'Nothing waiting to upload',
+          results: [{ changed: v2Result.applied }],
+        };
+        syncMeta.shadowLastMirrorAt = nowISO();
+        syncMeta.shadowLastMirrorSummary = shadowResult.summary;
+        syncMeta.shadowLastMirrorError = '';
+      } else {
+        shadowResult = await mirrorPayloadToShadowTables(client, localPayload, session, {
+          fullMirror: runFullMirror,
+          tableKeys: options.tableKeys,
+        });
+        // Old server: also send the exact queued records, whatever their age.
+        if (typeof syncV2Active === 'function' && syncV2Active()) await pushSyncV2OutboxLegacy(client, session);
+      }
       // Beat the heartbeat: tell all other devices data changed.
       // Non-fatal — realtime is a best-effort notification layer.
       try {
@@ -3501,7 +3663,10 @@ async function pushGS(options = {}) {
     pushTiming.rows = (shadowResult?.results || []).reduce((sum, item) => sum + (item.changed || 0) + (item.deleted || 0), 0);
     finishPushTiming('ok');
     const pushedAt = nowISO();
-    const newerLocalChange = (Date.parse(syncMeta.updatedAt || 0) || 0) > (Date.parse(localPayload.meta.updatedAt || 0) || 0);
+    const newerLocalChange = (Date.parse(syncMeta.updatedAt || 0) || 0) > (Date.parse(localPayload.meta.updatedAt || 0) || 0)
+      // Queued records not refused by the server go again soon; refused ones
+      // wait for the background retry (pendingSync stays on for them below).
+      || (typeof syncV2Active === 'function' && syncV2Active() && [...syncV2.outbox.values()].some(entry => !entry.lastError));
     if (runFullMirror) syncMeta.shadowLastFullMirrorAt = pushedAt;
     else if (fullMirrorDue) scheduleDeferredFullMirror();
     syncMeta.lastPushedAt = pushedAt;
@@ -3518,6 +3683,13 @@ async function pushGS(options = {}) {
       syncMeta.pendingSince = syncMeta.pendingSince || syncMeta.updatedAt || nowISO();
       syncMeta.lastSyncError = '';
       queueAutoSync({ domain: options.domain, domains: options.domains });
+    }
+    if (typeof syncV2Active === 'function' && syncV2Active() && syncV2.outbox.size) {
+      // Refused records: keep the device marked unsynced (Disconnect stays
+      // guarded) and show why.
+      syncMeta.pendingSync = true;
+      syncMeta.pendingSince = syncMeta.pendingSince || nowISO();
+      if (syncV2.lastError) syncMeta.lastSyncError = syncV2.lastError;
     }
     localStorage.setItem(SK.syncMeta, JSON.stringify(syncMeta));
     let clearedOptimisticInvoice = false;
@@ -3563,6 +3735,11 @@ async function pushGS(options = {}) {
 
 async function initGSSync() {
   const warmUiSwitch = typeof consumeWarmUiSwitchNavigation === 'function' && consumeWarmUiSwitchNavigation();
+  // Upload queue + server versions (js/sync-outbox.js). Loads before any
+  // pull so cloud data never overwrites a change still waiting here.
+  if (typeof loadSyncV2State === 'function') {
+    try { await loadSyncV2State(); } catch (err) { console.warn('[sync v2] load failed', err); }
+  }
   const localDataReady = typeof buildSyncPayload === 'function' && hasAnyRecords(buildSyncPayload());
   // Customers/stock can load while the jobs store came back empty (Safari's
   // 5 MB localStorage cap silently dropped it before data moved to
@@ -3602,6 +3779,7 @@ async function initGSSync() {
         updateGSStatus('Cloud configured. Sign in to sync this device.');
         return;
       }
+      if (typeof checkSyncV2Server === 'function') await checkSyncV2Server(cloudClient);
       if (warmUiSwitch && !localJobsMissing) {
         updateGSStatus(syncMeta.pendingSync ? 'Local data ready. Cloud sync continues in background.' : 'Local data ready.');
         if (syncMeta.pendingSync) queueAutoSync();
@@ -3625,6 +3803,16 @@ async function initGSSync() {
       }
       startRealtimeSync(cloudClient);
       if (historyIncomplete()) scheduleHistoryBackfill(3000);
+      // First run against the v2 server: one full download so this phone
+      // learns the server version of every record. Not on a phone that keeps
+      // only recent history (it would download everything): there versions
+      // arrive with each changes-only pull, and edits to records whose version
+      // isn't known yet are merged field by field on the server.
+      if (typeof syncV2ServerMode === 'function' && syncV2ServerMode() && !syncMeta.syncV2FullPullAt && !localHistoryPartial()) {
+        setTimeout(() => {
+          if (cloudSessionActive && !cloudSyncBusy) pullGS({ quiet: true, allowEmpty: true, force: true, full: true });
+        }, 3000);
+      }
       if (localDataReady && !syncMeta.pendingSync && !localJobsMissing) {
         setTimeout(() => {
           refreshRecentCloudChanges(gapFillWindowMs(), { quiet: true });

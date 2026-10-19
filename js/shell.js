@@ -758,7 +758,7 @@ function invoiceTableRowHtml(j, linkedIncomeIndex) {
     ? linkedIncome.map(entry => `${fmtMoney(entry.amount)}${entry.note ? ` · ${entry.note}` : ''}`).join('<br>')
     : '';
   return `<tr>
-    <td style="font-family:var(--fh);font-weight:700;color:var(--acc);display:flex;align-items:center;gap:8px;">${j.invoiceNo||j.id}${invoicePendingDot(j.id)}</td>
+    <td style="font-family:var(--fh);font-weight:700;color:var(--acc);display:flex;align-items:center;gap:8px;flex-wrap:wrap;">${j.invoiceNo||j.id}${invoicePendingDot(j.id)}${typeof syncStatusBadgeHtml === 'function' ? syncStatusBadgeHtml('jobs', j) : ''}</td>
     <td style="font-size:12px;">${fmtDate(stamp)}<br><span style="color:var(--mut)">${new Date(stamp).toLocaleTimeString('en-IN', { hour:'2-digit', minute:'2-digit' })}</span></td>
     <td>
       <button class="btn btn-g btn-sm" style="padding:0;border:none;background:none;color:var(--txt);font-weight:600;text-align:left;" onclick="openCustomerHistory('${escapeJsAttr(j.custId || '')}','${escapeJsAttr(j.cust || '')}','${escapeJsAttr(j.phone || '')}','${escapeJsAttr(j.id || '')}')">${j.cust}</button>

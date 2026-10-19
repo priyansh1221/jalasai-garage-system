@@ -247,11 +247,6 @@ declare
     'garage_expenses', 'garage_income_entries', 'garage_parts_log', 'garage_audit_log',
     'garage_stock_movements'
   ];
-  -- Same extra columns the app's table pull reads (js/sync.js pullFromShadowTables).
-  extra jsonb := jsonb_build_object(
-    'garage_jobs', 'customer_id, customer_name, phone, vehicle, registration_no, job_status, job_date, invoice_no, mechanic_ids, mechanic_names, service_note, remarks',
-    'garage_income_entries', 'entry_date, income_kind, category, amount, method, invoice_no, note, mechanic_id, mechanic_name'
-  );
   lim int := least(greatest(coalesce(p_limit, 500), 1), 1000);
   result jsonb := '{}'::jsonb;
   t text;
@@ -272,14 +267,14 @@ begin
     execute format(
       'select coalesce(jsonb_agg(to_jsonb(s) order by s.server_updated_at, s.id), ''[]''::jsonb), count(*)
          from (
-           select id, record_data, source_updated_at, mirrored_at, deleted_at, server_updated_at%s,
-                  to_char(server_updated_at at time zone ''UTC'', ''YYYY-MM-DD"T"HH24:MI:SS.US"Z"'') as su
-             from public.%I
-            where (server_updated_at, id) > ($1, $2)
-            order by server_updated_at, id
+           select t.*,
+                  to_char(t.server_updated_at at time zone ''UTC'', ''YYYY-MM-DD"T"HH24:MI:SS.US"Z"'') as su
+             from public.%I t
+            where (t.server_updated_at, t.id) > ($1, $2)
+            order by t.server_updated_at, t.id
             limit $3
          ) s',
-      coalesce(', ' || (extra->>t), ''), t)
+      t)
       into v_rows, v_count
       using v_at, v_id, lim + 1;
     result := result || jsonb_build_object(t, jsonb_build_object(
@@ -314,11 +309,10 @@ set search_path = public
 as $$
   select coalesce(jsonb_agg(to_jsonb(s)), '[]'::jsonb)
   from (
-    select id, record_data, source_updated_at, mirrored_at, deleted_at, server_updated_at,
-           customer_id, customer_name, phone, vehicle, registration_no, job_status, job_date,
-           invoice_no, mechanic_ids, mechanic_names, service_note, remarks,
-           to_char(server_updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as su
-      from public.garage_jobs
+    -- Whole row: later columns (Stage 2's version) come along on their own.
+    select j.*,
+           to_char(j.server_updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as su
+      from public.garage_jobs j
      where deleted_at is null
        and (job_status <> 'done' or job_date is null or job_date >= p_since)
   ) s;
@@ -333,11 +327,10 @@ set search_path = public
 as $$
   select coalesce(jsonb_agg(to_jsonb(s) order by s.job_date desc, s.id desc), '[]'::jsonb)
   from (
-    select id, record_data, source_updated_at, mirrored_at, deleted_at, server_updated_at,
-           customer_id, customer_name, phone, vehicle, registration_no, job_status, job_date,
-           invoice_no, mechanic_ids, mechanic_names, service_note, remarks,
-           to_char(server_updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as su
-      from public.garage_jobs
+    -- Whole row: later columns (Stage 2's version) come along on their own.
+    select j.*,
+           to_char(j.server_updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as su
+      from public.garage_jobs j
      where deleted_at is null
        and job_status = 'done'
        and job_date is not null
@@ -673,10 +666,8 @@ as $$
   )
   select coalesce(jsonb_agg(to_jsonb(s)), '[]'::jsonb)
   from (
-    select id, record_data, source_updated_at, mirrored_at, deleted_at, server_updated_at,
-           customer_id, customer_name, phone, vehicle, registration_no, job_status, job_date,
-           invoice_no, mechanic_ids, mechanic_names, service_note, remarks,
-           to_char(server_updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as su
+    select live.*,
+           to_char(live.server_updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as su
       from live
      where id in (select id from owing) or id in (select id from latest)
   ) s;
@@ -692,11 +683,10 @@ set search_path = public
 as $$
   select coalesce(jsonb_agg(to_jsonb(s) order by s.job_date desc nulls last, s.id desc), '[]'::jsonb)
   from (
-    select id, record_data, source_updated_at, mirrored_at, deleted_at, server_updated_at,
-           customer_id, customer_name, phone, vehicle, registration_no, job_status, job_date,
-           invoice_no, mechanic_ids, mechanic_names, service_note, remarks,
-           to_char(server_updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as su
-      from public.garage_jobs
+    -- Whole row: later columns (Stage 2's version) come along on their own.
+    select j.*,
+           to_char(j.server_updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as su
+      from public.garage_jobs j
      where deleted_at is null
        and ((coalesce(p_customer_id, '') <> '' and customer_id = p_customer_id)
          or (coalesce(p_phone, '') <> '' and phone = p_phone))
@@ -731,11 +721,10 @@ set search_path = public
 as $$
   select coalesce(jsonb_agg(to_jsonb(s) order by s.job_date desc nulls last, s.id desc), '[]'::jsonb)
   from (
-    select id, record_data, source_updated_at, mirrored_at, deleted_at, server_updated_at,
-           customer_id, customer_name, phone, vehicle, registration_no, job_status, job_date,
-           invoice_no, mechanic_ids, mechanic_names, service_note, remarks,
-           to_char(server_updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as su
-      from public.garage_jobs
+    -- Whole row: later columns (Stage 2's version) come along on their own.
+    select j.*,
+           to_char(j.server_updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as su
+      from public.garage_jobs j
      where deleted_at is null
        and length(trim(coalesce(p_query, ''))) >= 2
        and public.jalasai_job_search_text(invoice_no, customer_name, phone, vehicle, registration_no)

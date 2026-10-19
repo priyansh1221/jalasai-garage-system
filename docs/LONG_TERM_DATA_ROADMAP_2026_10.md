@@ -1,6 +1,6 @@
 # JalaSai long-term data roadmap: fast, safe, never lose a rupee
 
-Status (2026-10-19, nothing deployed yet): Stage 0's L1/L2 fixes are built. Stage 1 (speed) is in progress. Stage 2 was built and tested, then **parked** as `docs/parked/sync-v2-stage2.patch` so Stage 1 lands first (see "Stage 2 status"). The Stage 0 nightly export and Stages 3–7 are still plans.
+Status (2026-10-20): Stage 0 is built (L1/L2 fixes live; R2 nightly export and restore script ready, waiting on R2 secrets). Stage 1 (speed, lakh scale) and Stage 2 (two-phone safety) are built and tested locally, not deployed; their SQL has not been run on live Supabase. Stages 3–7 are in progress.
 Date: 2026-10-19 · Companion to `docs/FAST_CLOUD_LOAD_PLAN_2026_10.md` (Stage 1 below)
 
 ## Rule #1: no data loss, ever
@@ -175,13 +175,21 @@ invoices first, older on demand, server totals. Background backfill stops at the
   and it's another service to pay for. **Decide with a 2-day spike** before
   starting Stage 2.
 
-#### Stage 2 status (2026-10-19): built, tested locally, then parked
+#### Stage 2 status (2026-10-20): built, merged onto Stage 1, tested locally
 
-**Parked:** the whole change (app code + `supabase/2026-10-sync-v2-stage2.sql`)
-is saved as `docs/parked/sync-v2-stage2.patch`, made against the Stage 0 code, so
-the speed work (Stage 1) goes first. After Stage 1 lands, re-apply it with
-`git apply docs/parked/sync-v2-stage2.patch`. Expect to rework its download side,
-which overlaps Stage 1's changes-only sync, and re-run the two-phone tests.
+Built 2026-10-19, parked while Stage 1 landed, then merged on 2026-10-20:
+- Downloads all go through Stage 1's changes-only path. `applyChangedRecords`
+  captures local edits first, keeps records with changes waiting, takes the
+  server copy for everything else on a v2 server, and marks applied records as
+  matching the cloud (no echo uploads).
+- Stage 1's server functions return whole rows, so each row's `version`
+  arrives with it once the Stage 2 SQL is run.
+- The one-time "learn every version" full download is skipped on phones that
+  keep only recent history (it would download everything); their versions
+  arrive with each pull.
+- Tested again with two phones against local Postgres: the data-loss
+  checklist, upgrade-in-place, old-app safety, and all Stage 1 suites in both
+  modes (Phase 1 SQL only, and Phase 1 + Stage 2 SQL).
 
 Built our own engine (no build step, no new service). PowerSync was not tried.
 

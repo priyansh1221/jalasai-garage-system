@@ -25,6 +25,7 @@ const APP_ASSETS = [
   './js/scanner.js?v=BUILD_TIMESTAMP',
   './js/print.js?v=BUILD_TIMESTAMP',
   './js/sync.js?v=BUILD_TIMESTAMP',
+  './js/sync-outbox.js?v=BUILD_TIMESTAMP',
   './js/shell.js?v=BUILD_TIMESTAMP',
   './js/new-ui.js?v=BUILD_TIMESTAMP',
   './js/vendor/supabase.js?v=BUILD_TIMESTAMP',
