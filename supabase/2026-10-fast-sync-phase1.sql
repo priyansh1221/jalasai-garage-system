@@ -351,6 +351,281 @@ grant execute on function public.jalasai_recent_jobs(date) to authenticated;
 grant execute on function public.jalasai_jobs_before(date, text, int) to authenticated;
 
 
+-- ── G. Report totals for any date range (fast-load Phase 5) ─────
+-- Reports for a range whose invoices aren't on the phone (history still
+-- downloading, or older than the phone's rolling window) read these instead
+-- of local data. garage_daily_totals keeps one running total per day and
+-- metric, kept current by triggers on jobs, income and expenses, so any
+-- range is a sum of at most a few hundred small rows — fast at lakhs of
+-- invoices. Same rules as reportBundle() / jobPaymentEntries() /
+-- buildRevenueEntries() in js/:
+--   invoices / billed / discounts: live done jobs on their report date
+--     (doneAt's date, else date); billed = total_amount;
+--   revenue: every positive payment entry on its own date (else doneAt /
+--     date) + every live income entry on its date; a done job with no
+--     positive payment entries counts its legacy "payment" once;
+--   method buckets: contains "upi" -> upi, else contains "cash" -> cash,
+--     else other; invoice revenue = job payments; manual income = income
+--     entries of kind regular_income / other_income.
+-- An entry with no usable date at all is left out (the app would show it
+-- on "today", which moves every day). jalasai_rebuild_daily_totals()
+-- recomputes everything from scratch; it runs once at the end of this file.
+
+create or replace function public.jalasai_num(p text)
+returns numeric
+language sql
+immutable
+as $$
+  select case when p ~ '^\s*-?[0-9]+(\.[0-9]+)?\s*$' then trim(p)::numeric else 0 end;
+$$;
+
+create or replace function public.jalasai_day(p text)
+returns date
+language sql
+immutable
+as $$
+  select case when left(coalesce(p, ''), 10) ~ '^\d{4}-\d{2}-\d{2}$' then left(p, 10)::date else null end;
+$$;
+
+create or replace function public.jalasai_method_bucket(p text)
+returns text
+language sql
+immutable
+as $$
+  select case when lower(coalesce(p, '')) like '%upi%' then 'rev_upi'
+              when lower(coalesce(p, '')) like '%cash%' then 'rev_cash'
+              else 'rev_other' end;
+$$;
+
+create table if not exists public.garage_daily_totals (
+  day     date    not null,
+  metric  text    not null,  -- invoices, billed, discounts, rev_cash, rev_upi, rev_other, rev_invoice, rev_manual, expense
+  amount  numeric not null default 0,
+  primary key (day, metric)
+);
+
+alter table public.garage_daily_totals enable row level security;
+drop policy if exists "Authenticated can read daily totals" on public.garage_daily_totals;
+create policy "Authenticated can read daily totals"
+  on public.garage_daily_totals for select to authenticated using (true);
+grant select on public.garage_daily_totals to authenticated;
+
+-- What one job row adds to the daily totals (nothing unless live and done).
+create or replace function public.jalasai_job_day_totals(r jsonb, status text, deleted_at timestamptz, total numeric)
+returns table (day date, metric text, amount numeric)
+language sql
+immutable
+as $$
+  with job as (
+    select r,
+           case when jsonb_typeof(r->'payments') = 'array' then r->'payments' else '[]'::jsonb end as pays,
+           coalesce(public.jalasai_day(r->>'doneAt'), public.jalasai_day(r->>'date')) as report_day
+     where deleted_at is null and status = 'done'
+  ),
+  pay as (
+    select coalesce(public.jalasai_day(p->>'at'), public.jalasai_day(job.r->>'doneAt'), public.jalasai_day(job.r->>'date')) as day,
+           public.jalasai_num(p->>'amount') as amount,
+           coalesce(nullif(p->>'method', ''), job.r->>'payMethod', '') as method
+      from job, jsonb_array_elements(job.pays) p
+     where public.jalasai_num(p->>'amount') > 0
+    union all
+    select job.report_day, public.jalasai_num(job.r->>'payment'), coalesce(job.r->>'payMethod', '')
+      from job
+     where public.jalasai_num(job.r->>'payment') > 0
+       and not exists (select 1 from jsonb_array_elements(job.pays) p where public.jalasai_num(p->>'amount') > 0)
+  )
+  select report_day, 'invoices', 1::numeric from job where report_day is not null
+  union all select report_day, 'billed', coalesce(total, 0) from job where report_day is not null
+  union all select report_day, 'discounts', greatest(0, public.jalasai_num(r->>'discount')) from job where report_day is not null
+  union all select day, public.jalasai_method_bucket(method), amount from pay where day is not null
+  union all select day, 'rev_invoice', amount from pay where day is not null;
+$$;
+
+create or replace function public.jalasai_income_day_totals(p_day date, p_kind text, p_method text, p_amount numeric, p_deleted_at timestamptz)
+returns table (day date, metric text, amount numeric)
+language sql
+immutable
+as $$
+  select p_day, public.jalasai_method_bucket(p_method), coalesce(p_amount, 0) where p_deleted_at is null and p_day is not null
+  union all
+  select p_day, 'rev_manual', coalesce(p_amount, 0) where p_deleted_at is null and p_day is not null and p_kind in ('regular_income', 'other_income');
+$$;
+
+create or replace function public.jalasai_add_day_totals(rows jsonb)
+returns void
+language sql
+security definer
+set search_path = public
+as $$
+  insert into public.garage_daily_totals (day, metric, amount)
+  select (x->>'day')::date, x->>'metric', sum((x->>'amount')::numeric)
+    from jsonb_array_elements(rows) x
+   group by 1, 2
+  having sum((x->>'amount')::numeric) <> 0
+  on conflict (day, metric) do update set amount = public.garage_daily_totals.amount + excluded.amount;
+$$;
+
+create or replace function public.jalasai_jobs_daily_trigger()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  delta jsonb := '[]'::jsonb;
+begin
+  if tg_op = 'UPDATE'
+     and old.record_data is not distinct from new.record_data
+     and old.job_status is not distinct from new.job_status
+     and old.deleted_at is not distinct from new.deleted_at
+     and old.total_amount is not distinct from new.total_amount then
+    return new;
+  end if;
+  if tg_op in ('UPDATE', 'DELETE') then
+    select coalesce(jsonb_agg(jsonb_build_object('day', t.day, 'metric', t.metric, 'amount', -t.amount)), '[]'::jsonb) || delta into delta
+      from public.jalasai_job_day_totals(old.record_data, old.job_status, old.deleted_at, old.total_amount) t;
+  end if;
+  if tg_op in ('INSERT', 'UPDATE') then
+    select delta || coalesce(jsonb_agg(jsonb_build_object('day', t.day, 'metric', t.metric, 'amount', t.amount)), '[]'::jsonb) into delta
+      from public.jalasai_job_day_totals(new.record_data, new.job_status, new.deleted_at, new.total_amount) t;
+  end if;
+  if jsonb_array_length(delta) > 0 then perform public.jalasai_add_day_totals(delta); end if;
+  return case when tg_op = 'DELETE' then old else new end;
+end;
+$$;
+
+create or replace function public.jalasai_income_daily_trigger()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  delta jsonb := '[]'::jsonb;
+begin
+  if tg_op in ('UPDATE', 'DELETE') then
+    select coalesce(jsonb_agg(jsonb_build_object('day', t.day, 'metric', t.metric, 'amount', -t.amount)), '[]'::jsonb) into delta
+      from public.jalasai_income_day_totals(old.entry_date, old.income_kind, old.method, old.amount, old.deleted_at) t;
+  end if;
+  if tg_op in ('INSERT', 'UPDATE') then
+    select delta || coalesce(jsonb_agg(jsonb_build_object('day', t.day, 'metric', t.metric, 'amount', t.amount)), '[]'::jsonb) into delta
+      from public.jalasai_income_day_totals(new.entry_date, new.income_kind, new.method, new.amount, new.deleted_at) t;
+  end if;
+  if jsonb_array_length(delta) > 0 then perform public.jalasai_add_day_totals(delta); end if;
+  return case when tg_op = 'DELETE' then old else new end;
+end;
+$$;
+
+create or replace function public.jalasai_expense_daily_trigger()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  delta jsonb := '[]'::jsonb;
+begin
+  if tg_op in ('UPDATE', 'DELETE') and old.deleted_at is null and old.expense_date is not null then
+    delta := delta || jsonb_build_array(jsonb_build_object('day', old.expense_date, 'metric', 'expense', 'amount', -coalesce(old.amount, 0)));
+  end if;
+  if tg_op in ('INSERT', 'UPDATE') and new.deleted_at is null and new.expense_date is not null then
+    delta := delta || jsonb_build_array(jsonb_build_object('day', new.expense_date, 'metric', 'expense', 'amount', coalesce(new.amount, 0)));
+  end if;
+  if jsonb_array_length(delta) > 0 then perform public.jalasai_add_day_totals(delta); end if;
+  return case when tg_op = 'DELETE' then old else new end;
+end;
+$$;
+
+drop trigger if exists garage_jobs_daily_totals on public.garage_jobs;
+create trigger garage_jobs_daily_totals after insert or update or delete on public.garage_jobs
+  for each row execute function public.jalasai_jobs_daily_trigger();
+drop trigger if exists garage_income_entries_daily_totals on public.garage_income_entries;
+create trigger garage_income_entries_daily_totals after insert or update or delete on public.garage_income_entries
+  for each row execute function public.jalasai_income_daily_trigger();
+drop trigger if exists garage_expenses_daily_totals on public.garage_expenses;
+create trigger garage_expenses_daily_totals after insert or update or delete on public.garage_expenses
+  for each row execute function public.jalasai_expense_daily_trigger();
+
+-- Recompute every daily total from the source tables (safe to re-run; used
+-- once below and whenever totals need checking).
+create or replace function public.jalasai_rebuild_daily_totals()
+returns bigint
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  n bigint;
+begin
+  lock table public.garage_daily_totals in exclusive mode;
+  delete from public.garage_daily_totals;
+  insert into public.garage_daily_totals (day, metric, amount)
+  select day, metric, sum(amount) from (
+    select t.* from public.garage_jobs j,
+      lateral public.jalasai_job_day_totals(j.record_data, j.job_status, j.deleted_at, j.total_amount) t
+    union all
+    select t.* from public.garage_income_entries i,
+      lateral public.jalasai_income_day_totals(i.entry_date, i.income_kind, i.method, i.amount, i.deleted_at) t
+    union all
+    select e.expense_date, 'expense', coalesce(e.amount, 0) from public.garage_expenses e
+     where e.deleted_at is null and e.expense_date is not null
+  ) s
+  where day is not null
+  group by 1, 2
+  having sum(amount) <> 0;
+  get diagnostics n = row_count;
+  return n;
+end;
+$$;
+
+create or replace function public.jalasai_report_summary(p_start date, p_end date)
+returns jsonb
+language sql
+stable
+security invoker
+set search_path = public
+as $$
+  with t as (
+    select metric, coalesce(sum(amount), 0) as amount
+      from public.garage_daily_totals
+     where day between p_start and p_end
+     group by metric
+  ),
+  m as (
+    select coalesce(max(amount) filter (where metric = 'invoices'), 0) as invoices,
+           coalesce(max(amount) filter (where metric = 'billed'), 0) as billed,
+           coalesce(max(amount) filter (where metric = 'discounts'), 0) as discounts,
+           coalesce(max(amount) filter (where metric = 'rev_cash'), 0) as cash,
+           coalesce(max(amount) filter (where metric = 'rev_upi'), 0) as upi,
+           coalesce(max(amount) filter (where metric = 'rev_other'), 0) as other,
+           coalesce(max(amount) filter (where metric = 'rev_invoice'), 0) as invoice_revenue,
+           coalesce(max(amount) filter (where metric = 'rev_manual'), 0) as manual_income,
+           coalesce(max(amount) filter (where metric = 'expense'), 0) as expense
+      from t
+  )
+  select jsonb_build_object(
+    'start', p_start,
+    'end', p_end,
+    'invoices', invoices,
+    'billed', billed,
+    'discounts', discounts,
+    'revenue', cash + upi + other,
+    'paymentMix', jsonb_build_object('cash', cash, 'upi', upi, 'other', other),
+    'invoiceRevenue', invoice_revenue,
+    'manualIncome', manual_income,
+    'expense', expense
+  )
+  from m;
+$$;
+
+grant execute on function public.jalasai_report_summary(date, date) to authenticated;
+revoke all on function public.jalasai_add_day_totals(jsonb) from public, anon, authenticated;
+revoke all on function public.jalasai_rebuild_daily_totals() from public, anon, authenticated;
+
+select public.jalasai_rebuild_daily_totals();
+
+
+
 -- ════════════════════════════════════════════════════════════════
 -- CHECK FIRST (run alone, before the file above; copy the results into
 -- the plan doc). Read-only.

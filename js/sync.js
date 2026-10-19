@@ -2783,6 +2783,87 @@ async function runHistoryBackfill() {
 }
 
 // Short status for screens that total all history while it's still loading.
+// ─── Server report totals (fast-load Phase 5) ─────────────
+// A report range the phone doesn't fully hold — older invoices still
+// downloading, expenses/income not loaded yet, or before the phone's rolling
+// window — takes its headline totals from jalasai_report_summary() instead
+// of the partial local data. Results are cached per range for a short time;
+// a fetch re-renders Reports when it lands.
+const SERVER_REPORT_TTL_MS = 2 * 60 * 1000;
+const serverReportCache = new Map();
+
+function localReportCoverageStart() {
+  const windowFrom = String(syncMeta?.window?.from || '');
+  if (historyIncomplete()) {
+    if (!syncMeta.history.laterDone) return '9999-12-31';
+    const cursor = String(syncMeta.history.jobsBefore?.date || '');
+    // Invoices on the cursor's own date may be only partly loaded.
+    const loadedFrom = cursor ? businessDateAfter(cursor, 1) : '9999-12-31';
+    return windowFrom && windowFrom > loadedFrom ? windowFrom : loadedFrom;
+  }
+  return windowFrom;
+}
+
+function businessDateAfter(date, days) {
+  const base = new Date(`${String(date).slice(0, 10)}T00:00:00Z`);
+  base.setUTCDate(base.getUTCDate() + days);
+  return base.toISOString().slice(0, 10);
+}
+
+function reportRangeNeedsServer(span) {
+  if (!span || !span.start) return false;
+  const from = localReportCoverageStart();
+  return !!from && span.start < from;
+}
+
+function serverReportSummary(span) {
+  if (!reportRangeNeedsServer(span)) return null;
+  const key = `${span.start}|${span.end}`;
+  const cached = serverReportCache.get(key);
+  const fresh = cached?.data && Date.now() - cached.at < SERVER_REPORT_TTL_MS;
+  if (!fresh && !cached?.pending && cloudSessionActive && cloudClient && deltaServerReady !== false) {
+    const entry = { ...(cached || {}), pending: true };
+    serverReportCache.set(key, entry);
+    Promise.resolve(cloudClient.rpc('jalasai_report_summary', { p_start: span.start, p_end: span.end }))
+      .then(({ data, error }) => {
+        if (error) throw error;
+        serverReportCache.set(key, { at: Date.now(), data: normaliseServerReport(data) });
+      })
+      .catch(err => {
+        console.warn('server report totals unavailable', err);
+        serverReportCache.set(key, { at: Date.now(), data: cached?.data || null, error: true });
+      })
+      .finally(() => {
+        if (typeof currentPage !== 'undefined' && currentPage === 'reports' && typeof renderReports === 'function') {
+          try { renderReports(); } catch (err) { console.warn('report re-render failed', err); }
+        }
+      });
+  }
+  return serverReportCache.get(key) || null;
+}
+
+function normaliseServerReport(data) {
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row || typeof row !== 'object') return null;
+  const n = value => Number(value || 0) || 0;
+  const invoices = n(row.invoices);
+  const billed = n(row.billed);
+  const revenue = n(row.revenue);
+  const expense = n(row.expense);
+  return {
+    invoices,
+    billed,
+    discounts: n(row.discounts),
+    revenue,
+    expense,
+    net: revenue - expense,
+    avgInvoice: invoices ? billed / invoices : 0,
+    paymentMix: { cash: n(row.paymentMix?.cash), upi: n(row.paymentMix?.upi), other: n(row.paymentMix?.other) },
+    invoiceRevenue: n(row.invoiceRevenue),
+    manualIncome: n(row.manualIncome),
+  };
+}
+
 function historyLoadingNoteHtml() {
   if (!historyIncomplete()) return '';
   const loaded = Number(syncMeta.history?.loadedInvoices || 0);

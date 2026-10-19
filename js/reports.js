@@ -628,6 +628,24 @@ function renderReports() {
   const q = reportFilters.search.trim().toLowerCase();
   const current = reportBundle(span, q);
   const previous = reportBundle(prevSpan, q);
+  // A range the phone doesn't fully hold takes its headline totals from the
+  // cloud (see serverReportSummary in js/sync.js); the breakdowns below stay
+  // on the invoices this phone has. A search can't run on the cloud totals.
+  const cloudTotals = { used: false, pending: false, failed: false };
+  if (!q && typeof serverReportSummary === 'function') {
+    [[span, current], [prevSpan, previous]].forEach(([range, bundle]) => {
+      const server = serverReportSummary(range);
+      if (!server) return;
+      if (server.data) {
+        Object.assign(bundle, server.data);
+        cloudTotals.used = true;
+      } else if (server.pending) {
+        cloudTotals.pending = true;
+      } else if (server.error) {
+        cloudTotals.failed = true;
+      }
+    });
+  }
   const todayInvoices = jobs.filter(j => isLiveJob(j) && j.status === 'done' && ((j.doneAt || '').slice(0, 10) || j.date || '') === today()).length;
   const yesterdayInvoices = jobs.filter(j => isLiveJob(j) && j.status === 'done' && ((j.doneAt || '').slice(0, 10) || j.date || '') === yesterday()).length;
   const filteredDone = current.doneJobs.slice().sort((a, b) => invoiceSortValue(b) - invoiceSortValue(a));
@@ -644,7 +662,14 @@ function renderReports() {
   const reportsPage = document.getElementById('page-reports');
   if (reportsPage) {
     let note = document.getElementById('rpt-history-note');
-    const noteHtml = typeof historyLoadingNoteHtml === 'function' ? historyLoadingNoteHtml() : '';
+    const cloudNote = cloudTotals.used
+      ? '<span class="history-loading-note" title="Older invoices are not all on this phone, so the totals come from the cloud. Breakdowns below use the invoices on this phone.">Totals from cloud · breakdowns use invoices on this phone</span>'
+      : cloudTotals.pending
+        ? '<span class="history-loading-note">Getting full totals from cloud…</span>'
+        : cloudTotals.failed
+          ? '<span class="history-loading-note" title="Connect to the internet to see totals that include invoices not on this phone.">Offline: totals only include invoices on this phone</span>'
+          : '';
+    const noteHtml = [cloudNote, typeof historyLoadingNoteHtml === 'function' ? historyLoadingNoteHtml() : ''].filter(Boolean).join(' ');
     if (noteHtml && !note) {
       note = document.createElement('div');
       note.id = 'rpt-history-note';

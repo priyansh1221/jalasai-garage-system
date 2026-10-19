@@ -67,11 +67,32 @@ Postgres.
   with no duplicates, including across a restart.
 - The old server path is unchanged.
 
+**Phase 3, saving only changed records (2026-10-20):**
+- Id-keyed tables are stored in 64 groups by a hash of the record key, with the
+  list order kept separately. A save that names the records it changed rewrites
+  only their groups: **19 ms instead of 181 ms** for one invoice at 1 lakh.
+- Cloud pulls, the history download, realtime updates and the single-job saves
+  (status, lane, delete, quick invoice, quick job card, payment, edit invoice)
+  name their records. Every other save rewrites the whole table.
+- Safety net: a table with only grouped saves is rewritten in full within a
+  minute and whenever the app is hidden, so an edit a caller forgot to report
+  can't stay unsaved.
+
+**Phase 5, cloud report totals (2026-10-20, SQL §G):**
+- `garage_daily_totals` keeps one running total per day and metric (invoices,
+  billed, discounts, revenue by cash / UPI / other, invoice revenue, manual
+  income, expenses), kept current by triggers on jobs, income and expenses.
+- `jalasai_report_summary(start, end)` sums those rows. At 3 lakh invoices: a
+  month in 3 ms, a year in 13 ms (summing the raw rows took 1.6 s and 3 s). One
+  job edit costs ~8 ms extra on the server.
+- Reports use the cloud totals for any range the phone doesn't fully hold.
+  Breakdowns (mechanics, parts, vehicles) stay on the phone's invoices, with a
+  note.
+- Tested: cloud totals equal the phone's own Reports to the rupee across 10
+  ranges with messy data, before and after edits and deletes, and the running
+  totals equal a full recompute.
+
 **Not built yet (still planned):**
-- Phase 3: saving only the changed records. A save still writes the whole table
-  to IndexedDB: 34 ms at 20k invoices, 220 ms at 1 lakh.
-- Phase 5: server report summaries for old ranges. Reports show the note
-  instead, and the history download fills the gap in the background.
 - "Load older invoices" on demand and a server-side search fallback. The
   background download makes these less urgent.
 - Phase 6: the rolling window. Phones still keep full history, which is fine up
