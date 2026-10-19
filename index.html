@@ -1694,10 +1694,12 @@ startInitialDataLoadOverlay(
     : 'Loading data from cloud...',
   { delayMs: 0 }
 );
-setTimeout(() => {
+setTimeout(async () => {
   if (window.__appInitialised) return;
   window.__appInitialised = true;
-  loadAll();
+  // Business tables live in IndexedDB (Safari's 5 MB localStorage cap lost
+  // invoices); loadAllFromStorage falls back to localStorage on its own.
+  try { await loadAllFromStorage(); } catch (err) { console.warn('Data load failed', err); }
   applyDataEntryDateLimits();
   initVehicleBrands();
   bindStickyJobDrafts();

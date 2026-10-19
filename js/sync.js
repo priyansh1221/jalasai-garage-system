@@ -2512,6 +2512,11 @@ async function pushGS(options = {}) {
 async function initGSSync() {
   const warmUiSwitch = typeof consumeWarmUiSwitchNavigation === 'function' && consumeWarmUiSwitchNavigation();
   const localDataReady = typeof buildSyncPayload === 'function' && hasAnyRecords(buildSyncPayload());
+  // Customers/stock can load while the jobs store came back empty (Safari's
+  // 5 MB localStorage cap silently dropped it before data moved to
+  // IndexedDB). "Local data ready" must not skip the pull then, or the phone
+  // shows no invoices forever.
+  const localJobsMissing = !normaliseArray(typeof jobs !== 'undefined' ? jobs : []).length;
   if (!warmUiSwitch && localDataReady && typeof finishInitialDataLoadAndRender === 'function') {
     finishInitialDataLoadAndRender({ localDataReady: true });
   }
@@ -2545,17 +2550,21 @@ async function initGSSync() {
         updateGSStatus('Cloud configured. Sign in to sync this device.');
         return;
       }
-      if (warmUiSwitch) {
+      if (warmUiSwitch && !localJobsMissing) {
         updateGSStatus(syncMeta.pendingSync ? 'Local data ready. Cloud sync continues in background.' : 'Local data ready.');
         if (syncMeta.pendingSync) queueAutoSync();
       } else {
-        if (localDataReady && !syncMeta.pendingSync) {
+        if (localDataReady && !syncMeta.pendingSync && !localJobsMissing) {
           updateGSStatus('Local data ready. Cloud refresh continues in background.');
         } else {
+          if (localJobsMissing && localDataReady) updateGSStatus('Invoices missing on this device. Downloading them from cloud...');
           const pullResult = await pullGS({
             quiet: true,
             allowEmpty: true,
-            force: !localDataReady || syncAgeMs(syncMeta.lastPulledAt) > STALE_DEVICE_PULL_MS,
+            force: !localDataReady || localJobsMissing || syncAgeMs(syncMeta.lastPulledAt) > STALE_DEVICE_PULL_MS,
+            // A delta pull would only bring recent changes; a device with no
+            // jobs needs the whole jobs table.
+            full: localJobsMissing,
             automatic: true,
             criticalOnly: true,
           });
@@ -2563,7 +2572,7 @@ async function initGSSync() {
         }
       }
       startRealtimeSync(cloudClient);
-      if (localDataReady && !syncMeta.pendingSync) {
+      if (localDataReady && !syncMeta.pendingSync && !localJobsMissing) {
         setTimeout(() => {
           refreshRecentCloudChanges(gapFillWindowMs(), { quiet: true });
           checkAndPullIfStale(cloudClient);

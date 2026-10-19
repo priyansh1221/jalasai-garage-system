@@ -277,6 +277,7 @@ const LOCAL_SIGN_OUT_STORAGE_KEYS = Object.freeze([
   SK.followupStartDate,
   SK.localBackupLatest,
   SK.bootCleanupVersion,
+  'js_data_in_idb',
   'js_sync_backup_before_pull',
   'js_catalog_import_session',
   'jala_job_draft_v1:new',
@@ -316,7 +317,11 @@ const SAVE_DOMAIN_KEYS = Object.freeze({
   settings: ['gsUrl', 'cloudKey', 'cloudEmail', 'syncMeta', 'followupStartDate', 'garageProfile'],
 });
 
-const SAVE_KEY_WRITERS = {
+// localStorage writers for the business tables. Since 2026-10 these are only
+// the fallback when IndexedDB can't be used (see "Business tables live in
+// IndexedDB" below); SAVE_KEY_WRITERS routes the tables through
+// queueTableSave().
+const LOCAL_STORAGE_TABLE_WRITERS = {
   jobs: () => setLocalStorageSafe(SK.jobs, encodeLocalStorageJson(jobs)),
   stock: () => setLocalStorageSafe(SK.stock, encodeLocalStorageJson(stock)),
   customers: () => setLocalStorageSafe(SK.customers, encodeLocalStorageJson(customers)),
@@ -326,6 +331,18 @@ const SAVE_KEY_WRITERS = {
   partsLog: () => setLocalStorageSafe(SK.partsLog, encodeLocalStorageJson(partsLog)),
   auditLog: () => setLocalStorageSafe(SK.auditLog, encodeLocalStorageJson(auditLog)),
   stockMovements: () => setLocalStorageSafe(SK.stockMovements, encodeLocalStorageJson(stockMovements)),
+};
+
+const SAVE_KEY_WRITERS = {
+  jobs: () => queueTableSave('jobs'),
+  stock: () => queueTableSave('stock'),
+  customers: () => queueTableSave('customers'),
+  mechanics: () => queueTableSave('mechanics'),
+  expenses: () => queueTableSave('expenses'),
+  incomeEntries: () => queueTableSave('incomeEntries'),
+  partsLog: () => queueTableSave('partsLog'),
+  auditLog: () => queueTableSave('auditLog'),
+  stockMovements: () => queueTableSave('stockMovements'),
   jobCtr: () => setLocalStorageSafe(SK.jobCtr, jobCtr),
   invoiceCtr: () => setLocalStorageSafe(SK.invoiceCtr, invoiceCtr),
   gsUrl: () => setLocalStorageSafe(SK.gsUrl, gsUrl),
@@ -498,6 +515,239 @@ function clearLastPullAt() {
   } catch (e) {}
 }
 
+// ─── Business tables live in IndexedDB ────────────────────
+// iPhone/iPad Safari caps localStorage at 5 MB per site and counts every
+// LZ-compressed character as 2 bytes. Once a garage had ~10k+ invoices the
+// jobs write hit that cap and failed silently; the next reload (which iOS
+// does on its own when a tab sits in the background) opened with no
+// invoices, and because customers/stock still loaded, the app treated the
+// device as "data ready" and never downloaded them again. IndexedDB quotas
+// are hundreds of MB on every browser, so the business tables are stored
+// there. localStorage keeps settings/counters and stays the fallback when
+// IndexedDB can't be opened (some private modes).
+const DATA_IDB_NAME = 'jalasai-data';
+const DATA_IDB_STORE = 'tables';
+const DATA_IDB_OPEN_TIMEOUT_MS = 5000;
+const DATA_IDB_MARKER_KEY = 'js_data_in_idb';
+const DATA_TABLE_KEYS = Object.freeze([
+  'mechanics', 'jobs', 'stock', 'customers', 'expenses',
+  'incomeEntries', 'partsLog', 'auditLog', 'stockMovements',
+]);
+const DATA_TABLE_ACCESS = {
+  jobs: { get: () => jobs, set: v => { jobs = v; }, normalize: x => normalizeJob(x), key: x => x?.id },
+  stock: { get: () => stock, set: v => { stock = v; }, normalize: x => normalizeStockItem(x), key: x => x?.id || x?.sku },
+  customers: { get: () => customers, set: v => { customers = v; }, normalize: x => normalizeCustomer(x), key: x => x?.id || x?.phone || x?.name },
+  mechanics: { get: () => mechanics, set: v => { mechanics = v; }, normalize: x => normalizeMechanic(x), key: x => x?.id || x?.phone || x?.name },
+  expenses: { get: () => expenses, set: v => { expenses = v; }, normalize: x => normalizeExpense(x), key: x => x?.id },
+  incomeEntries: { get: () => incomeEntries, set: v => { incomeEntries = v; }, normalize: x => normalizeIncomeEntry(x), key: x => x?.id },
+  partsLog: { get: () => partsLog, set: v => { partsLog = v; }, events: true, key: x => `${x?.date || ''}|${x?.time || ''}|${x?.sku || ''}|${x?.part || ''}` },
+  auditLog: { get: () => auditLog, set: v => { auditLog = v; }, events: true, key: x => x?.id || `${x?.at || ''}|${x?.entity || ''}|${x?.entityId || ''}|${x?.action || ''}` },
+  stockMovements: { get: () => stockMovements, set: v => { stockMovements = v; }, normalize: x => normalizeStockMovement(x), key: x => x?.id || `${x?.stockId || ''}|${x?.createdAt || ''}|${x?.type || ''}|${x?.qty || ''}` },
+};
+
+let dataIdbPromise = null;
+let dataIdbUsable = false;
+let tableSaveFlushQueued = false;
+const pendingTableSaves = new Set();
+let lastTableSaveFailureToastAt = 0;
+
+function openDataIdb() {
+  if (dataIdbPromise) return dataIdbPromise;
+  dataIdbPromise = new Promise((resolve, reject) => {
+    if (typeof indexedDB === 'undefined' || !indexedDB) {
+      reject(new Error('IndexedDB is not available'));
+      return;
+    }
+    // Some iOS versions never fire success/error on the first open; don't
+    // let that hang app start — fall back to localStorage instead.
+    const timer = setTimeout(() => reject(new Error('IndexedDB open timed out')), DATA_IDB_OPEN_TIMEOUT_MS);
+    let request;
+    try {
+      request = indexedDB.open(DATA_IDB_NAME, 1);
+    } catch (err) {
+      clearTimeout(timer);
+      reject(err);
+      return;
+    }
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains(DATA_IDB_STORE)) db.createObjectStore(DATA_IDB_STORE);
+    };
+    request.onsuccess = () => {
+      clearTimeout(timer);
+      const db = request.result;
+      db.onversionchange = () => {
+        db.close();
+        dataIdbPromise = null;
+      };
+      resolve(db);
+    };
+    request.onerror = () => {
+      clearTimeout(timer);
+      reject(request.error || new Error('IndexedDB open failed'));
+    };
+  });
+  dataIdbPromise.catch(() => { dataIdbPromise = null; });
+  return dataIdbPromise;
+}
+
+async function readDataTablesFromIdb() {
+  const db = await openDataIdb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(DATA_IDB_STORE, 'readonly');
+    const store = tx.objectStore(DATA_IDB_STORE);
+    const result = {};
+    DATA_TABLE_KEYS.forEach(key => {
+      const request = store.get(key);
+      request.onsuccess = () => { result[key] = request.result; };
+    });
+    tx.oncomplete = () => resolve(result);
+    tx.onerror = () => reject(tx.error || new Error('IndexedDB read failed'));
+    tx.onabort = () => reject(tx.error || new Error('IndexedDB read aborted'));
+  });
+}
+
+async function writeDataTablesToIdb(keys) {
+  const db = await openDataIdb();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(DATA_IDB_STORE, 'readwrite');
+    const store = tx.objectStore(DATA_IDB_STORE);
+    try {
+      // put() snapshots (structured-clones) the array right now, so later
+      // in-memory edits can't leak into this write half-done.
+      keys.forEach(key => store.put({ rows: DATA_TABLE_ACCESS[key].get(), savedAt: nowISO() }, key));
+    } catch (err) {
+      try { tx.abort(); } catch (_) {}
+      reject(err);
+      return;
+    }
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error || new Error('IndexedDB write failed'));
+    tx.onabort = () => reject(tx.error || new Error('IndexedDB write aborted'));
+  });
+}
+
+function noteTableSaveResult(key, ok, err) {
+  if (typeof noteLocalSaveResult === 'function') {
+    noteLocalSaveResult(`table:${key}`, ok, err);
+    return;
+  }
+  if (ok) return;
+  syncMeta.lastSyncError = `Device save failed for ${key} (${err?.name || err?.message || 'unknown error'}). Download a backup before closing the app.`;
+  const now = Date.now();
+  if (typeof toast === 'function' && now - lastTableSaveFailureToastAt > 60000) {
+    lastTableSaveFailureToastAt = now;
+    toast('This phone could not save. Do not close the app — download a backup from Cloud Sync.', 6000);
+  }
+  if (typeof renderSyncDiagnostics === 'function') renderSyncDiagnostics();
+}
+
+// saveAll() calls this per table; writes from one burst of saves are
+// coalesced into a single IndexedDB transaction at the end of the task.
+// IndexedDB runs readwrite transactions on a store in creation order, so the
+// latest snapshot always lands last.
+function queueTableSave(key) {
+  if (!DATA_TABLE_ACCESS[key]) return;
+  if (!dataIdbUsable) {
+    LOCAL_STORAGE_TABLE_WRITERS[key]();
+    return;
+  }
+  pendingTableSaves.add(key);
+  if (tableSaveFlushQueued) return;
+  tableSaveFlushQueued = true;
+  Promise.resolve().then(flushTableSaves);
+}
+
+function flushTableSaves() {
+  tableSaveFlushQueued = false;
+  const keys = [...pendingTableSaves];
+  pendingTableSaves.clear();
+  if (!keys.length) return Promise.resolve();
+  return writeDataTablesToIdb(keys).then(() => {
+    keys.forEach(key => {
+      // The localStorage copy is now stale and only eats Safari's 5 MB.
+      try { localStorage.removeItem(SK[key]); } catch (_) {}
+      noteTableSaveResult(key, true);
+    });
+    try { localStorage.setItem(DATA_IDB_MARKER_KEY, '1'); } catch (_) {}
+  }).catch(err => {
+    console.warn('IndexedDB save failed; trying localStorage', err);
+    keys.forEach(key => {
+      const ok = LOCAL_STORAGE_TABLE_WRITERS[key]();
+      noteTableSaveResult(key, !!ok, ok ? null : err);
+    });
+  });
+}
+
+// Union of two copies of a table without losing any record: newer record
+// stamp wins, tombstones are kept (same rules as a cloud merge).
+function mergeStoredTableCopies(key, primary, secondary) {
+  const access = DATA_TABLE_ACCESS[key];
+  if (!secondary.length) return primary;
+  if (!primary.length) return secondary;
+  if (access.events && typeof mergeEventLists === 'function') return mergeEventLists(primary, secondary, access.key);
+  if (!access.events && typeof mergeByKey === 'function') return mergeByKey(primary, secondary, access.key, null, { preferLocal: true });
+  const seen = new Map();
+  [...primary, ...secondary].forEach(item => {
+    const id = access.key(item);
+    if (id && !seen.has(id)) seen.set(id, item);
+  });
+  return [...seen.values()];
+}
+
+// Boot loader: settings + any localStorage tables first (loadAll), then the
+// IndexedDB tables. A table present in both (old copy from before the move,
+// or a fallback write after an IndexedDB failure) is merged, never dropped.
+async function loadAllFromStorage() {
+  loadAll();
+  let stored;
+  try {
+    stored = await readDataTablesFromIdb();
+    dataIdbUsable = true;
+  } catch (err) {
+    console.warn('IndexedDB unavailable; using localStorage for data', err);
+    dataIdbUsable = false;
+    return { backend: 'localStorage' };
+  }
+  const toMigrate = [];
+  DATA_TABLE_KEYS.forEach(key => {
+    const access = DATA_TABLE_ACCESS[key];
+    const idbRows = Array.isArray(stored[key]?.rows) ? stored[key].rows : null;
+    const localRows = normaliseStoredArray(access.get());
+    let hasLocalCopy = false;
+    try { hasLocalCopy = localStorage.getItem(SK[key]) !== null; } catch (_) {}
+    if (!idbRows) {
+      if (hasLocalCopy) toMigrate.push(key);
+      return;
+    }
+    const rows = hasLocalCopy ? mergeStoredTableCopies(key, idbRows, localRows) : idbRows;
+    access.set(access.normalize ? rows.map(access.normalize) : rows);
+    if (hasLocalCopy) toMigrate.push(key);
+  });
+  // normalizeJob() reads mechanic names, so jobs are normalized after
+  // mechanics (DATA_TABLE_KEYS lists mechanics first).
+  markDataChanged('load-idb');
+  if (toMigrate.length) {
+    toMigrate.forEach(key => pendingTableSaves.add(key));
+    await flushTableSaves();
+  }
+  return { backend: 'indexedDB', migrated: toMigrate };
+}
+
+function normaliseStoredArray(value) {
+  return Array.isArray(value) ? value : [];
+}
+
+function clearDataTablesInIdb() {
+  pendingTableSaves.clear();
+  return openDataIdb().then(db => new Promise(resolve => {
+    const tx = db.transaction(DATA_IDB_STORE, 'readwrite');
+    tx.objectStore(DATA_IDB_STORE).clear();
+    tx.oncomplete = () => resolve(true);
+    tx.onerror = tx.onabort = () => resolve(false);
+  })).catch(() => false);
+}
+
 function extractMaxUpdatedAt(rows) {
   // Returns the latest source_updated_at value from an array of
   // shadow table rows, as an ISO string. Returns null if rows is
@@ -577,10 +827,15 @@ function loadAll() {
     window.__JALASAI_OPTIMISTIC_INVOICES.clear();
   }
   const load = (key, seed, fallback) => {
+    const empty = seed || fallback || [];
     try {
       const raw = localStorage.getItem(key);
-      return raw ? parseLocalStorageJson(raw) : (seed || fallback || []);
-    } catch { return seed || fallback || []; }
+      if (!raw) return empty;
+      // A truncated LZ value decompresses to null; never let that crash boot.
+      const parsed = parseLocalStorageJson(raw);
+      if (Array.isArray(empty)) return Array.isArray(parsed) ? parsed : empty;
+      return parsed && typeof parsed === 'object' ? parsed : empty;
+    } catch { return empty; }
   };
   jobs       = load(SK.jobs,      []).map(normalizeJob);
   stock      = load(SK.stock,     []).map(normalizeStockItem);
@@ -631,6 +886,8 @@ function clearLocalDeviceDataAfterSignOut() {
       }
     });
   } catch (_) {}
+
+  if (typeof clearDataTablesInIdb === 'function') clearDataTablesInIdb();
 
   jobs = [];
   stock = [];
@@ -1110,6 +1367,9 @@ function ensureSharedSyncOverlay() {
 
 function hasLocalBusinessDataSnapshot() {
   if (typeof localStorage === 'undefined') return false;
+  try {
+    if (localStorage.getItem('js_data_in_idb') === '1') return true;
+  } catch (_) {}
   const keys = [SK.jobs, SK.stock, SK.customers, SK.mechanics, SK.expenses, SK.incomeEntries];
   return keys.some(key => {
     try {
