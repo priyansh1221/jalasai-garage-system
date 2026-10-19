@@ -1163,11 +1163,15 @@ function runAfterInvoiceSavePaint(callback) {
   raf(() => setTimeout(callback, 0));
 }
 
+// refreshOptions.changedJobIds: the only jobs this save changed, so the
+// device save rewrites just their storage groups. Leave it out when a save can
+// touch other jobs (e.g. applying a customer's advance).
 function saveInvoiceAfterPaint(domain = 'invoice', refreshOptions = {}) {
   const pages = ['jobs', 'invoices', 'customers', 'reminders', 'reports', 'home'];
   if (typeof markAppTabsStale === 'function') markAppTabsStale(pages);
+  const changedJobIds = Array.isArray(refreshOptions.changedJobIds) ? refreshOptions.changedJobIds.filter(Boolean) : [];
   runAfterInvoiceSavePaint(() => {
-    if (typeof saveAll === 'function') saveAll({ domain });
+    if (typeof saveAll === 'function') saveAll({ domain, changed: changedJobIds.length ? { jobs: changedJobIds } : undefined });
     scheduleInvoiceSaveUiRefresh(refreshOptions);
   });
 }
@@ -1290,7 +1294,7 @@ function saveQuickInvoice(nextAction = 'close') {
     clearQuickInvoiceDraft();
     logAction('create', 'job', newJob.id, { customer: custName, quick: true, paid, source: 'quick-job-card' });
     closeM('m-quick-invoice');
-    saveInvoiceAfterPaint('jobs');
+    saveInvoiceAfterPaint('jobs', { changedJobIds: [newJob.id] });
     if (typeof showPage === 'function') showPage('jobs', { forceRender: true });
     toast(`Saved ${newJob.id} as job card`);
     return;
@@ -1345,7 +1349,7 @@ function saveQuickInvoice(nextAction = 'close') {
   rememberPaymentMethod(payMethod);
   clearQuickInvoiceDraft();
   logAction('create', 'invoice', newJob.id, { invoiceNo, customer: custName, quick: true, paid });
-  saveInvoiceAfterPaint('invoice');
+  saveInvoiceAfterPaint('invoice', { changedJobIds: [newJob.id] });
 
   if (nextAction === 'next') {
     resetQuickInvoiceForm({ focusCustomer: true, preserveMethod: true });
@@ -1906,7 +1910,7 @@ function cycleStatus(id) {
   j.status = JOB_STATUS_OPTIONS[(JOB_STATUS_OPTIONS.indexOf(j.status) + 1) % JOB_STATUS_OPTIONS.length];
   j.updatedAt = nowISO();
   logAction('update', 'job', j.id, { status: j.status });
-  saveAll({ domain: 'jobs' }); renderJobs(); toast('Status → ' + SLbl[j.status]);
+  saveAll({ domain: 'jobs', changed: { jobs: [j.id] } }); renderJobs(); toast('Status → ' + SLbl[j.status]);
 }
 
 function setJobStatus(id, status) {
@@ -1916,7 +1920,7 @@ function setJobStatus(id, status) {
   j.status = status;
   j.updatedAt = nowISO();
   logAction('update', 'job', j.id, { status: j.status });
-  saveAll({ domain: 'jobs' });
+  saveAll({ domain: 'jobs', changed: { jobs: [j.id] } });
   renderJobs();
   toast('Status → ' + SLbl[j.status]);
 }
@@ -1958,7 +1962,7 @@ function setJobLane(id, lane) {
   j.lane = next;
   j.updatedAt = nowISO();
   logAction('update', 'job', j.id, { lane: j.lane });
-  saveAll({ domain: 'jobs' });
+  saveAll({ domain: 'jobs', changed: { jobs: [j.id] } });
   renderJobs();
   toast('Lane → ' + jobLaneLabel(next));
 }
@@ -1971,7 +1975,7 @@ function removeJob(id) {
   j.deletedAt = nowISO();
   j.updatedAt = j.deletedAt;
   logAction('delete', 'job', id);
-  saveAll({ domain: 'jobs' }); renderJobs(); toast('Job removed');
+  saveAll({ domain: 'jobs', changed: { jobs: [j.id] } }); renderJobs(); toast('Job removed');
 }
 
 function viewJob(id, options = {}) {
@@ -2570,6 +2574,6 @@ function savePayment() {
   }
   logAction('payment', 'job', j.id, { amount, discount, method, due: dueAfter, advance: advanceAfter });
   if (j.status === 'done') markOptimisticInvoice(j.id);
-  saveInvoiceAfterPaint('payment');
+  saveInvoiceAfterPaint('payment', { changedJobIds: [j.id] });
   if (typeof updateDuesBadge === 'function') updateDuesBadge();
 }

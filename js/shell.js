@@ -549,7 +549,7 @@ function confirmDone(nextAction = 'close') {
     clearInvoiceDraft(j.id, mode);
     logAction('update', 'invoice', j.id, { invoiceNo: j.invoiceNo, discount: j.discount, paid: j.payment });
     closeM('m-done');
-    if (typeof saveInvoiceAfterPaint === 'function') saveInvoiceAfterPaint('invoice', { renderInvoiceId: j.id });
+    if (typeof saveInvoiceAfterPaint === 'function') saveInvoiceAfterPaint('invoice', { renderInvoiceId: j.id, changedJobIds: [j.id] });
     else {
       saveAll({ domain: 'invoice' });
       if (typeof scheduleInvoiceSaveUiRefresh === 'function') scheduleInvoiceSaveUiRefresh({ renderInvoiceId: j.id });

@@ -349,16 +349,18 @@ const LOCAL_STORAGE_TABLE_WRITERS = {
   stockMovements: () => setLocalStorageSafe(SK.stockMovements, encodeLocalStorageJson(stockMovements)),
 };
 
+// options.changed = { jobs: [id, ...] } lets a save rewrite only those
+// records' groups (see "Grouped storage"); without it the table is rewritten.
 const SAVE_KEY_WRITERS = {
-  jobs: () => queueTableSave('jobs'),
-  stock: () => queueTableSave('stock'),
-  customers: () => queueTableSave('customers'),
-  mechanics: () => queueTableSave('mechanics'),
-  expenses: () => queueTableSave('expenses'),
-  incomeEntries: () => queueTableSave('incomeEntries'),
+  jobs: (options) => queueTableSave('jobs', options?.changed?.jobs),
+  stock: (options) => queueTableSave('stock', options?.changed?.stock),
+  customers: (options) => queueTableSave('customers', options?.changed?.customers),
+  mechanics: (options) => queueTableSave('mechanics', options?.changed?.mechanics),
+  expenses: (options) => queueTableSave('expenses', options?.changed?.expenses),
+  incomeEntries: (options) => queueTableSave('incomeEntries', options?.changed?.incomeEntries),
   partsLog: () => queueTableSave('partsLog'),
   auditLog: () => queueTableSave('auditLog'),
-  stockMovements: () => queueTableSave('stockMovements'),
+  stockMovements: (options) => queueTableSave('stockMovements', options?.changed?.stockMovements),
   jobCtr: () => setLocalStorageSafe(SK.jobCtr, jobCtr),
   invoiceCtr: () => setLocalStorageSafe(SK.invoiceCtr, invoiceCtr),
   gsUrl: () => setLocalStorageSafe(SK.gsUrl, gsUrl),
@@ -369,12 +371,17 @@ const SAVE_KEY_WRITERS = {
   garageProfile: () => setLocalStorageSafe(SK.garageProfile, JSON.stringify(garageProfile)),
 };
 
-function saveDomainKeySet(domain) {
+// exactTables: the names are storage keys, not UI domains — used by cloud
+// pulls that know exactly which tables changed ("jobs" as a domain would also
+// rewrite customers and the logs).
+function saveDomainKeySet(domain, exactTables = false) {
   if (!domain) return null;
   const requested = Array.isArray(domain) ? domain : String(domain).split(/[,\s]+/);
   const keys = new Set(['syncMeta']);
   requested.map(item => String(item || '').trim()).filter(Boolean).forEach(item => {
-    const mapped = SAVE_DOMAIN_KEYS[item] || (SAVE_KEY_WRITERS[item] ? [item] : []);
+    const mapped = exactTables && SAVE_KEY_WRITERS[item]
+      ? [item]
+      : (SAVE_DOMAIN_KEYS[item] || (SAVE_KEY_WRITERS[item] ? [item] : []));
     mapped.forEach(key => keys.add(key));
   });
   return keys;
@@ -564,7 +571,8 @@ const DATA_TABLE_ACCESS = {
 let dataIdbPromise = null;
 let dataIdbUsable = false;
 let tableSaveFlushQueued = false;
-const pendingTableSaves = new Set();
+// table -> 'full' | Set(changed record keys)
+const pendingTableSaves = new Map();
 let lastTableSaveFailureToastAt = 0;
 
 function openDataIdb() {
@@ -607,37 +615,174 @@ function openDataIdb() {
   return dataIdbPromise;
 }
 
+// ─── Grouped storage (fast-load plan Phase 3) ─────────────
+// Rewriting a whole table on every save cost ~220 ms at 1 lakh invoices.
+// Id-keyed tables are split into DATA_IDB_BUCKETS groups by a hash of the
+// record key ("jobs#17"), so a save that knows which records changed only
+// rewrites their groups. Array order is kept in "jobs@order" and rewritten
+// only when records were added, removed or reordered.
+// Safety: a save that doesn't say which records changed rewrites the whole
+// table, and every table with grouped-only saves gets a full rewrite at least
+// once a minute and whenever the app is hidden, so an in-place edit that a
+// caller forgot to report can't stay unsaved.
+const DATA_IDB_BUCKETS = 64;
+const DATA_FULL_RESAVE_MS = 60 * 1000;
+const bucketedTableKeys = new Set();
+const lastSavedTableOrder = new Map();
+const partialSavedTablesAt = new Map();
+// Hash per record key (keys are short ids; the cache only skips rehashing).
+const recordBucketCache = new Map();
+
+function tableIsBucketable(key) {
+  const access = DATA_TABLE_ACCESS[key];
+  return !!access && !access.events;
+}
+
+function dataBucketKey(key, bucket) {
+  return `${key}#${String(bucket).padStart(2, '0')}`;
+}
+
+function dataBucketOf(recordKey) {
+  const text = String(recordKey || '');
+  let hash = 5381;
+  for (let i = 0; i < text.length; i += 1) hash = ((hash << 5) + hash) ^ text.charCodeAt(i);
+  return (hash >>> 0) % DATA_IDB_BUCKETS;
+}
+
+// The key is read fresh every time (a customer's key can change when an id
+// or phone is added), so a record always lands in the group its key says.
+function recordBucket(access, record) {
+  const key = String(access.key(record) || '');
+  let bucket = recordBucketCache.get(key);
+  if (bucket === undefined) {
+    bucket = dataBucketOf(key);
+    recordBucketCache.set(key, bucket);
+  }
+  return { key, bucket };
+}
+
+// Rebuilds the table in its saved order. Rows are matched to the order list
+// by key (a queue per key, so duplicates survive); any row the order list
+// doesn't mention is appended, never dropped.
+function assembleBucketedRows(buckets, order) {
+  const queues = new Map();
+  buckets.forEach(rows => normaliseStoredArray(rows).forEach(row => {
+    const key = String(row?.__k ?? '');
+    const queue = queues.get(key);
+    if (queue) queue.push(row.r);
+    else queues.set(key, [row.r]);
+  }));
+  const out = [];
+  normaliseStoredArray(order).forEach(key => {
+    const queue = queues.get(String(key));
+    if (queue && queue.length) out.push(queue.shift());
+  });
+  queues.forEach(queue => queue.forEach(row => out.push(row)));
+  return out;
+}
+
 async function readDataTablesFromIdb() {
   const db = await openDataIdb();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(DATA_IDB_STORE, 'readonly');
     const store = tx.objectStore(DATA_IDB_STORE);
-    const result = {};
+    const legacy = {};
+    const orders = {};
+    const buckets = {};
     DATA_TABLE_KEYS.forEach(key => {
       const request = store.get(key);
-      request.onsuccess = () => { result[key] = request.result; };
+      request.onsuccess = () => { legacy[key] = request.result; };
+      if (!tableIsBucketable(key)) return;
+      const orderRequest = store.get(`${key}@order`);
+      orderRequest.onsuccess = () => { orders[key] = orderRequest.result; };
+      buckets[key] = new Array(DATA_IDB_BUCKETS);
+      for (let b = 0; b < DATA_IDB_BUCKETS; b += 1) {
+        const bucketRequest = store.get(dataBucketKey(key, b));
+        bucketRequest.onsuccess = () => { buckets[key][b] = bucketRequest.result?.rows || []; };
+      }
     });
-    tx.oncomplete = () => resolve(result);
+    tx.oncomplete = () => {
+      const result = {};
+      DATA_TABLE_KEYS.forEach(key => {
+        if (orders[key] && Array.isArray(orders[key].keys)) {
+          const rows = assembleBucketedRows(buckets[key], orders[key].keys);
+          result[key] = { rows, savedAt: orders[key].savedAt, bucketed: true };
+          lastSavedTableOrder.set(key, orders[key].keys.slice());
+          bucketedTableKeys.add(key);
+        } else {
+          result[key] = legacy[key];
+        }
+      });
+      resolve(result);
+    };
     tx.onerror = () => reject(tx.error || new Error('IndexedDB read failed'));
     tx.onabort = () => reject(tx.error || new Error('IndexedDB read aborted'));
   });
 }
 
-async function writeDataTablesToIdb(keys) {
+// plan: Map table -> 'full' | Set(changed record keys). A table gets a
+// grouped write only when it is already stored grouped and the caller listed
+// the records it changed; otherwise the whole table is written (grouped).
+async function writeDataTablesToIdb(plan) {
   const db = await openDataIdb();
+  const savedAt = nowISO();
+  const orderUpdates = new Map();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(DATA_IDB_STORE, 'readwrite');
     const store = tx.objectStore(DATA_IDB_STORE);
     try {
-      // put() snapshots (structured-clones) the array right now, so later
-      // in-memory edits can't leak into this write half-done.
-      keys.forEach(key => store.put({ rows: DATA_TABLE_ACCESS[key].get(), savedAt: nowISO() }, key));
+      plan.forEach((changedKeys, key) => {
+        const access = DATA_TABLE_ACCESS[key];
+        const rows = normaliseStoredArray(access.get());
+        // put() snapshots (structured-clones) the data right now, so later
+        // in-memory edits can't leak into this write half-done.
+        if (!tableIsBucketable(key)) {
+          store.put({ rows, savedAt }, key);
+          return;
+        }
+        const partial = changedKeys instanceof Set && bucketedTableKeys.has(key);
+        const wanted = new Set();
+        if (partial) changedKeys.forEach(recordKey => wanted.add(dataBucketOf(recordKey)));
+        const grouped = new Map();
+        const order = new Array(rows.length);
+        rows.forEach((row, i) => {
+          const { key: recordKey, bucket } = recordBucket(access, row);
+          order[i] = recordKey;
+          if (partial && !wanted.has(bucket)) return;
+          const list = grouped.get(bucket);
+          if (list) list.push({ __k: recordKey, r: row });
+          else grouped.set(bucket, [{ __k: recordKey, r: row }]);
+        });
+        const targets = partial ? [...wanted] : Array.from({ length: DATA_IDB_BUCKETS }, (_, b) => b);
+        targets.forEach(b => store.put({ rows: grouped.get(b) || [], savedAt }, dataBucketKey(key, b)));
+        const previous = lastSavedTableOrder.get(key);
+        const orderChanged = !partial || !previous || previous.length !== order.length
+          || order.some((recordKey, i) => recordKey !== previous[i]);
+        if (orderChanged) {
+          store.put({ keys: order, savedAt }, `${key}@order`);
+          orderUpdates.set(key, order);
+        }
+        if (!partial) store.delete(key);
+      });
     } catch (err) {
       try { tx.abort(); } catch (_) {}
       reject(err);
       return;
     }
-    tx.oncomplete = () => resolve();
+    tx.oncomplete = () => {
+      orderUpdates.forEach((order, key) => lastSavedTableOrder.set(key, order));
+      plan.forEach((changedKeys, key) => {
+        if (!tableIsBucketable(key)) return;
+        const partial = changedKeys instanceof Set && bucketedTableKeys.has(key);
+        bucketedTableKeys.add(key);
+        if (partial) {
+          if (!partialSavedTablesAt.has(key)) partialSavedTablesAt.set(key, Date.now());
+        } else {
+          partialSavedTablesAt.delete(key);
+        }
+      });
+      resolve();
+    };
     tx.onerror = () => reject(tx.error || new Error('IndexedDB write failed'));
     tx.onabort = () => reject(tx.error || new Error('IndexedDB write aborted'));
   });
@@ -662,16 +807,51 @@ function noteTableSaveResult(key, ok, err) {
 // coalesced into a single IndexedDB transaction at the end of the task.
 // IndexedDB runs readwrite transactions on a store in creation order, so the
 // latest snapshot always lands last.
-function queueTableSave(key) {
+function queueTableSave(key, changedRecordKeys) {
   if (!DATA_TABLE_ACCESS[key]) return;
   if (!dataIdbUsable) {
     LOCAL_STORAGE_TABLE_WRITERS[key]();
     return;
   }
-  pendingTableSaves.add(key);
+  const listed = Array.isArray(changedRecordKeys) || changedRecordKeys instanceof Set
+    ? [...changedRecordKeys].map(id => String(id || '')).filter(Boolean)
+    : null;
+  const current = pendingTableSaves.get(key);
+  if (!listed || !listed.length || current === 'full') {
+    pendingTableSaves.set(key, 'full');
+  } else if (current instanceof Set) {
+    listed.forEach(id => current.add(id));
+  } else {
+    pendingTableSaves.set(key, new Set(listed));
+  }
   if (tableSaveFlushQueued) return;
   tableSaveFlushQueued = true;
   Promise.resolve().then(flushTableSaves);
+}
+
+// Safety net for grouped saves: rewrite in full any table that has had only
+// grouped writes for a minute, and everything grouped when the app is hidden.
+function queueFullResaveOfPartialTables(force = false) {
+  if (!dataIdbUsable) return;
+  const now = Date.now();
+  let queued = false;
+  partialSavedTablesAt.forEach((since, key) => {
+    if (!force && now - since < DATA_FULL_RESAVE_MS) return;
+    pendingTableSaves.set(key, 'full');
+    queued = true;
+  });
+  if (queued && !tableSaveFlushQueued) {
+    tableSaveFlushQueued = true;
+    Promise.resolve().then(flushTableSaves);
+  }
+}
+
+if (typeof window !== 'undefined' && !window.__jalasaiFullResaveBound) {
+  window.__jalasaiFullResaveBound = true;
+  setInterval(() => queueFullResaveOfPartialTables(false), DATA_FULL_RESAVE_MS / 2);
+  const resaveOnHide = () => { if (document.visibilityState === 'hidden') queueFullResaveOfPartialTables(true); };
+  document.addEventListener('visibilitychange', resaveOnHide);
+  window.addEventListener('pagehide', () => queueFullResaveOfPartialTables(true));
 }
 
 // The newest flush, so callers can wait until a save has really landed on
@@ -685,10 +865,11 @@ function whenTableSavesSettled() {
 
 function flushTableSaves() {
   tableSaveFlushQueued = false;
-  const keys = [...pendingTableSaves];
+  const plan = new Map(pendingTableSaves);
   pendingTableSaves.clear();
+  const keys = [...plan.keys()];
   if (!keys.length) return lastTableSaveFlush;
-  lastTableSaveFlush = writeDataTablesToIdb(keys).then(() => {
+  lastTableSaveFlush = writeDataTablesToIdb(plan).then(() => {
     keys.forEach(key => {
       // The localStorage copy is now stale and only eats Safari's 5 MB.
       try { localStorage.removeItem(SK[key]); } catch (_) {}
@@ -756,8 +937,12 @@ async function loadAllFromStorage() {
   // normalizeJob() reads mechanic names, so jobs are normalized after
   // mechanics (DATA_TABLE_KEYS lists mechanics first).
   markDataChanged('load-idb');
+  // Tables still stored as one record are rewritten grouped once.
+  DATA_TABLE_KEYS.forEach(key => {
+    if (tableIsBucketable(key) && stored[key] && !stored[key].bucketed && !toMigrate.includes(key)) toMigrate.push(key);
+  });
   if (toMigrate.length) {
-    toMigrate.forEach(key => pendingTableSaves.add(key));
+    toMigrate.forEach(key => pendingTableSaves.set(key, 'full'));
     await flushTableSaves();
   }
   return { backend: 'indexedDB', migrated: toMigrate };
@@ -769,6 +954,9 @@ function normaliseStoredArray(value) {
 
 function clearDataTablesInIdb() {
   pendingTableSaves.clear();
+  bucketedTableKeys.clear();
+  lastSavedTableOrder.clear();
+  partialSavedTablesAt.clear();
   return openDataIdb().then(db => new Promise(resolve => {
     const tx = db.transaction(DATA_IDB_STORE, 'readwrite');
     tx.objectStore(DATA_IDB_STORE).clear();
@@ -817,7 +1005,7 @@ function persistBeforePullBackup(payload) {
 
 function saveAll(options = {}) {
   try {
-    const scopedKeys = saveDomainKeySet(options.domain || options.domains);
+    const scopedKeys = saveDomainKeySet(options.domain || options.domains, !!options.exactTables);
     markDataChanged(options.skipSync ? 'local-cache' : 'save');
     if (!syncMeta.deviceId) syncMeta.deviceId = 'dev-' + Math.random().toString(36).slice(2, 10);
     const saveStamp = nowISO();
@@ -830,7 +1018,7 @@ function saveAll(options = {}) {
     const keysToWrite = scopedKeys || new Set(Object.keys(SAVE_KEY_WRITERS));
     keysToWrite.forEach(key => {
       const write = SAVE_KEY_WRITERS[key];
-      if (write) write();
+      if (write) write(options);
     });
     if (!scopedKeys && !options.skipSync && typeof buildSyncPayload === 'function') {
       try {

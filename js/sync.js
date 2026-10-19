@@ -1931,13 +1931,19 @@ function handleRealtimeShadowChange(config, payload, options = {}) {
     ? applyRealtimeShadowDelete(config.key, id, deletedAt, applyOptions)
     : applyRealtimeShadowRecord(config.key, payload.new?.record_data || payload.old?.record_data, payload.eventType, applyOptions);
   if (!applied) return false;
+  if (options.changedIds && id) {
+    const set = options.changedIds[config.key] instanceof Set
+      ? options.changedIds[config.key]
+      : (options.changedIds[config.key] = new Set());
+    set.add(String(id));
+  }
   const remoteStamp = shadowTimestamp(row.source_updated_at || row.mirrored_at || '');
   if (remoteStamp) {
     syncMeta.lastPulledAt = nowISO();
     syncMeta.lastRemoteUpdatedAt = remoteStamp;
   }
   if (options.deferSideEffects) return true;
-  saveAll({ preserveUpdatedAt: true, skipSync: true, domain: config.key });
+  saveAll({ preserveUpdatedAt: true, skipSync: true, domain: config.key, exactTables: true, changed: id ? { [config.key]: [String(id)] } : undefined });
   refreshRealtimePages(config.key, config.pages || []);
   return true;
 }
@@ -1956,6 +1962,7 @@ async function refreshRecentCloudChanges(windowMs = VISIBILITY_GAP_FILL_MS, opti
   recentRefreshBusy = true;
   let changed = false;
   const changedKeys = new Set();
+  const recentChangedIds = {};
   const changedPages = new Set();
   try {
     for (const config of REALTIME_SHADOW_TABLES) {
@@ -1970,7 +1977,7 @@ async function refreshRecentCloudChanges(windowMs = VISIBILITY_GAP_FILL_MS, opti
       for (let i = 0; i < rows.length; i += RECENT_REFRESH_CHUNK_SIZE) {
         const chunk = rows.slice(i, i + RECENT_REFRESH_CHUNK_SIZE);
         chunk.forEach(row => {
-          if (handleRealtimeShadowChange(config, { eventType: row.deleted_at ? 'DELETE' : 'UPDATE', new: row }, { deferSideEffects: true })) {
+          if (handleRealtimeShadowChange(config, { eventType: row.deleted_at ? 'DELETE' : 'UPDATE', new: row }, { deferSideEffects: true, changedIds: recentChangedIds })) {
             changed = true;
             changedKeys.add(config.key);
             (config.pages || []).forEach(page => changedPages.add(page));
@@ -1980,7 +1987,7 @@ async function refreshRecentCloudChanges(windowMs = VISIBILITY_GAP_FILL_MS, opti
       }
     }
     if (changed) {
-      saveAll({ preserveUpdatedAt: true, skipSync: true, domains: [...changedKeys] });
+      saveAll({ preserveUpdatedAt: true, skipSync: true, domains: [...changedKeys], exactTables: true, changed: recentChangedIds });
       refreshRealtimePagesBatch(changedKeys, changedPages);
     }
     if (changed && !options.quiet) updateGSStatus('Pulled recent cloud changes.');
@@ -2036,8 +2043,9 @@ function startRealtimeSync(client) {
     let needsPull = false;
     const changedKeys = new Set();
     const changedPages = new Set();
+    const changedIds = {};
     batch.forEach(({ config, payload }) => {
-      if (!handleRealtimeShadowChange(config, payload, { deferSideEffects: true })) {
+      if (!handleRealtimeShadowChange(config, payload, { deferSideEffects: true, changedIds })) {
         needsPull = true;
         return;
       }
@@ -2047,7 +2055,7 @@ function startRealtimeSync(client) {
       (config.pages || []).forEach(page => changedPages.add(page));
     });
     if (changedKeys.size) {
-      saveAll({ preserveUpdatedAt: true, skipSync: true, domains: [...changedKeys] });
+      saveAll({ preserveUpdatedAt: true, skipSync: true, domains: [...changedKeys], exactTables: true, changed: changedIds });
       refreshRealtimePagesBatch([...changedKeys], [...changedPages]);
     }
     if (needsPull) scheduleRealtimePull();
@@ -2484,7 +2492,10 @@ async function fetchChangesSince(client, configs) {
 // job payments are unioned). Returns the table keys that changed.
 const DELTA_APPLY_ORDER = Object.freeze(['mechanics', 'customers', 'jobs', 'stock', 'expenses', 'incomeEntries', 'stockMovements', 'partsLog', 'auditLog']);
 
-function applyChangedRecords(recordsByKey) {
+// changedIds (optional out-param) collects the keys of the records that
+// actually changed per table, so the device save can rewrite only their
+// storage groups.
+function applyChangedRecords(recordsByKey, changedIds = null) {
   const changed = [];
   const localNewerSnapshot = !!syncMeta.pendingSync;
   DELTA_APPLY_ORDER.forEach(key => {
@@ -2499,6 +2510,7 @@ function applyChangedRecords(recordsByKey) {
     });
     let next = null;
     const added = [];
+    const touched = new Set();
     incoming.forEach(remote => {
       const id = access.key(remote);
       if (!id) return;
@@ -2508,6 +2520,7 @@ function applyChangedRecords(recordsByKey) {
         if (at === -1 && !deleted) {
           added.push(remote);
           index.set(id, list.length + added.length - 1);
+          touched.add(id);
         }
         return;
       }
@@ -2516,6 +2529,7 @@ function applyChangedRecords(recordsByKey) {
         if (deleted) return;
         added.push(access.normalize ? access.normalize(remote) : remote);
         index.set(id, list.length + added.length - 1);
+        touched.add(id);
         return;
       }
       const local = at < list.length ? list[at] : added[at - list.length];
@@ -2524,6 +2538,7 @@ function applyChangedRecords(recordsByKey) {
         winner = normalizeJob(applyJobPaymentUnion([winner], buildJobPaymentUnionIndex([remote], [local]))[0]);
       }
       if (!winner || shadowStableStringify(winner) === shadowStableStringify(local)) return;
+      touched.add(id);
       if (at < list.length) {
         if (!next) next = list.slice();
         next[at] = winner;
@@ -2536,6 +2551,10 @@ function applyChangedRecords(recordsByKey) {
     // New jobs go first (the app keeps jobs newest-first); other tables append.
     access.set(key === 'jobs' ? [...added, ...base] : [...base, ...added]);
     changed.push(key);
+    if (changedIds) {
+      const set = changedIds[key] instanceof Set ? changedIds[key] : (changedIds[key] = new Set());
+      touched.forEach(id => set.add(String(id)));
+    }
   });
   return changed;
 }
@@ -2544,9 +2563,10 @@ async function pullChangesOnly(client, options = {}) {
   const configs = deltaPullConfigs(options.criticalOnly);
   const fetched = await fetchChangesSince(client, configs);
   if (!fetched) return { tooMany: true };
-  const changedKeys = applyChangedRecords(fetched.recordsByKey);
+  const changedIds = {};
+  const changedKeys = applyChangedRecords(fetched.recordsByKey, changedIds);
   if (changedKeys.length) {
-    saveAll({ preserveUpdatedAt: true, skipSync: true, domains: changedKeys });
+    saveAll({ preserveUpdatedAt: true, skipSync: true, domains: changedKeys, exactTables: true, changed: changedIds });
     const pages = new Set();
     REALTIME_SHADOW_TABLES.forEach(config => {
       if (changedKeys.includes(config.key)) (config.pages || []).forEach(page => pages.add(page));
@@ -2703,20 +2723,22 @@ async function runHistoryBackfill() {
     let cursor = { ...(syncMeta.history.jobsBefore || { date: historyRecentSince(), id: '' }) };
     let pagesSinceSave = 0;
     let loadedSinceSave = 0;
+    let historyChangedIds = {};
     while (!syncMeta.history.jobsDone) {
       if (!cloudSessionActive || (typeof navigator !== 'undefined' && navigator.onLine === false)) return;
       const { data, error } = await client.rpc('jalasai_jobs_before', { p_date: cursor.date, p_id: cursor.id, p_limit: HISTORY_PAGE_LIMIT });
       if (error) throw error;
       const rows = normaliseArray(data);
       const records = rows.map(row => shadowRowToRecord(jobsConfig, row)).filter(Boolean);
-      if (records.length) applyChangedRecords({ jobs: records });
+      if (records.length) applyChangedRecords({ jobs: records }, historyChangedIds);
       loadedSinceSave += records.length;
       pagesSinceSave += 1;
       const last = rows[rows.length - 1];
       const finished = rows.length < HISTORY_PAGE_LIMIT || !last;
       if (last) cursor = { date: String(last.job_date || '').slice(0, 10), id: String(last.id || '') };
       if (finished || pagesSinceSave >= HISTORY_SAVE_EVERY_PAGES) {
-        saveAll({ preserveUpdatedAt: true, skipSync: true, domains: ['jobs'] });
+        saveAll({ preserveUpdatedAt: true, skipSync: true, domains: ['jobs'], exactTables: true, changed: historyChangedIds });
+        historyChangedIds = {};
         if (typeof whenTableSavesSettled === 'function') await whenTableSavesSettled();
         syncMeta.history.jobsBefore = cursor;
         syncMeta.history.loadedInvoices = (syncMeta.history.loadedInvoices || 0) + loadedSinceSave;
