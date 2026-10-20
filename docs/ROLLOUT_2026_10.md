@@ -23,7 +23,9 @@ Tested setups (two simulated phones, the real `js/` files, local Postgres):
 | 2026-10-20 | Bug found | an old phone stayed stuck at invoice 12076 even after refreshing (it last synced weeks ago). Fixed in commit "Old phones catch up by themselves…" (c145aa8). |
 | 2026-10-20 | Fix deployed (`ux-polish` 389e5e3, build jalasai-1792477571) | live site loads with the catch-up fix; payment-date fix still not included |
 | 2026-10-20 | Docs brought up to date and pushed to GitHub | — |
-| 2026-10-21 | Stage 4 changed to book mode (numbers typed from the paper book; no auto numbers or drafts) | tested locally; **not deployed** — waiting for the owner's OK |
+| 2026-10-21 | Stage 4 changed to book mode (numbers typed from the paper book; no auto numbers or drafts) | tested locally |
+| 2026-10-21 | Book mode deployed (`ux-polish` 210ecc9, build jalasai-1792530892) | live site loads, number box "Invoice No. * (from the book)" visible in both UIs, no console errors; payment-date fix still not included |
+| next | 7b. Stage 4 SQL (`2026-10-invoice-book-check-stage4.sql`) | owner runs it; VERIFY AFTER query |
 | next | Old phone | reopen it once; it should show "Bringing this phone up to date with cloud..." and reach the newest invoice by itself (no Repair needed) |
 | next | Watch phones ~1 day | Sync diagnostics → "Changes only", Sync Now ≈ 1 s |
 | waiting | Payment-date fix (branch `claude/loving-leavitt-0cfc46`) | not merged yet, by choice; after merging, re-run its updated section of the Phase 1 SQL (it recomputes totals) |

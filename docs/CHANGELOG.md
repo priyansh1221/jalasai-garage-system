@@ -1,10 +1,10 @@
 # JalaSai Changelog
 
-Last updated: 2026-10-20
+Last updated: 2026-10-21
 
 ## 2026-10-21
 
-### Invoice numbers come from the paper book ("book mode"; not deployed yet)
+### Invoice numbers come from the paper book ("book mode"; deployed as build `jalasai-1792530892`)
 
 - The invoice number is the one written in the garage's invoice book, so the
   app no longer guesses or makes up numbers:
