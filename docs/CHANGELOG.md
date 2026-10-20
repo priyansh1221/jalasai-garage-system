@@ -1,10 +1,102 @@
 # JalaSai Changelog
 
-Last updated: 2026-10-19
+Last updated: 2026-10-20
+
+## 2026-10-20
+
+### Live now (deployed from `ux-polish`)
+
+- **Deploy 1** (ff6e37d): the speed work below plus grouped device storage,
+  daily close and the UPI field. The live site loaded with no errors.
+- **Phase 1 SQL run on live** by the owner
+  (`supabase/2026-10-fast-sync-phase1.sql`). The daily totals rebuild made
+  1,902 rows; the highest invoice was 12747.
+  - The CHECK FIRST queries found **older duplicate invoice numbers**: 10607
+    three times, and 10594, 11068, 10499, 10609, 10500, 9721 and 9785 twice
+    each. This work didn't cause them. Stage 4 stops new ones.
+- **Deploy 2** (389e5e3, build `jalasai-1792477571`): old phones catch up by
+  themselves (see below).
+
+### Switched on with deploy 1 and the Phase 1 SQL
+
+- **Saving only what changed (fast-load Phase 3).** Needs no SQL.
+  - Tables are stored on the phone in 64 groups, so saving one invoice rewrites
+    one group: 19 ms instead of 181 ms at 1 lakh invoices.
+  - As a safety net, the whole table is re-saved within a minute and whenever
+    the app is hidden.
+- **Cloud report totals (Phase 5).** Uses `garage_daily_totals` and
+  `jalasai_report_summary` from the Phase 1 SQL.
+  - Reports take their headline totals from the cloud for any range the phone
+    doesn't fully hold.
+- **Rolling window and on-demand history (Phase 6).** Also from the Phase 1
+  SQL.
+  - Phones keep about a year of invoices (at most 20,000). Older invoices stay
+    on the phone if they have money owing or an advance, are a customer's
+    latest job, or are open.
+  - A record is removed from the phone only after the cloud confirms it holds
+    the identical copy.
+  - Older invoices are still reachable: "Load older invoices", cloud search, and
+    a customer's full history when the customer is opened.
+
+### Old phones catch up by themselves
+
+- **Problem:** a phone that hadn't synced for weeks stayed at invoice 12076,
+  even after a refresh. The quick catch-up only asks for the last few days, and
+  it moved the "last synced" time forward even when it had stopped early. After
+  that the phone believed it was up to date.
+- **Fix, part 1:** on opening, a phone without changes-only cursors, or one
+  more than 7 days behind, now does one full catch-up pull. That pull also sets
+  the cursors, so later syncs are changes-only.
+- **Fix, part 2:** the quick catch-up no longer moves "last synced" forward
+  when it stopped early or was too far behind.
+- Tested with a simulated old phone holding 300 of 600 invoices. Before the fix
+  it stayed at 300. After the fix it reaches 600, then receives new invoices
+  changes-only.
+
+### Built and tested, waiting for their SQL (not switched on yet)
+
+Each feature below switches on by itself once the owner runs its SQL file. Until
+then, the app behaves as before. The order and the checks are in
+`docs/ROLLOUT_2026_10.md`.
+
+- **Two-phone safety (Stage 2, `2026-10-sync-v2-stage2.sql`).**
+  - Adds an upload queue in IndexedDB `jalasai-sync`, server versions, and a
+    field-by-field merge. Two phones can no longer overwrite each other's edits.
+  - Clashes are recorded in `garage_sync_conflicts`.
+- **Money ledger (Stage 3, `2026-10-ledger-stage3.sql`).**
+  - Adds the insert-only `garage_ledger_entries`, filled from invoices by a
+    trigger.
+  - `jalasai_ledger_reconcile()` must return 0 rows.
+- **Server invoice numbers (Stage 4, `2026-10-invoice-numbers-stage4.sql`).**
+  - The server hands out the next number.
+  - A phone that is offline saves a draft number (`D-<phone>-<n>`) and gets
+    the real one when it's back online.
+  - The phone warns when a number is already used in the cloud. No GST format.
+- **Staff roles and statements (Stage 6, `2026-10-customer-features-stage6.sql`).**
+  - **Staff roles:** owner, manager or mechanic. The server enforces them, and
+    mechanics can't see money reports or the ledger.
+  - **"Share statement":** sends a customer a private 30-day link on WhatsApp.
+    It opens `statement.html`, which shows the balance, every entry and a
+    "Pay by UPI" button.
+  - **Live without the SQL:** "Close the day" (cash count; a difference is
+    recorded as an expense or income) and the UPI ID in Garage profile.
+- **Backups to Cloudflare R2 (Stage 0).**
+  - The nightly workflow also uploads to R2, keeping 30 daily and 12 monthly
+    copies. It waits for the 4 R2 secrets.
+  - `scripts/supabase-restore.mjs` can check a backup, add missing rows, or
+    overwrite a scratch project.
+
+### Not merged yet
+
+- **Payment dates by Indian time** (branch `claude/loving-leavitt-0cfc46`).
+  - Today a payment made between midnight and 5:30 am counts on the previous
+    day.
+  - The branch fixes this. It waits for the owner's check of Sync diagnostics
+    on the phones.
 
 ## 2026-10-19
 
-### Speed for a lakh-scale database (roadmap Stage 1, not deployed yet)
+### Speed for a lakh-scale database (roadmap Stage 1; deployed 2026-10-20)
 
 - **Local speed fixes** (Mac, 1 lakh synthetic invoices; phones 3–5× slower):
   - Job board 8.1 s → 65 ms, header stats 8.0 s → 40 ms, Reports 6.0 s →
@@ -41,11 +133,11 @@ Last updated: 2026-10-19
 - **SQL:** Phase 1 was extended with `jalasai_changes_since`,
   `jalasai_recent_jobs` and `jalasai_jobs_before`. The row-history trigger now
   also compares `record_data`. It's tested on local Postgres but **not run on
-  live**.
+  live** (the owner ran it on 2026-10-20).
 - **Two-phone safety (roadmap Stage 2):**
   - built and tested (outbox, server versions, field-by-field merge);
-  - then parked as `docs/parked/sync-v2-stage2.patch`, so the speed work lands
-    first.
+  - parked for a day as a patch so the speed work landed first, then merged
+    back on 2026-10-20 (see above; the patch file is gone).
 
 ### Stage 0 safety fixes (merged from `hotfix/safari-invoices`)
 

@@ -4,6 +4,8 @@ Production-focused garage operations platform for two-wheeler workshops, built f
 
 Vanilla JS | Local-first architecture | Supabase cloud sync | PWA-ready | Real workflow validation.
 
+> The maintained docs are in [docs/](docs/README.md); the 2026-10 rollout state is in [docs/ROLLOUT_2026_10.md](docs/ROLLOUT_2026_10.md).
+
 ![Release](https://img.shields.io/github/v/release/priyansh1221/jalasai-garage-system?label=release)
 ![Last Commit](https://img.shields.io/github/last-commit/priyansh1221/jalasai-garage-system)
 ![Stack](https://img.shields.io/badge/stack-Vanilla%20JS%20%7C%20HTML%20%7C%20CSS-0f766e)

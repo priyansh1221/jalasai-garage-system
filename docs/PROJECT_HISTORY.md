@@ -16,6 +16,11 @@ This is the build history and product reasoning log.
 
 ## Current State Snapshot
 
+As of 2026-10-20 (details in `docs/CHANGELOG.md` and `docs/ROLLOUT_2026_10.md`):
+- business data on each phone lives in IndexedDB; downloads are changes-only by the server's clock; new phones load newest first; phones keep about a year of invoices and fetch older ones on demand
+- the 2026-10 speed and safety work is live; two-phone safety, the money ledger, server invoice numbers, staff roles and statement links are built and wait for their SQL
+- the main lesson of 2026-10: on phones, a failed save or a sync cursor moved too early can hide data silently, so every save failure is now shown and every cursor moves only after the data is really in
+
 As of 2026-04-23:
 - shadow-table sync is the live cloud path
 - realtime heartbeat plus 30-second fallback polling are active in the app runtime

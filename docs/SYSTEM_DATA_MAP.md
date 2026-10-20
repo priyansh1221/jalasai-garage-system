@@ -1,22 +1,26 @@
 # System Data Map
 
-Last updated: 2026-10-19
+Last updated: 2026-10-20
 
 This file documents the practical business data currently handled by JalaSai, how that data is used, and how it behaves in local-first and cloud-sync mode.
 
 ## Current Runtime Sync State
 
-Current app/runtime behavior (2026-10-19):
+Current app/runtime behavior (2026-10-20):
 
 - shadow tables are the live source of truth
 - 10 shadow tables are mirrored on push; 9 are pulled into app state (job payments are derived)
 - on each phone, business tables live in IndexedDB `jalasai-data`; localStorage holds settings and is the fallback
 - `garage_sync_heartbeat` drives realtime multi-device updates
 - background sync interval is 5 minutes and falls back to stale-check pulls when realtime misses an event
-- once `supabase/2026-10-fast-sync-phase1.sql` is run:
+- `supabase/2026-10-fast-sync-phase1.sql` is live (run 2026-10-20):
   - downloads are changes-only by the server's clock (`server_updated_at`, deletes included);
   - a fresh phone loads newest first, then older history in the background;
+  - phones keep a rolling window of about one year of invoices (at most 20,000) plus every older invoice that still matters (money owing or advance, each customer's latest job, open jobs); older ones come from the cloud on demand;
+  - report totals for ranges a phone doesn't hold come from `garage_daily_totals`;
   - every overwritten or deleted cloud row is kept in `garage_row_history`
+- a phone more than 7 days behind (or without changes-only cursors) does one full catch-up pull on opening
+- built, waiting for their SQL: upload queue + server versions (Stage 2), money ledger (Stage 3), server invoice numbers (Stage 4), staff roles and statement links (Stage 6). See "2026-10 cloud tables" below
 - the `garage_state` blob and Apps Script backups were removed on 2026-06-12; backups are the Admin JSON download and the nightly GitHub Action
 - date-sensitive defaults now follow `Asia/Kolkata`
 
@@ -43,22 +47,40 @@ Business truth is entered by staff. The system stores it locally first, then syn
 
 ## Current Cloud Model
 
-JalaSai now uses shadow tables as the primary cloud storage:
+JalaSai uses shadow tables as the only cloud source of truth:
 
-- primary live sync: shadow-table mirror writes across 15 tables (`garage_customers`, `garage_jobs`, etc.)
-- primary pull path: 14 active tables are read back into app state (`jobPayments` stays derived)
-- legacy backup blob: `garage_state` JSON blob, maintained only when operators explicitly keep that path active
+- push mirrors 10 tables: `garage_customers`, `garage_jobs`, `garage_job_payments`, `garage_stock_items`, `garage_expenses`, `garage_income_entries`, `garage_parts_log`, `garage_audit_log`, `garage_stock_movements`, `garage_mechanics`
+- pull reads 9 of them back into app state (`jobPayments` is derived from jobs)
+- each row keeps the full record in `record_data` plus `updated_at`, `server_updated_at` (server clock, used by changes-only sync) and `deleted_at`
+- the `garage_state` blob, Apps Script and Drive backups were removed on 2026-06-12
 
 Safety rules:
 
-- shadow tables are the active source of truth for all read and write operations
-- push writes only changed rows to shadow tables (hash-based incremental upsert)
-- pull reads all active rows from shadow tables; falls back to blob if tables are empty or unreachable
-- missing rows are soft-deleted in shadow tables, not hard-deleted
-- the app runtime does not auto-write `garage_state`
-- Admin can manually copy the current table-synced dataset into `garage_state`
-- Apps Script can still write `garage_state` as an external fallback when configured
-- daily Drive backup reads from shadow tables at 10 PM IST; keeps last 30 days
+- push writes only changed rows (hash-based incremental upsert)
+- deletes are soft: the row gets `deleted_at` and is sent to other phones as a delete
+- a pull with no pending local edits replaces the local cache; partial or changes-only pulls always merge
+- a phone trims an old invoice from its own storage only after the cloud confirms the identical copy (`jalasai_record_hashes`); trimming never touches the cloud
+
+### 2026-10 cloud tables
+
+| Table | Made by | What it holds |
+|---|---|---|
+| `garage_row_history` | Phase 1 (live) | old version of every overwritten or deleted shadow row; written only by a trigger |
+| `garage_daily_totals` | Phase 1 (live) | one running total per day and metric (invoices, billed, discounts, revenue by method, manual income, expenses), kept current by triggers |
+| `garage_sync_conflicts` | Stage 2 | fields two phones changed at the same time, with both values |
+| `garage_applied_changes` | Stage 2 | ids of uploads already applied, so a retried upload is never applied twice |
+| `garage_ledger_entries` | Stage 3 | insert-only money ledger (charges, payments, advances, corrections), filled from jobs by a trigger |
+| `garage_invoice_series` / `garage_invoice_claims` | Stage 4 | next invoice number and which job got which number |
+| `garage_staff` | Stage 6 | owner / manager / mechanic by sign-in email |
+| `garage_statement_links` | Stage 6 | 30-day customer statement tokens |
+
+Shadow rows also gain a `version` column with Stage 2.
+
+### On the phone
+
+- IndexedDB `jalasai-data`, store `tables`: business tables in 64 groups per table (`jobs#00` … `jobs#63`, list order in `jobs@order`)
+- IndexedDB `jalasai-sync` (Stage 2): the upload queue
+- localStorage: settings, sync metadata, draft invoice counter; fallback for tables if IndexedDB fails
 
 ## Data Domains
 
@@ -433,6 +455,9 @@ Current protection metadata includes:
 - `deltaCursors`: per-table server-clock positions for changes-only pulls
 - `history`: progress of a fresh phone's background history download (`complete`, `jobsBefore`, `loadedInvoices`)
 - `serverTotals`: invoice count, billed, collected and highest invoice number from the server, used while history is incomplete
+- `window`: the rolling window (`from`, `contiguousFrom`, last trim time)
+- `staffRole`: this user's role after Stage 6 (`owner`, `manager`, `mechanic`)
+- `lastPullTiming` / sync timings: speed and mode of recent pulls, shown in Sync diagnostics
 
 Purpose:
 
@@ -447,7 +472,7 @@ The system now favors preservation over overwrite.
 Current practical rules:
 
 - records are merged by `id`
-- `updatedAt` helps choose newer record state
+- `updatedAt` helps choose newer record state; after Stage 2 the server `version` decides and clashing fields are merged one by one
 - local edits are not supposed to be replaced by a full stale snapshot from another device
 - background sync retries quietly
 - offline usage should continue locally

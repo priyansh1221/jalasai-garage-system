@@ -1,6 +1,11 @@
 # JalaSai long-term data roadmap: fast, safe, never lose a rupee
 
-Status (2026-10-20): Stage 0 is built (L1/L2 fixes live; R2 nightly export and restore script ready, waiting on R2 secrets). Stage 1 (speed, lakh scale) and Stage 2 (two-phone safety) are built and tested locally, not deployed; their SQL has not been run on live Supabase. Stages 3–7 are in progress.
+Status (2026-10-20):
+- **Stage 0** is built. The L1/L2 fixes and row history are live. The R2 nightly export and the restore script are ready, waiting on the R2 secrets.
+- **Stage 1** (speed, lakh scale) is **live**: deployed, and the Phase 1 SQL was run on live.
+- **Stages 2, 3, 4 and 6** are built and tested locally. Their app code is deployed but stays off until the owner runs each SQL file (order: `docs/ROLLOUT_2026_10.md`).
+- **Stage 5** is partly done: the rolling window, on-demand history and cloud search came with Stage 1. Slim list rows, server-paged customers and yearly partitions are not built yet; at today's size (about 13k invoices) they aren't needed.
+- **Stage 7** waits for a go / no-go.
 Date: 2026-10-19 · Companion to `docs/FAST_CLOUD_LOAD_PLAN_2026_10.md` (Stage 1 below)
 
 ## Rule #1: no data loss, ever
@@ -175,7 +180,7 @@ invoices first, older on demand, server totals. Background backfill stops at the
   and it's another service to pay for. **Decide with a 2-day spike** before
   starting Stage 2.
 
-#### Stage 2 status (2026-10-20): built, merged onto Stage 1, tested locally
+#### Stage 2 status (2026-10-20): built, merged onto Stage 1, tested locally; app deployed, SQL not run on live yet
 
 Built 2026-10-19, parked while Stage 1 landed, then merged on 2026-10-20:
 - Downloads all go through Stage 1's changes-only path. `applyChangedRecords`
@@ -249,7 +254,7 @@ Built our own engine (no build step, no new service). PowerSync was not tried.
   read-only for 2 releases.
 - *Pass:* 0 rupee difference on every customer and every day across all history.
 
-#### Stage 3 status (2026-10-20): built, tested locally — server-side ledger
+#### Stage 3 status (2026-10-20): built, tested locally — server-side ledger; app deployed, SQL not run on live yet
 
 Built as an **insert-only ledger on the server that follows the job records**,
 rather than rewriting the app's money model. Every invoice, payment, edit,
@@ -290,7 +295,7 @@ same guarantees without it:
 - First, check whether the garage is GST-registered. If not, keep the simple
   numbering but still issue numbers from the server.
 
-#### Stage 4 status (2026-10-20): built, tested locally (no GST)
+#### Stage 4 status (2026-10-20): built, tested locally (no GST); app deployed, SQL not run on live yet
 
 The garage isn't GST-registered, so numbers stay plain and keep counting from
 today's highest (e.g. 10564). `supabase/2026-10-invoice-numbers-stage4.sql`
@@ -340,7 +345,7 @@ today's highest (e.g. 10564). `supabase/2026-10-invoice-numbers-stage4.sql`
   device only).
 - Telugu labels; "lite mode" for cheap phones.
 
-#### Stage 6 status (2026-10-20): built, tested locally
+#### Stage 6 status (2026-10-20): built, tested locally; app deployed, SQL not run on live yet
 
 `supabase/2026-10-customer-features-stage6.sql` (needs Stage 3):
 - **Staff roles** (owner / manager / mechanic) in `garage_staff`. While the list
@@ -407,9 +412,14 @@ today's highest (e.g. 10564). `supabase/2026-10-invoice-numbers-stage4.sql`
 
 ## Decisions needed from the owner
 
-1. Start with **Stage 0 (safety fixes)** now, before the speed work?
-2. Is the garage **GST-registered**? (This decides the invoice number format.)
-3. Build our own sync engine (Stage 2), or try **PowerSync** first (adds a build
-   step and a monthly cost)?
-4. Where should nightly backups go: **Cloudflare R2** (same account as the site)
-   or Google Drive?
+Decided on 2026-10-20: Stage 0 first (done); **no GST** (plain running
+numbers); **build our own** sync engine; backups to **Cloudflare R2**; offline
+invoices get a **draft number, the real one later**.
+
+Still open:
+1. When to run the Stage 2, 3, 4 and 6 SQL (after a day of watching the phones
+   on changes-only sync).
+2. Merge the payment-date fix (payments counted by Indian date, branch
+   `claude/loving-leavitt-0cfc46`)?
+3. Labels in Gujarati or Hindi, and a lite mode for cheap phones?
+4. Stage 7 (many garages): go / no-go.

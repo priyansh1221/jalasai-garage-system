@@ -1,6 +1,6 @@
 # JalaSai Changelog
 
-> **Older copy.** The current, maintained version is [docs/CHANGELOG.md](docs/CHANGELOG.md) (updated 2026-10-19). This root file is kept for history only.
+> **Older copy.** The current, maintained version is [docs/CHANGELOG.md](docs/CHANGELOG.md) (updated 2026-10-20). This root file is kept for history only.
 
 Last updated: 2026-06-12
 

@@ -1,9 +1,10 @@
 # Rollout checklist — 2026-10 data, speed and safety work
 
-Everything below is built and tested locally on branch `ux-polish`. Nothing is
-deployed, and none of the SQL has been run on live Supabase. Each step is safe
-on its own and can stop there; the app detects what the server has and only
-switches on the matching features.
+Everything below is built and tested on branch `ux-polish`. As of 2026-10-20
+the app is deployed (steps 1–4 done) and only the Phase 1 SQL has been run on
+live Supabase; see the progress log. Each step is safe on its own and can stop
+there; the app detects what the server has and only switches on the matching
+features.
 
 Tested setups (two simulated phones, the real `js/` files, local Postgres):
 - **today's live server** (no new SQL): the new app syncs exactly as before;
@@ -21,6 +22,8 @@ Tested setups (two simulated phones, the real `js/` files, local Postgres):
 | 2026-10-20 | 4. Phase 1 SQL run on live | daily totals rebuilt: 1,902 rows; highest invoice 12747 |
 | 2026-10-20 | Bug found | an old phone stayed stuck at invoice 12076 even after refreshing (it last synced weeks ago). Fixed in commit "Old phones catch up by themselves…" (c145aa8). |
 | 2026-10-20 | Fix deployed (`ux-polish` 389e5e3, build jalasai-1792477571) | live site loads with the catch-up fix; payment-date fix still not included |
+| 2026-10-20 | Docs brought up to date and pushed to GitHub | — |
+| next | Old phone | reopen it once; it should show "Bringing this phone up to date with cloud..." and reach the newest invoice by itself (no Repair needed) |
 | next | Watch phones ~1 day | Sync diagnostics → "Changes only", Sync Now ≈ 1 s |
 | waiting | Payment-date fix (branch `claude/loving-leavitt-0cfc46`) | not merged yet, by choice; after merging, re-run its updated section of the Phase 1 SQL (it recomputes totals) |
 | waiting | 5. Stage 2 SQL | after the phones look good |

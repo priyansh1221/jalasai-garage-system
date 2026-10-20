@@ -1,6 +1,15 @@
 # JalaSai Project Architecture and Function Reference
 
-Last updated: 2026-10-19
+Last updated: 2026-10-20
+
+> **2026-10-20 update:**
+> - Live: the Phase 1 SQL was run; saves rewrite only the changed record's
+>   group in IndexedDB; rolling window with on-demand history; cloud report
+>   totals; old phones catch up on opening (`initGSSync`).
+> - Built, waiting for their SQL: `js/sync-outbox.js` (Stage 2 upload queue),
+>   ledger (Stage 3), server invoice numbers (Stage 4), staff roles and
+>   `statement.html` (Stage 6). Rollout: `docs/ROLLOUT_2026_10.md`.
+> - Function tables below include every new function.
 
 > **2026-10-19 update:**
 > - Business tables now live in IndexedDB. localStorage is only the fallback.
@@ -21,7 +30,7 @@ This document explains how the JalaSai Garage System is structured, how it works
 
 Scope notes:
 
-- Primary maintained runtime files are the root `index.html`, `style.css`, `sw.js`, `js/`, `NEW UI/index.html`, `NEW UI/style.css`, `supabase/schema.sql` and `supabase/2026-10-fast-sync-phase1.sql`. (`apps-script/` was removed on 2026-06-12.)
+- Primary maintained runtime files are the root `index.html`, `style.css`, `sw.js`, `js/`, `NEW UI/index.html`, `NEW UI/style.css`, `statement.html`, `supabase/schema.sql` and the `supabase/2026-10-*.sql` files. (`apps-script/` was removed on 2026-06-12.)
 - Both UI shells load the same root `js/` files. `deploy/` is generated output only and should not contain hand-maintained JS copies.
 - `js/new-ui.js` is New UI-specific shell code and is documented separately.
 - `js/vendor/supabase.js` and `js/vendor/lz-string.min.js` are third-party/minified dependencies, not JalaSai-owned functions.
@@ -68,9 +77,11 @@ The root page loads scripts in a global-script style. Modules share global array
 
 The app writes business changes to browser memory first, then to the device through `saveAll()`. Business tables (jobs, customers, stock and the rest) are stored in IndexedDB `jalasai-data`; localStorage keeps settings and counters, and is the fallback when IndexedDB can't open. This changed in 2026-10, because Safari's 5 MB localStorage cap silently dropped the jobs table on iPhones. The local data remains usable offline. `saveAll()` supports scoped domain saves for hot paths, updates counters/metadata, marks UI tabs stale, stores compressed local snapshots for full saves, and queues cloud sync.
 
-Invoice hot paths are paint-first. Completing/editing an invoice, creating a quick invoice, saving a quick job-card, and recording invoice payment all update in-memory state immediately, close the modal, mark related pages stale, then defer the blocking scoped `saveAll()` call until after the browser has had a chance to paint. This keeps mobile saves feeling responsive while still using localStorage as the durable local write path and queued Supabase sync as the cloud write path.
+Invoice hot paths are paint-first. Completing/editing an invoice, creating a quick invoice, saving a quick job-card, and recording invoice payment all update in-memory state immediately, close the modal, mark related pages stale, then defer the blocking scoped `saveAll()` call until after the browser has had a chance to paint. This keeps mobile saves feeling responsive while still using IndexedDB as the durable local write path and queued Supabase sync as the cloud write path.
 
 Main local storage keys are declared in `SK` inside `js/data.js`.
+
+Since 2026-10-20, id-keyed tables are stored in 64 groups (`jobs#00` … `jobs#63`, order in `jobs@order`). A save that names its records (`saveAll({ changed: { jobs: [id] } })`) rewrites only their groups; any other save rewrites the table. A full re-save runs within a minute of grouped saves and whenever the app is hidden.
 
 ### Cloud Sync Layer
 
@@ -87,6 +98,13 @@ Pulls come in three kinds:
 - **Full pull:** reads every live row of the shadow tables and merges it into the local arrays.
 - **Changes-only pull (2026-10):** once `supabase/2026-10-fast-sync-phase1.sql` is run, phones call `jalasai_changes_since()`. It returns every row changed since each table's server-clock cursor (`server_updated_at`), deletes included, in one request. Only those records are merged in.
 - **Newest first (fresh phone):** a phone with no invoices loads open jobs and recent invoices first (`jalasai_recent_jobs`). It then downloads older history in the background (`jalasai_jobs_before`, newest first). While that runs, header totals and the next invoice number use server values, and full mirrors and balance uploads wait.
+- **Catch-up (old phone):** on opening, a phone without changes-only cursors or more than 7 days behind does one full pull, which also sets the cursors. The short reconnect sweep restores `lastPulledAt` if it stopped early, so it can never mark a phone as up to date when it isn't.
+
+Every download is merged through `applyChangedRecords`, which is also where the Stage 2 queue protects records still waiting to upload.
+
+**Rolling window (lakh scale):** phones keep about a year of invoices (`jalasai_window_from`) plus every record that still matters locally (`rollingJobKeepSet`). `trimToRollingWindow` drops older ones only after `jalasai_record_hashes` confirms the cloud copy. Older invoices come back on demand (`loadOlderInvoices`, `queueServerInvoiceSearch`, `fetchCustomerJobsFromServer`). Reports use `serverReportSummary` for ranges the phone doesn't hold.
+
+**Stage 2 upload queue (`js/sync-outbox.js`):** when the server has `jalasai_apply_changes`, each changed record is queued in IndexedDB `jalasai-sync` with its base `version` and sent with a stable change id; the server merges clashing fields and logs them in `garage_sync_conflicts`.
 
 The `garage_state` blob was removed on 2026-06-12.
 
@@ -102,12 +120,20 @@ Realtime sync is driven by `garage_sync_heartbeat`. After a successful push, the
 - RLS policies for authenticated access,
 - storage bucket/policies for `job-photos`.
 
-`supabase/2026-10-fast-sync-phase1.sql` (additive; **not yet run on live**) adds:
+`supabase/2026-10-fast-sync-phase1.sql` (additive; **run on live 2026-10-20**) adds:
 - the `server_updated_at` server-clock column and trigger, with a `(server_updated_at, id)` index;
 - the `garage_row_history` table, which keeps every overwritten or deleted row;
 - newest-first indexes;
 - the `jalasai_invoice_totals` and `jalasai_max_invoice_no` functions and the `garage_customer_balances` view;
-- the `jalasai_changes_since`, `jalasai_recent_jobs` and `jalasai_jobs_before` functions.
+- the `jalasai_changes_since`, `jalasai_recent_jobs` and `jalasai_jobs_before` functions;
+- `garage_daily_totals` with its triggers, `jalasai_report_summary` and `jalasai_rebuild_daily_totals` (§G);
+- the rolling window and on-demand history: `jalasai_window_from`, `jalasai_jobs_keep`, `jalasai_customer_jobs`, `jalasai_search_jobs` (trigram index), `jalasai_record_hashes` (§H).
+
+Later files, built and tested, not run on live yet (order in `docs/DEPLOYMENT.md`):
+- `2026-10-sync-v2-stage2.sql`: `version` columns, `jalasai_apply_changes`, `jalasai_sync_v2_info`, `garage_applied_changes`, `garage_sync_conflicts`;
+- `2026-10-ledger-stage3.sql`: `garage_ledger_entries` (insert-only, trigger from jobs), `garage_ledger_balances`, `jalasai_ledger_reconcile`, `jalasai_customer_statement`;
+- `2026-10-invoice-numbers-stage4.sql`: `garage_invoice_series`, `garage_invoice_claims`, `jalasai_claim_invoice_no`, `jalasai_invoice_no_taken`;
+- `2026-10-customer-features-stage6.sql`: `garage_staff`, `jalasai_my_role`, `jalasai_claim_owner`, `jalasai_set_staff_role`, role-based RLS, `garage_statement_links`, `jalasai_create_statement_link`, `jalasai_revoke_statement_links`, `jalasai_statement_by_token` (anon).
 
 ### PWA Layer
 
@@ -158,14 +184,18 @@ Realtime sync is driven by `garage_sync_heartbeat`. After a successful push, the
 | `js/reminders.js` | Unified reminders tab. |
 | `js/mechanics.js` | Mechanics CRUD and period metrics. |
 | `js/expenses.js` | Expenses and manual income pages. |
-| `js/reports.js` | Business analytics, logs, closing summary, AI prompt drafting. |
+| `js/reports.js` | Business analytics, logs, closing summary, daily close, AI prompt drafting. |
+| `js/sync.js` | Cloud auth, push/pull, changes-only sync, history download, rolling window, cloud totals, invoice-number claims, staff roles, statement links. |
+| `js/sync-outbox.js` | Stage 2 upload queue and server versions. |
+| `js/shell.js` | Shell helpers shared by both UIs (invoice completion, invoice list, photos). |
+| `statement.html` | Public customer statement page (token link, no sign-in). |
 | `js/scanner.js` | QR/SKU scanner via BarcodeDetector, ZXing, or jsQR fallback. |
 | `js/print.js` | QR sticker sheet and invoice print/share. |
 | `js/qrgen.js` | QR library loaded by printing/scanning flows; no project-owned named functions. |
 | `deploy.sh` | Generates `deploy/`, copies runtime assets/config, injects cache-busting timestamps, and deploys generated output with Wrangler. |
 | `supabase/schema.sql` | Database tables, indexes, RLS, storage bucket, helper SQL function. |
-| `apps-script/JalaSaiSync.gs` | Optional Google Sheet JSON snapshot sync. |
-| `apps-script/JalaSaiDriveBackup.gs` | Optional Supabase shadow-table backup to Google Drive/blob. |
+| `supabase/2026-10-*.sql` | Additive 2026-10 server features (fast sync, Stages 2, 3, 4, 6). |
+| `scripts/supabase-backup.mjs` / `scripts/supabase-restore.mjs` | Nightly dump (private repo + R2) and restore (`--check`, `--insert-missing`, `--overwrite`). |
 | `js/new-ui.js` | New UI shell routing, sidebar, home dashboard. |
 
 ## 6. Function Reference
@@ -389,6 +419,17 @@ Realtime sync is driven by `garage_sync_heartbeat`. After a successful push, the
 | `isKnownNonJobRecordId / isCustomerShapedJobPollution / isAuditShapedJobPollution` | Pieces of `isNonWorkshopJobRecord`. Its result is stored on each job as `_nonWorkshop` by `normalizeJob`. |
 | `revenueEntriesForDate(date)` | Revenue entries for one date, expanding only jobs that can have a payment that day. |
 | `revenueCacheKey / buildRevenueEntries` | `allRevenueEntries` is built once per data version and cached. |
+| `tableIsBucketable(key)` | True for id-keyed tables stored in 64 groups in IndexedDB. |
+| `dataBucketKey(key, bucket)` | IndexedDB key of one group, e.g. `jobs#07`. |
+| `dataBucketOf(recordKey)` | Which of the 64 groups a record key falls in (stable hash, cached by key). |
+| `recordBucket(access, record)` | Group of a record, using the table's key function. |
+| `assembleBucketedRows(buckets, order)` | Rebuilds a table from its groups in the saved list order (`<table>@order`). |
+| `queueFullResaveOfPartialTables(force)` | Safety net: rewrites tables that only had grouped saves, within a minute and when the app is hidden. |
+| `isDraftInvoiceNo(value)` | True for offline draft numbers `D-<device>-<n>` (Stage 4). |
+| `serverIssuesInvoiceNumbers()` | True when the server hands out invoice numbers (Stage 4 SQL present). |
+| `nextDraftInvoiceNo()` | Next draft number for this phone, from a counter in localStorage. |
+| `invoiceNoPrefill()` | What the invoice-number box starts with: empty ("Auto") when the server issues numbers, else the old suggestion. |
+| `applyInvoiceNoField(el, value)` | Fills an invoice-number box and sets its "Auto" placeholder. |
 
 ### `js/utils.js`
 
@@ -818,6 +859,17 @@ Realtime sync is driven by `garage_sync_heartbeat`. After a successful push, the
 | `filterLogsEntity(value)` | Updates log entity filter. |
 | `sendClosingSummary()` | Builds and opens WhatsApp closing summary. |
 | `aiDraftClosingSummary()` | Opens AI prompt for a closing summary draft. |
+| `auditLogKey(log)` | Identity of an audit entry, for de-duplication. |
+| `auditLogStamp(log)` | Time of an audit entry in ms. |
+| `mergeAuditLogs(...lists)` | Merges local and cloud audit logs without duplicates, newest first. |
+| `lastDailyCloseEntry()` | The most recent daily close in the audit log. |
+| `dailyCloseNumbers(day)` | Opening cash, cash taken and expenses for the day, for the close form. |
+| `ensureDailyCloseModal()` | Builds the `m-daily-close` modal once (made in JS, so both UIs get it). |
+| `dailyCloseExpected()` | Expected cash in the drawer from the form fields. |
+| `updateDailyCloseDiff()` | Shows short / extra as the counted cash is typed. |
+| `openDailyClose()` | Opens "Close the day" (admin only). |
+| `saveDailyClose()` | Saves the close: a difference becomes a "Cash difference" expense or income, plus an audit entry. |
+| `invoiceLedgerCheckLine(invoices)` | First / last invoice number and count for the period, to check against the paper invoice book. |
 
 ### `js/scanner.js`
 
@@ -877,6 +929,8 @@ Realtime sync is driven by `garage_sync_heartbeat`. After a successful push, the
 | `shareInvoiceWA()` | Shares current invoice via WhatsApp. |
 | `openInvoice(id, options)` | Opens invoice modal, builds invoice view, totals, parts, customer, and print/share actions. |
 | `printInvoice()` | Prints the currently opened invoice. |
+| `drawStickerQR(canvas, payload, size)` | Draws a sticker QR with the offline `QRGen` encoder; false if it failed. |
+| `stickerCanvasHasQRData(canvas)` | Checks the canvas actually has QR pixels. |
 
 ### `js/sync.js`
 
@@ -1007,6 +1061,62 @@ Realtime sync is driven by `garage_sync_heartbeat`. After a successful push, the
 | `loadNewestFirst(client)` | Fresh phone first screen: open jobs, this month / last 30 days of invoices, customers, mechanics and stock. Then starts the history download. |
 | `scheduleHistoryBackfill / historyBackfillYield / runHistoryBackfill` | Background download of older invoices (newest first, 500 per page), then expenses, income and logs. Resumes after a restart. |
 | `historyLoadingNoteHtml()` | The "Loading older invoices… x / y" note on Invoices, Customers and Reports. |
+| `localHistoryPartial()` | True when this phone doesn't hold all history (still downloading, or trimmed to the rolling window). |
+| `refreshRollingWindow(client)` | Asks the server where the window starts (`jalasai_window_from`: 365 days or 20,000 invoices). |
+| `rollingCustomerKey(job)` | Customer key used to keep each customer's latest job. |
+| `rollingJobKeepSet(list)` | Jobs that stay on the phone however old: money owing or advance, each customer's latest, open, unsaved. |
+| `rollingTrimCandidates(key, from)` | Records of a table older than the window edge that may be trimmed. |
+| `trimToRollingWindow(options)` | Removes old records from this phone only after `jalasai_record_hashes` confirms the cloud holds the identical copy; refuses while changes wait to upload. |
+| `scheduleRollingTrim(delayMs)` | Runs the trim later, at most every 12 hours. |
+| `mergeServerJobRows(rows)` | Adds older jobs fetched on demand without marking anything for upload. |
+| `oldestLocalInvoiceCursor()` | Where "Load older invoices" continues from (`syncMeta.window.contiguousFrom`). |
+| `loadOlderInvoices()` | Fetches the next 500 older invoices from the cloud (`jalasai_jobs_before`). |
+| `queueServerInvoiceSearch(query)` | Debounced cloud search (`jalasai_search_jobs`) for invoices the phone doesn't hold. |
+| `renderOlderInvoicesFooter(searchQuery)` | "Load older invoices" / cloud search results under the Invoices list. |
+| `fetchCustomerJobsFromServer(customer)` | A customer's full history from the cloud when the customer is opened (`jalasai_customer_jobs`). |
+| `checkInvoiceSeriesServer(client, options)` | Detects Stage 4 (server invoice numbers); rechecks every 6 hours. |
+| `claimPendingInvoiceNumbers()` | Swaps offline draft numbers for real ones (`jalasai_claim_invoice_no`), oldest draft first. |
+| `warnIfInvoiceNoTakenInCloud(invoiceNo, jobId)` | Warns when a typed number is already used in the cloud (`jalasai_invoice_no_taken`). |
+| `refreshStaffRole(client)` | Reads this user's role (`jalasai_my_role`) into `syncMeta.staffRole`. |
+| `staffFeaturesReady()` | True when the Stage 6 SQL is present. |
+| `renderStaffRolesCard()` | Admin → Staff roles card. |
+| `claimStaffOwner()` | "Make me the owner" (`jalasai_claim_owner`); only works while there is no owner. |
+| `saveStaffRole()` | Owner sets a staff member's role by sign-in email (`jalasai_set_staff_role`). |
+| `createStatementLink(customer, days)` | Makes a 30-day statement link (`jalasai_create_statement_link`) and returns `/statement.html?t=…`. |
+| `openWhatsAppWithStatement(customer, message)` | Opens WhatsApp inside the tap, then adds the statement link to the message. |
+| `shareCustomerStatement(id)` | Customers → Share statement. |
+| `localReportCoverageStart()` | First date the phone fully holds for reports (history download, window edge). |
+| `businessDateAfter(date, days)` | Adds days to a `YYYY-MM-DD` date. |
+| `reportRangeNeedsServer(span)` | True when a report range starts before what the phone holds. |
+| `serverReportSummary(span)` | Cloud headline totals for a range (`jalasai_report_summary`), cached 2 minutes; re-renders Reports when they arrive. |
+| `normaliseServerReport(data)` | Shapes the server totals like the local report numbers. |
+
+### `js/sync-outbox.js`
+
+Stage 2 upload queue and server versions (switched on by `supabase/2026-10-sync-v2-stage2.sql`).
+
+| Function | Details |
+| --- | --- |
+| `syncV2Active() / syncV2ServerMode()` | Whether the Stage 2 upload queue is on (server has `jalasai_apply_changes`). |
+| `openSyncV2Db() / syncV2Tx(stores, mode, work)` | IndexedDB `jalasai-sync` (queue + known server versions). |
+| `loadSyncV2State() / syncV2FlushKv() / syncV2ScheduleKvSave()` | Loads and saves the queue state. |
+| `syncV2NewEntry(tableKey, id, record) / syncV2PutEntries / syncV2DeleteEntries` | Queue entries: one per changed record, with the version it was based on. |
+| `captureSyncV2Changes() / captureSyncV2Ids(idsByTable) / captureSyncV2Now(tableKeys) / scheduleSyncV2Capture()` | After a save, compares fingerprints and queues the records that changed. |
+| `syncV2PendingIds(tableKey)` | Ids still waiting to upload; downloads skip them so a pending edit is never overwritten. |
+| `syncV2AdoptRemote(tableKeys, idsByTable)` | Takes downloaded records as the new base (called from `applyChangedRecords`). |
+| `syncV2NoteVersion / syncV2NoteRowVersions` | Remembers server versions seen in downloads. |
+| `checkSyncV2Server(client, options)` | Detects the Stage 2 SQL; rechecks every 6 hours. |
+| `syncV2BuildRows / syncV2ChangeId / syncV2DerivedPaymentChanges` | Builds the upload: rows, a stable change id (so a retry is applied once), derived payment rows. |
+| `pushSyncV2Outbox(client, session)` | Sends the queue in batches to `jalasai_apply_changes`; clashes are merged field by field on the server. |
+| `syncV2ApplyServerResult(entry, result, changedTables)` | Applies the server's answer (new version, merged record) and clears the entry. |
+| `pushSyncV2OutboxLegacy(client, session)` | Fallback upload when the server lacks Stage 2. |
+| `syncV2RecordStatus / syncStatusBadgeHtml` | "Waiting to upload" badge on a record. |
+| `syncV2DiagnosticsRows()` | Upload-queue rows in Sync diagnostics. |
+| `clearSyncV2Store()` | Empties the queue on Disconnect (only after it has uploaded). |
+
+### `statement.html`
+
+Public customer statement page (no sign-in). Reads `t` from the URL, calls `jalasai_statement_by_token` with the anon key from `/config.js`, and shows the balance, last year's entries, `Pay by UPI`, `Save as PDF` and `Call garage`.
 
 ### `js/qrgen.js`
 
@@ -1093,8 +1203,12 @@ No functions are declared. It assigns `window.JALASAI_CLOUD_CONFIG` with Supabas
 
 - Customer matching: change carefully. `customerMatchesJob()`, `bestCustomerForJob()`, and `tidyCustomerRecords()` prevent imported/opening-balance records from attaching to the wrong customer.
 - Sync/tombstones: `SHADOW_INFER_DELETES` is disabled to avoid stale-device accidental deletes. Do not infer remote deletes from missing local rows without a fresh pull strategy. This matters even more with newest-first loading, where a phone legitimately holds only part of the history.
-- Partial history: while `historyIncomplete()` is true, nothing may compute and upload all-history values (customer balances, full mirror) or run the customer-linking maintenance.
-- Invoice numbers: duplicate checks are split between `jobs.js` strict matching and `index.html` invoice display matching.
+- Partial history: while `historyIncomplete()` or `localHistoryPartial()` is true (history still downloading, or trimmed to the rolling window), nothing may compute and upload all-history values (customer balances, full mirror) or merge duplicate customers.
+- Downloads: every cloud row must be merged through `applyChangedRecords`; a new download path that writes the arrays directly would bypass the Stage 2 protection of records still waiting to upload.
+- Grouped saves: a save that changes records must either name them (`changed: { table: [ids] }`) or do a full table save. Saves that touch other records too (applying an advance across jobs) stay full saves.
+- Sync cursors: never move `lastPulledAt` or the changes-only cursors forward unless the pull really covered that time; a cursor moved too early leaves a phone stuck (the 2026-10-20 old-phone bug).
+- Rolling trim: only drop a local record after the cloud hash matches and nothing is waiting to upload.
+- Invoice numbers: duplicate checks are split between `jobs.js` strict matching and `index.html` invoice display matching; a phone without full history also asks the cloud (`warnIfInvoiceNoTakenInCloud`). With Stage 4 the server issues numbers and drafts (`D-…`) must never be printed as final.
 - Payments: payment history, legacy `payment` fields, due/advance calculations, and manual income are related but intentionally separate.
 - Stock imports: catalog review and agent JSON import can update live inventory, purchase records, supplier maps, and stock movements.
 - Inline helper duplication: `index.html` duplicates `getPhotoPreviewList()` and `photoGalleryMarkup()` identically; browser hoisting leaves the later definition active.

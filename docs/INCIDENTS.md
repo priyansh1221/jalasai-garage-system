@@ -4,6 +4,12 @@ This file keeps operational incidents easy to find without mixing them into norm
 
 ## 2026
 
+- Old phone stuck at an old invoice - 2026-10-20
+  - A phone that hadn't synced for weeks stayed at invoice 12076, even after refreshing, while the cloud had 12747.
+  - The short reconnect sweep only asks for recent changes and caps them, but it still moved the phone's "last synced" time forward. After that the phone believed it was up to date, and changes-only sync never started because it had no cursors yet.
+  - Fixed (c145aa8, deployed as build `jalasai-1792477571`): a phone without changes-only cursors, or more than 7 days behind, does one full catch-up pull on opening, and the sweep never moves "last synced" forward when it stopped early.
+  - Immediate workaround on an affected phone: Cloud Sync → Sync diagnostics → "Repair: re-download everything".
+  - See `docs/CHANGELOG.md` (2026-10-20) and `docs/ROLLOUT_2026_10.md`.
 - Invoices vanishing on iPhones - 2026-10-19
   - Safari caps localStorage at 5 MB and counts compressed text double.
   - Once the jobs list outgrew that, saves failed silently. After a reload the phone had no invoices, and because customers and stock still loaded, it never downloaded them again.

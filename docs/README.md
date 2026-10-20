@@ -66,6 +66,8 @@ Vanilla JS | Local-first architecture | Supabase cloud sync | PWA-ready | Real w
 - PWA-ready static frontend with local resilience
 - Supabase-backed multi-device sync, photo storage, and shadow table dataset validation
 - Old and new UI modes in one deploy package, sharing the same local cache and Supabase backend
+- `Close the day` cash count in Reports, UPI ID in Garage profile
+- Customer statement links with `Pay by UPI` (after the Stage 6 SQL)
 
 ## Current Runtime Sync Model
 
@@ -74,14 +76,16 @@ Current app behavior:
 - shadow-table sync is the live cloud path
 - 10 shadow tables are mirrored on push; 9 are pulled back into app state (job payments are derived)
 - business data on each phone lives in IndexedDB (2026-10; localStorage is the fallback)
-- with `supabase/2026-10-fast-sync-phase1.sql` run, downloads are changes-only by the server's clock (deletes included), and a fresh phone loads newest first, then the older history in the background
+- `supabase/2026-10-fast-sync-phase1.sql` is live (2026-10-20): downloads are changes-only by the server's clock (deletes included), a fresh phone loads newest first, then older history in the background, and a phone that missed sync for a week catches up by itself on opening
+- built for lakhs of invoices: phones keep about a year of invoices (plus anything still owing), older ones load on demand (`Load older invoices`, cloud search, customer history), and Reports use cloud daily totals for ranges the phone doesn't hold
+- built and waiting for their SQL: two-phone safety (upload queue + server versions), insert-only money ledger, server-issued invoice numbers with offline drafts, staff roles and customer statement links (order and checks: `docs/ROLLOUT_2026_10.md`)
 - devices subscribe to `garage_sync_heartbeat` for realtime multi-device updates
 - background sync keeps local backup fresh and falls back to heartbeat checks every 5 minutes when realtime misses an event
 - normal saves upload only rows changed around the pending local edit, so invoice/job updates do not rescan every cloud table
 - `Sync Now` pulls latest cloud changes first, then pushes only if this device still has pending local changes; a full re-download is `Repair` in Sync diagnostics
 - devices that have not pulled for more than 7 days refresh from cloud before upload; startup renders local data first when available and only blocks empty devices for first cloud hydration
 - if there are no pending local edits, a pull replaces the local business cache so stale records are removed automatically
-- backups: Admin exposes a one-tap full JSON download; an optional GitHub Action dumps all Supabase tables nightly to a private repository
+- backups: Admin exposes a one-tap full JSON download; a GitHub Action dumps all Supabase tables nightly to a private repository and to Cloudflare R2 (30 daily + 12 monthly copies, once its secrets are set); `scripts/supabase-restore.mjs` restores them
 - sync table reads avoid tombstoned rows where possible, and empty-local-device safety pulls before pushing
 - old/new UI switching keeps local data backed up first, then lets cloud sync continue in the background
 
@@ -105,6 +109,10 @@ Current app behavior:
 - Implementation details: [IMPLEMENTATION.md](/Users/priyansh/Projects/JalaSai/docs/IMPLEMENTATION.md)
 - Improvements and evolution: [IMPROVEMENTS.md](/Users/priyansh/Projects/JalaSai/docs/IMPROVEMENTS.md)
 - Security policy: [SECURITY.md](/Users/priyansh/Projects/JalaSai/docs/SECURITY.md)
+- 2026-10 rollout steps and progress log: [ROLLOUT_2026_10.md](/Users/priyansh/Projects/JalaSai/docs/ROLLOUT_2026_10.md)
+- Long-term data roadmap (Stages 0–7): [LONG_TERM_DATA_ROADMAP_2026_10.md](/Users/priyansh/Projects/JalaSai/docs/LONG_TERM_DATA_ROADMAP_2026_10.md)
+- Fast cloud load plan (Stage 1): [FAST_CLOUD_LOAD_PLAN_2026_10.md](/Users/priyansh/Projects/JalaSai/docs/FAST_CLOUD_LOAD_PLAN_2026_10.md)
+- Function reference: [ARCHITECTURE_AND_FUNCTION_REFERENCE.md](/Users/priyansh/Projects/JalaSai/docs/ARCHITECTURE_AND_FUNCTION_REFERENCE.md)
 
 ## Social Preview Asset
 
@@ -126,8 +134,8 @@ Designed social preview image for repository branding:
 2. Open project root in VS Code.
 3. Review `js/cloud-config.js` for the target deployment model.
    The current deployment supports built-in project config, but a fresh deploy can still be pointed at a different Supabase project.
-4. Run `supabase/schema.sql`.
-   This sets up the live shadow-table sync path plus the optional legacy backup row/table path.
+4. Run `supabase/schema.sql`, then the 2026-10 SQL files in the order given in `docs/DEPLOYMENT.md`.
+   This sets up the live shadow-table sync path, changes-only sync and the 2026-10 features.
 5. Serve as static files using any static host/local server.
 
 If any key was previously exposed, rotate it at provider level before publishing.

@@ -1,6 +1,6 @@
 # Implementation Overview
 
-Last updated: 2026-10-19
+Last updated: 2026-10-20
 
 Related references:
 
@@ -31,7 +31,9 @@ Core design decisions:
 
 - Local cache/state management in `js/data.js`
 - Cloud auth and sync logic in `js/sync.js`
-- Supabase schema and table setup in `supabase/schema.sql`
+- Upload queue and server versions (Stage 2) in `js/sync-outbox.js`
+- Supabase schema and table setup in `supabase/schema.sql`, plus the additive 2026-10 files in `supabase/` (order in `docs/DEPLOYMENT.md`)
+- Public customer statement page: `statement.html` (no sign-in; reads one customer by token)
 
 Current sync safety model:
 - shadow tables (`garage_customers`, `garage_jobs`, etc.) are the live source of truth
@@ -44,12 +46,23 @@ Current sync safety model:
   - business tables are stored in IndexedDB `jalasai-data`, with localStorage as the fallback;
   - Disconnect never wipes unsynced changes;
   - a failing device save shows a red banner
-- 2026-10, once `supabase/2026-10-fast-sync-phase1.sql` is run:
+- 2026-10, with `supabase/2026-10-fast-sync-phase1.sql` (live since 2026-10-20):
   - `jalasai_changes_since()` replaces the device-clock delta with per-table server-clock cursors (deletes included, one request);
+  - every download goes through `applyChangedRecords`, the one place where cloud rows are merged in;
   - a fresh phone loads newest first, then downloads older history in the background (`syncMeta.history`);
+  - on opening, a phone without cursors or more than 7 days behind does one full catch-up pull (`initGSSync`); the short reconnect sweep never moves `lastPulledAt` forward when it stopped early;
+  - saves name the records they changed (`saveAll({ changed: { jobs: [id] } })`) and rewrite only that record's group of 64 in IndexedDB; a full re-save runs within a minute and when the app is hidden;
+  - rolling window: `trimToRollingWindow` keeps about a year (`jalasai_window_from`) plus `rollingJobKeepSet` and drops a record only when `jalasai_record_hashes` matches; `loadOlderInvoices`, `queueServerInvoiceSearch` and `fetchCustomerJobsFromServer` bring older ones back;
+  - Reports use `serverReportSummary` (`jalasai_report_summary` over `garage_daily_totals`) for ranges outside `localReportCoverageStart`;
   - see `docs/FAST_CLOUD_LOAD_PLAN_2026_10.md`
+- 2026-10, built and switched on by their SQL (not run on live yet):
+  - Stage 2: every save is queued in IndexedDB `jalasai-sync` with its base `version`; `jalasai_apply_changes` applies it once (`garage_applied_changes`) and merges clashing fields into `garage_sync_conflicts`;
+  - Stage 3: `garage_ledger_entries` is filled from jobs by a trigger; `jalasai_ledger_reconcile` must return no rows;
+  - Stage 4: `jalasai_claim_invoice_no` hands out numbers; offline saves get `D-<device>-<n>` drafts that `claimPendingInvoiceNumbers` swaps for real numbers;
+  - Stage 6: `garage_staff` roles (`refreshStaffRole`, `isAdminUser`), statement links (`createStatementLink`, `jalasai_statement_by_token`);
+  - the app checks for each server feature on start and every 6 hours, so running a SQL file needs no app deploy
 - payments arrays are unioned across both copies of a job during merge so concurrent payments are never lost
-- backups: Admin one-tap JSON download plus the optional nightly GitHub Action (`.github/workflows/nightly-backup.yml`)
+- backups: Admin one-tap JSON download plus the nightly GitHub Action (`.github/workflows/nightly-backup.yml`) to a private repo and Cloudflare R2; `scripts/supabase-restore.mjs` checks, adds missing rows, or overwrites a scratch project
 - `SHADOW_PULL_TABLES` in sync.js lists the 9 pullable tables (excludes derived `jobPayments`)
 
 Background sync behavior:
@@ -88,7 +101,8 @@ Render performance model:
 ### Operational Extensions
 
 - Shared shell runtime for both UIs in `js/shell.js` (extracted 2026-06-12)
-- Nightly Supabase backup workflow in `.github/workflows/nightly-backup.yml` + `scripts/supabase-backup.mjs`
+- Nightly Supabase backup workflow in `.github/workflows/nightly-backup.yml` + `scripts/supabase-backup.mjs` (private repo + Cloudflare R2), restore with `scripts/supabase-restore.mjs`
+- Daily close (`openDailyClose` / `saveDailyClose` in `js/reports.js`) records cash differences as expense or income
 - Catalog preparation scripts in `tools/` (offline tooling only)
 
 ## Key Implemented Workflows

@@ -1,6 +1,6 @@
 # Improvements and Evolution
 
-Last updated: 2026-05-08
+Last updated: 2026-10-20
 
 This document summarizes major improvements made to move JalaSai from a basic tracker to an operationally reliable garage workflow system.
 
@@ -75,7 +75,15 @@ This document summarizes major improvements made to move JalaSai from a basic tr
 - Locked `Print QR` back to the Admin-only path so non-admin users cannot route around access controls
 - Reduced tab-switch lag by reusing customer/job summary indexes in Customers and Reminders
 - Reduced invoice render work by indexing linked income once per render
-- Bumped the PWA service-worker cache to `jalasai-v20`
+- Bumped the PWA service-worker cache to `jalasai-v20` (since 2026-06 the cache name is stamped with the build time on every deploy)
+- 2026-10: business data moved to IndexedDB, so iPhones no longer lose invoices when localStorage fills up; a failed device save shows a red banner
+- 2026-10: Disconnect never wipes changes that haven't uploaded
+- 2026-10: screens up to 100× faster at 1 lakh invoices; changes-only sync (Sync Now ≈ 1 s); newest-first loading for new phones; saving one invoice rewrites one small group instead of the whole table
+- 2026-10: built for lakhs of invoices: phones keep about a year, older invoices load on demand, Reports use cloud daily totals
+- 2026-10: old phones catch up by themselves after missing sync for weeks
+- 2026-10: every cloud edit or delete keeps the old version (`garage_row_history`); nightly backups to Cloudflare R2 with a restore script
+- 2026-10, waiting for their SQL: two-phone safety (upload queue + server versions), insert-only money ledger, server-issued invoice numbers, staff roles, customer statement links with Pay by UPI
+- 2026-10: Close the day (cash count) in Reports
 
 ## Continuous Improvement Pattern Used
 

@@ -1,8 +1,10 @@
 # Fast cloud load plan — newest first, older on demand, delta sync
 
-Status (2026-10-20): **all phases built and tested locally** (0, 2, 3, 4, 5,
-6 and on-demand history) on `ux-polish`. Not deployed; the SQL has not been run
-on live Supabase. Rollout order: `docs/ROLLOUT_2026_10.md`.
+Status (2026-10-20): **all phases built and live.** The app was deployed from
+`ux-polish` and the owner ran `supabase/2026-10-fast-sync-phase1.sql` on live
+Supabase, which switches on Phases 2, 4, 5 and 6 (Phase 3 needs no SQL). A
+follow-up fix the same day makes phones that missed sync for weeks catch up by
+themselves. Progress log: `docs/ROLLOUT_2026_10.md`.
 
 ### Build status (2026-10-19)
 
@@ -114,9 +116,19 @@ Postgres.
   copy differs, deletes nothing in the cloud, and survives a restart; records a
   phone downloaded trim just like its own (fingerprints match).
 
-**Not built yet (still planned):**
-- A duplicate invoice-number check against history that hasn't downloaded yet
-  (roadmap Stage 4, server-issued numbers, replaces it).
+**Old-phone catch-up (2026-10-20, deployed):**
+- A phone that last synced weeks ago stayed stuck at an old invoice: the short
+  reconnect sweep asked only for recent changes and still moved "last synced"
+  forward.
+- Now a phone without changes-only cursors, or more than 7 days behind, does one
+  full catch-up pull on opening, and the sweep never moves "last synced"
+  forward when it stopped early.
+- Tested: an old phone with 300 of 600 invoices reaches 600 on reopening, then
+  gets new invoices changes-only.
+
+**Since built:** a cloud check for duplicate invoice numbers on phones without
+full history (`warnIfInvoiceNoTakenInCloud`), and server-issued numbers (roadmap
+Stage 4, waiting for its SQL).
 Date: 2026-10-19 · Branch at time of writing: `ux-polish`
 Part of the long-term roadmap: this plan is **Stage 1** of
 `docs/LONG_TERM_DATA_ROADMAP_2026_10.md`. Stage 0 (data-loss safety net) should

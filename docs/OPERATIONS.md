@@ -1,6 +1,6 @@
 # JalaSai Garage System — Operations Guide
 
-Last updated: 2026-10-19
+Last updated: 2026-10-20
 
 Project history and implementation journey:
 - [PROJECT_HISTORY.md](/Users/priyansh/Projects/JalaSai/docs/PROJECT_HISTORY.md)
@@ -138,7 +138,12 @@ Buttons:
 - Quick Invoice suggests the next invoice number
 - Mark Done / Edit Invoice suggests the next invoice number for new invoices
 - manual override is allowed
-- duplicate numbers warn before save
+- duplicate numbers warn before save; on a phone without full history the check also asks the cloud ("already used in the cloud")
+- after `supabase/2026-10-invoice-numbers-stage4.sql` is run (roadmap Stage 4):
+  - the number box shows "Auto" and the server hands out the next number when the invoice is saved, so two phones can't take the same number;
+  - an invoice saved while offline gets a draft number like `D-3F2A-4`, printed with a "Draft" label; the real number replaces it as soon as the phone is back online;
+  - typing a number by hand still works
+- the live database still has some older duplicate numbers from before 2026-10 (10607 three times; 10594, 11068, 10499, 10609, 10500, 9721, 9785 twice). The CHECK FIRST query in `supabase/2026-10-fast-sync-phase1.sql` lists them; fix them by editing one invoice of each pair
 
 ### Payment methods
 Across fast-entry billing and income, the active payment options are:
@@ -180,6 +185,13 @@ It now shares:
 - reorder warning if stock is low
 
 `Bikes Added` means jobs created/received in that selected date window.
+
+### Close the day (2026-10)
+
+`Reports → 🧮 Close the day` (admin only):
+- shows opening cash, cash taken today and today's expenses
+- enter the cash you counted in the drawer
+- if it doesn't match, the difference is saved as an expense ("Cash difference", when short) or income (when extra), and the close is written to the audit log
 
 ## Jobs Dashboard Finance
 
@@ -237,11 +249,16 @@ How sync works:
   - before the SQL is run it shows "Full table reads", which is the old behaviour
 - `Sync Now` uploads pending changes and downloads only the changes
 - for a full re-download (a phone's data looks wrong), use `Sync Diagnostics → Repair: re-download everything`
+- **a phone that hasn't synced for more than 7 days** (or never had changes-only sync) does one full catch-up download when it opens ("Bringing this phone up to date with cloud..."), then switches to changes-only. Before 2026-10-20 such a phone could stay stuck at an old invoice even after refreshing
 - **a new phone, or one whose data was cleared:**
   - it shows open jobs and this month's invoices within seconds;
   - older invoices download in the background and continue after the app is reopened;
   - meanwhile Invoices, Customers and Reports show "Loading older invoices… x / y";
   - totals that cover all history (customer dues, year reports) are complete once that note disappears
+- **phones keep about the last year of invoices** (at most 20,000), plus every older invoice with money owing or an advance, each customer's latest job and open jobs. Older ones are removed from the phone only after the cloud confirms it holds the identical copy; they are never deleted from the cloud
+  - to see older invoices: `Load older invoices` at the bottom of the Invoices list, search (it also searches the cloud), or open the customer (their full history loads from the cloud)
+  - Reports for a range the phone doesn't fully hold use the cloud's daily totals and say so; mechanic / part / vehicle breakdowns still come from the invoices on the phone
+- **two-phone safety, after `supabase/2026-10-sync-v2-stage2.sql` is run:** every save goes into an upload queue on the phone (IndexedDB `jalasai-sync`) and is sent with the version it was based on. If another phone changed the same invoice meanwhile, the server merges field by field and records the clash in `garage_sync_conflicts`; nothing is overwritten silently. Sync diagnostics shows the queue
 - removed records are soft-deleted, never hard-deleted
 - explicit user deletes now push tombstone rows to cloud so other devices apply the delete instead of resurrecting the record (2026-06-12)
 - the reconnect/visibility sweep widens its window to cover the device's offline gap (up to 7 days) so deletes made while away are applied
@@ -298,6 +315,18 @@ SUPABASE_URL=https://<ref>.supabase.co SUPABASE_SERVICE_ROLE=<key> node scripts/
 If diagnostics show a Table Sync Error:
 - local data stays safe on the phone; uploads retry on their own
 - rerun the latest [supabase/schema.sql](/Users/priyansh/Projects/JalaSai/supabase/schema.sql) (and the fast-sync SQL, if it was run before)
+
+### Staff roles (after `supabase/2026-10-customer-features-stage6.sql`)
+- `Admin → Staff roles`. Until someone taps "Make me the owner", everyone has full access, as before
+- owner: everything, manages roles. Manager: everything except roles (every signed-in staff member not on the list). Mechanic: jobs and stock; no money reports, no ledger, no statements, no Admin
+- the server enforces it (Row Level Security), not just the phone
+- locked out by mistake: `delete from garage_staff;` in the SQL editor restores full access for everyone
+
+### Customer statements (after the Stage 3 and Stage 6 SQL)
+- `Customers → Share statement` opens WhatsApp with a private link (`/statement?t=…`, valid 30 days). The customer sees the garage name, balance, every invoice and payment of the last year, `Save as PDF`, and `Pay by UPI` when a UPI ID is set in `Admin → Garage profile`
+- the due reminder sent from a customer (WhatsApp) includes the same link
+- the link needs no sign-in, shows only that customer, and stops working when it expires. To cancel a customer's links early, run `update garage_statement_links set revoked_at = now() where customer_key = '<customer id>' and revoked_at is null;` in the SQL editor
+- statements come from the money ledger (`garage_ledger_entries`). If `select count(*) from public.jalasai_ledger_reconcile();` isn't 0, don't send statements until it's checked
 
 ### Supabase project unhealthy response
 
@@ -555,6 +584,8 @@ Income is included in:
 ## Current Change History
 
 Major implemented work up to now (most recent first):
+- 2026-10-20: old phones catch up by themselves after missing sync for weeks; changes-only sync, cloud report totals and the rolling window went live with the Phase 1 SQL; Stages 2, 3, 4 and 6 (two-phone safety, money ledger, server invoice numbers, staff roles and statements) built and waiting for their SQL — order in `docs/ROLLOUT_2026_10.md`
+- 2026-10-19: business data moved to IndexedDB (fixes invoices vanishing on iPhones); Disconnect can't wipe unsent changes; red banner when a device save fails
 - optimized menu switching by batching customer-card rendering and replacing repeated per-customer/per-invoice scans with one-pass summary indexes
 - repaired shadow-table customer ownership issues after the split from `garage_state`, including Khatabook opening-balance isolation, duplicate customer id repair, strict duplicate-customer merge, and stale vehicle cleanup
 - fixed numeric invoice sorting so `9999` and `10000` sort correctly

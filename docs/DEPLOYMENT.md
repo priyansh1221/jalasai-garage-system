@@ -1,6 +1,6 @@
 # JalaSai Deployment
 
-Last updated: 2026-10-19
+Last updated: 2026-10-20
 
 For the full product/build history, see:
 - [PROJECT_HISTORY.md](/Users/priyansh/Projects/JalaSai/docs/PROJECT_HISTORY.md)
@@ -24,11 +24,12 @@ Required pieces:
    This creates the live shadow dataset tables, indexes, RLS policies, storage bucket,
    report views, and the additive `tenant_id` columns (2026-06-12 model — the legacy
    `garage_state` blob and import-pipeline tables are no longer created).
-3. Fast sync (2026-10, additive, safe to run more than once):
-   - after taking a backup, run [supabase/2026-10-fast-sync-phase1.sql](/Users/priyansh/Projects/JalaSai/supabase/2026-10-fast-sync-phase1.sql) in the SQL editor;
-   - it enables changes-only downloads, newest-first loading for fresh phones, server invoice totals, and `garage_row_history`;
-   - read its "CHECK FIRST" and "VERIFY AFTER" blocks;
-   - the app works with or without it, so deploy the app first.
+3. The 2026-10 SQL files (all additive and safe to run more than once). Deploy the app first, take a backup, then run them in the SQL editor in this order. Each file has "CHECK FIRST" / "VERIFY AFTER" blocks, and the app switches each feature on by itself once its SQL is there. Full order, checks and rollbacks: [ROLLOUT_2026_10.md](/Users/priyansh/Projects/JalaSai/docs/ROLLOUT_2026_10.md).
+   - [2026-10-fast-sync-phase1.sql](/Users/priyansh/Projects/JalaSai/supabase/2026-10-fast-sync-phase1.sql): changes-only sync, newest-first loading, `garage_row_history`, cloud report totals (`garage_daily_totals`), rolling window and cloud search. **Run on live 2026-10-20.**
+   - [2026-10-sync-v2-stage2.sql](/Users/priyansh/Projects/JalaSai/supabase/2026-10-sync-v2-stage2.sql): server versions, upload queue, field-by-field merge, `garage_sync_conflicts`.
+   - [2026-10-ledger-stage3.sql](/Users/priyansh/Projects/JalaSai/supabase/2026-10-ledger-stage3.sql): insert-only money ledger.
+   - [2026-10-invoice-numbers-stage4.sql](/Users/priyansh/Projects/JalaSai/supabase/2026-10-invoice-numbers-stage4.sql): server-issued invoice numbers.
+   - [2026-10-customer-features-stage6.sql](/Users/priyansh/Projects/JalaSai/supabase/2026-10-customer-features-stage6.sql): staff roles and statement links (needs Stage 3 first).
 4. Create owner/staff users in Supabase Auth.
 5. Configure Cloudflare Pages runtime variables for the deployment you are shipping.
    Production reads `/config.js` from a Pages Worker, which injects values from Cloudflare without committing them to git.
@@ -79,7 +80,9 @@ Maintained runtime files:
 Current deploy package notes:
 - `/deploy/` is generated output only; do not edit or mirror files there by hand
 - `/deploy/_worker.js` serves `/config.js` from Cloudflare Pages environment values
-- the service worker cache is currently `jalasai-v49`
+- `deploy.sh` stamps the service worker cache with the build time (`jalasai-<timestamp>`, e.g. `jalasai-1792477571` on 2026-10-20), so every deploy refreshes phones
+- `deploy.sh` copies `index.html`, `statement.html` (public customer statement page), `style.css`, `sw.js`, `assets`, `icons`, `js` and `NEW UI` (as `newui/`)
+- Cloudflare serves `/statement.html` as `/statement` (308 redirect, query kept); links made by the app work either way
 - the root service worker caches both the old UI and `newui/`, so old/new UI switching stays warm
 - New UI loads shared runtime scripts from root `js/`
 - root and New UI use the same updated favicon/app icon assets
@@ -132,6 +135,11 @@ Check these flows:
 - part add / scan part supports saved price and manual price override
 - Print QR works from Admin and stays hidden from non-admin users
 - Reports, Expenses, and other date-driven screens stay on IST/Asia-Kolkata business dates
+- Sync diagnostics opens and shows Download Mode, Last Download Speed and (after Stage 2) the upload queue
+- the Invoices list ends with `Load older invoices` on a phone that doesn't hold all history
+- `Reports → 🧮 Close the day` opens (admin only)
+- a phone that was closed for a week or more catches up on opening (it shows "Bringing this phone up to date with cloud...")
+- after Stage 6: `Customers → Share statement` makes a link that opens without sign-in
 
 ## Photos
 
@@ -160,7 +168,7 @@ Behavior:
 - phone photo flow persists draft state before opening camera/file picker
 - preferred AI direction is on-demand and human-reviewed, not background auto-processing
 - current AI assist is prompt-based and frontend-only, so there is no AI backend or extra deployment requirement yet
-- old and new UI modes share the same localStorage data and Supabase sync runtime
+- old and new UI modes share the same device data (IndexedDB `jalasai-data`, localStorage as fallback) and Supabase sync runtime
 - background cloud sync should not show a blocking full-screen blur after initial load
 - after running the fast-sync SQL, check `Cloud Sync → Sync Diagnostics → Download Mode`: it should read "Changes only (server clock)" on each phone (it rechecks within 6 hours or on the next app open)
 - New UI Home customer and due metrics are based on real workshop activity, not imported customer-master-only rows
