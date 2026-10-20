@@ -19,7 +19,8 @@ Tested setups (two simulated phones, the real `js/` files, local Postgres):
 | 2026-10-20 | 1. App deployed (`ux-polish` ff6e37d) | live site loads, new code running, no errors |
 | 2026-10-20 | 3. CHECK FIRST | existing **duplicate invoice numbers** found: 10607 ×3; 10594, 11068, 10499, 10609, 10500, 9721, 9785 ×2. Not caused by this work; Stage 4 prevents new ones. The query in step 3 lists which invoices share a number. |
 | 2026-10-20 | 4. Phase 1 SQL run on live | daily totals rebuilt: 1,902 rows; highest invoice 12747 |
-| 2026-10-20 | Bug found | an old phone stayed stuck at invoice 12076 even after refreshing (it last synced weeks ago). Fixed in commit "Old phones catch up by themselves…" — **needs a deploy**. Until then: on that phone, Admin → Sync diagnostics → "Repair: re-download everything". |
+| 2026-10-20 | Bug found | an old phone stayed stuck at invoice 12076 even after refreshing (it last synced weeks ago). Fixed in commit "Old phones catch up by themselves…" (c145aa8). |
+| 2026-10-20 | Fix deployed (`ux-polish` 389e5e3, build jalasai-1792477571) | live site loads with the catch-up fix; payment-date fix still not included |
 | next | Watch phones ~1 day | Sync diagnostics → "Changes only", Sync Now ≈ 1 s |
 | waiting | Payment-date fix (branch `claude/loving-leavitt-0cfc46`) | not merged yet, by choice; after merging, re-run its updated section of the Phase 1 SQL (it recomputes totals) |
 | waiting | 5. Stage 2 SQL | after the phones look good |
