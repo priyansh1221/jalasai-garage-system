@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=DM+Sans:wght@300;400;500&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  body { margin: 0; background: #24262a; }
+  a { color: #f6f1eb; } a:hover { color: #d28a42; }
+</style>
+</helmet>
+
+<section style="padding:40px; display:flex; flex-direction:column; gap:56px;">
+
+  <!-- ═════════════ LEGACY UI REDESIGN (dark + amber, calmer) ═════════════ -->
+  <div>
+    <div style="color:#a39a92; font-family:'Rajdhani',sans-serif; font-weight:700; font-size:15px; letter-spacing:1.5px; margin-bottom:4px;">LEGACY UI — REDESIGN</div>
+    <div style="color:#6d665f; font-family:'DM Sans',sans-serif; font-size:13px; margin-bottom:16px; max-width:720px;">Same workflows, less noise: one action bar at the thumb, stats in one strip, secondary actions moved one tap into the card. All existing functions stay reachable.</div>
+    <div style="display:flex; gap:40px; align-items:flex-start; flex-wrap:wrap; font-family:'DM Sans',sans-serif;">
+
+      <!-- 1a: JOBS -->
+      <div id="1a" data-screen-label="Redesign Legacy · Jobs" style="flex:0 0 auto;">
+        <div style="display:inline-flex; align-items:center; gap:8px; margin-bottom:10px;">
+          <span style="background:#d28a42; color:#111; font-family:'Rajdhani',sans-serif; font-weight:700; font-size:12px; padding:2px 8px; border-radius:6px;">1a</span>
+          <span style="color:#a39a92; font-family:'Rajdhani',sans-serif; font-weight:600; font-size:13px;">Jobs (landing)</span>
+        </div>
+        <div style="width:390px; height:844px; border-radius:24px; overflow:hidden; border:1px solid #2d3239; background:linear-gradient(180deg,#111418 0%,#0b0d10 42%,#08090b 100%); color:#f6f1eb; position:relative; display:flex; flex-direction:column;">
+
+          <!-- compact header: brand + sync + tabs in ONE band -->
+          <div style="background:linear-gradient(180deg,rgba(18,21,25,.98) 0%,rgba(12,14,18,.97) 100%); border-bottom:1px solid rgba(215,217,222,.06); padding:10px 12px 0;">
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:10px;">
+              <img src="assets/jalasai-logo-premium.jpg" alt="JalaSai logo" style="width:108px; height:38px; object-fit:cover; border-radius:8px; border:1px solid rgba(255,255,255,.06);">
+              <div style="display:inline-flex; align-items:center; gap:6px; font-size:11px; padding:5px 10px; border-radius:999px; background:rgba(255,71,87,.1); color:#ff5f5f; border:1px solid rgba(255,71,87,.3); font-family:'Rajdhani',sans-serif; font-weight:600;">
+                <span style="width:6px; height:6px; border-radius:50%; background:#ff5f5f;"></span>Offline
+              </div>
+            </div>
+            <div style="display:flex; gap:6px; overflow-x:auto; padding-bottom:10px;">
+              <div style="padding:7px 13px; border-radius:999px; font-family:'Rajdhani',sans-serif; font-size:12px; font-weight:600; white-space:nowrap; color:#f6f1eb; background:linear-gradient(180deg,rgba(50,51,56,.96) 0%,rgba(30,31,35,.98) 100%); border:1px solid rgba(210,138,66,.28);">Jobs</div>
+              <div style="padding:7px 13px; border-radius:999px; font-family:'Rajdhani',sans-serif; font-size:12px; font-weight:600; white-space:nowrap; color:#a39a92;">Invoices</div>
+              <div style="padding:7px 13px; border-radius:999px; font-family:'Rajdhani',sans-serif; font-size:12px; font-weight:600; white-space:nowrap; color:#a39a92;">Stock</div>
+              <div style="padding:7px 13px; border-radius:999px; font-family:'Rajdhani',sans-serif; font-size:12px; font-weight:600; white-space:nowrap; color:#a39a92;">Customers</div>
+              <div style="padding:7px 13px; border-radius:999px; font-family:'Rajdhani',sans-serif; font-size:12px; font-weight:600; white-space:nowrap; color:#a39a92;">More</div>
+            </div>
+          </div>
+
+          <div style="flex:1; overflow-y:auto; padding:12px 12px 96px;">
+            <!-- stats: ONE strip instead of 4 cards -->
+            <div style="display:flex; align-items:stretch; border-radius:14px; background:linear-gradient(180deg,rgba(28,31,36,.97) 0%,rgba(16,18,22,.99) 100%); border:1px solid rgba(255,255,255,.06); margin-bottom:12px; overflow:hidden;">
+              <div style="flex:1; padding:12px 8px; text-align:center;">
+                <div style="font-family:'Rajdhani',sans-serif; font-size:20px; font-weight:700; color:#d7d9de; line-height:1;">7</div>
+                <div style="font-size:9px; color:#a39a92; text-transform:uppercase; letter-spacing:.8px; margin-top:4px;">Active</div>
+              </div>
+              <div style="width:1px; background:rgba(255,255,255,.06); margin:10px 0;"></div>
+              <div style="flex:1; padding:12px 8px; text-align:center;">
+                <div style="font-family:'Rajdhani',sans-serif; font-size:20px; font-weight:700; color:#f5bb3d; line-height:1;">3</div>
+                <div style="font-size:9px; color:#a39a92; text-transform:uppercase; letter-spacing:.8px; margin-top:4px;">In&nbsp;Prog</div>
+              </div>
+              <div style="width:1px; background:rgba(255,255,255,.06); margin:10px 0;"></div>
+              <div style="flex:1; padding:12px 8px; text-align:center;">
+                <div style="font-family:'Rajdhani',sans-serif; font-size:20px; font-weight:700; color:#d28a42; line-height:1;">2</div>
+                <div style="font-size:9px; color:#a39a92; text-transform:uppercase; letter-spacing:.8px; margin-top:4px;">Ready</div>
+              </div>
+              <div style="width:1px; background:rgba(255,255,255,.06); margin:10px 0;"></div>
+              <div style="flex:1.4; padding:12px 8px; text-align:center;">
+                <div style="font-family:'Rajdhani',sans-serif; font-size:20px; font-weight:700; color:#d7d9de; line-height:1;">₹6,480</div>
+                <div style="font-size:9px; color:#a39a92; text-transform:uppercase; letter-spacing:.8px; margin-top:4px;">Today</div>
+              </div>
+            </div>
+
+            <!-- search + single filter -->
+            <div style="display:flex; gap:8px; margin-bottom:12px;">
+              <input style="flex:1; min-width:0; background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.08); border-radius:12px; padding:10px 12px; color:#f6f1eb; font-family:'DM Sans',sans-serif; font-size:14px; min-height:44px; outline:none; box-sizing:border-box;" placeholder="Search name / phone / reg no…">
+              <button style="flex:0 0 auto; min-height:44px; padding:0 14px; border-radius:12px; cursor:pointer; font-family:'Rajdhani',sans-serif; font-size:13px; font-weight:600; background:linear-gradient(180deg,rgba(38,39,44,.98) 0%,rgba(24,24,27,.98) 100%); color:#f6f1eb; border:1px solid rgba(255,255,255,.08);">⛭ Filter</button>
+            </div>
+
+            <!-- job cards: calm, one primary action -->
+            <div style="display:grid; grid-template-columns:1fr; gap:10px;">
+              <div style="position:relative; overflow:hidden; border-radius:16px; padding:14px 14px 14px 18px; background:linear-gradient(180deg,rgba(28,31,36,.97) 0%,rgba(16,18,22,.99) 100%); border:1px solid rgba(255,255,255,.06);">
+                <div style="position:absolute; left:0; top:0; bottom:0; width:3px; background:#f5bb3d;"></div>
+                <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:6px;">
+                  <span style="font-family:'Rajdhani',sans-serif; font-size:17px; font-weight:700;">Ramesh Patel</span>
+                  <span style="font-family:'Rajdhani',sans-serif; font-size:12px; color:#d28a42; font-weight:600;">MH 12 4448</span>
+                </div>
+                <div style="font-size:12px; color:#d8c2a7; margin-bottom:2px;">Hero Splendor Plus</div>
+                <div style="font-size:13px; color:#a39a92; line-height:1.5; margin-bottom:10px;">Clutch plate replacement, chain set check</div>
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <span style="font-size:10px; font-family:'Rajdhani',sans-serif; font-weight:600; padding:4px 10px; border-radius:20px; background:rgba(245,197,24,.15); color:#f5bb3d;">In Progress</span>
+                  <span style="font-size:10px; font-family:'Rajdhani',sans-serif; font-weight:600; padding:4px 10px; border-radius:20px; background:rgba(255,71,87,.12); color:#ff5f5f; border:1px solid rgba(255,71,87,.3);">Owe ₹850</span>
+                  <span style="flex:1;"></span>
+                  <button style="min-height:36px; padding:6px 14px; font-size:12px; border-radius:10px; cursor:pointer; font-family:'Rajdhani',sans-serif; font-weight:600; background:linear-gradient(180deg,rgba(62,63,69,.98) 0%,rgba(34,35,39,.98) 100%); color:#f6f1eb; border:1px solid rgba(210,138,66,.34);">Done ✓</button>
+                </div>
+                <div style="font-size:11px; color:#6d665f; margin-top:8px;">Sanjay · J-1042 · 09:40 am — tap card for details, parts &amp; edit</div>
+              </div>
+
+              <div style="position:relative; overflow:hidden; border-radius:16px; padding:14px 14px 14px 18px; background:linear-gradient(180deg,rgba(28,31,36,.97) 0%,rgba(16,18,22,.99) 100%); border:1px solid rgba(255,255,255,.06);">
+                <div style="position:absolute; left:0; top:0; bottom:0; width:3px; background:#00c896;"></div>
+                <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:6px;">
+                  <span style="font-family:'Rajdhani',sans-serif; font-size:17px; font-weight:700;">Suresh Kumar</span>
+                  <span style="font-family:'Rajdhani',sans-serif; font-size:12px; color:#d28a42; font-weight:600;">MH 12 8821</span>
+                </div>
+                <div style="font-size:12px; color:#d8c2a7; margin-bottom:2px;">Honda Activa 6G</div>
+                <div style="font-size:13px; color:#a39a92; line-height:1.5; margin-bottom:10px;">Oil change + brake shoe replacement</div>
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <span style="font-size:10px; font-family:'Rajdhani',sans-serif; font-weight:600; padding:4px 10px; border-radius:20px; background:rgba(0,200,150,.15); color:#00c896;">Ready</span>
+                  <span style="font-size:10px; font-family:'Rajdhani',sans-serif; font-weight:600; padding:4px 10px; border-radius:20px; background:rgba(138,143,158,.12); color:#a39a92; border:1px solid rgba(138,143,158,.28);">Clear</span>
+                  <span style="flex:1;"></span>
+                  <button style="min-height:36px; padding:6px 14px; font-size:12px; border-radius:10px; cursor:pointer; font-family:'Rajdhani',sans-serif; font-weight:600; background:linear-gradient(180deg,rgba(62,63,69,.98) 0%,rgba(34,35,39,.98) 100%); color:#f6f1eb; border:1px solid rgba(210,138,66,.34);">Done ✓</button>
+                </div>
+                <div style="font-size:11px; color:#6d665f; margin-top:8px;">Imran · J-1043 · 10:15 am · 📅 13 Jul</div>
+              </div>
+
+              <div style="position:relative; overflow:hidden; border-radius:16px; padding:14px 14px 14px 18px; background:linear-gradient(180deg,rgba(28,31,36,.97) 0%,rgba(16,18,22,.99) 100%); border:1px solid rgba(255,255,255,.06);">
+                <div style="position:absolute; left:0; top:0; bottom:0; width:3px; background:#a39a92;"></div>
+                <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:6px;">
+                  <span style="font-family:'Rajdhani',sans-serif; font-size:17px; font-weight:700;">Anil Jadhav</span>
+                  <span style="font-family:'Rajdhani',sans-serif; font-size:12px; color:#d28a42; font-weight:600;">—</span>
+                </div>
+                <div style="font-size:12px; color:#d8c2a7; margin-bottom:2px;">TVS Jupiter</div>
+                <div style="font-size:13px; color:#a39a92; line-height:1.5; margin-bottom:10px;">Puncture + general checkup</div>
+                <div style="display:flex; align-items:center; gap:8px;">
+                  <span style="font-size:10px; font-family:'Rajdhani',sans-serif; font-weight:600; padding:4px 10px; border-radius:20px; background:rgba(138,143,158,.15); color:#a39a92;">Waiting</span>
+                  <span style="flex:1;"></span>
+                  <button style="min-height:36px; padding:6px 14px; font-size:12px; border-radius:10px; cursor:pointer; font-family:'Rajdhani',sans-serif; font-weight:600; background:linear-gradient(180deg,rgba(62,63,69,.98) 0%,rgba(34,35,39,.98) 100%); color:#f6f1eb; border:1px solid rgba(210,138,66,.34);">Start ▸</button>
+                </div>
+                <div style="font-size:11px; color:#6d665f; margin-top:8px;">Unassigned · J-1044 · 11:02 am</div>
+              </div>
+            </div>
+
+            <!-- completed collapsed -->
+            <div style="margin-top:14px; display:flex; align-items:center; justify-content:space-between; padding:12px 14px; border-radius:14px; border:1px dashed rgba(255,255,255,.1); color:#a39a92;">
+              <span style="font-family:'Rajdhani',sans-serif; font-size:13px; font-weight:600;">Completed today (5) · +Income · +Expense</span>
+              <span style="font-size:12px;">▼</span>
+            </div>
+          </div>
+
+          <!-- thumb action bar -->
+          <div style="position:absolute; left:12px; right:12px; bottom:12px; display:flex; gap:8px; padding:8px; border-radius:18px; background:rgba(12,14,18,.92); border:1px solid rgba(255,255,255,.08); box-shadow:0 18px 42px rgba(0,0,0,.5); backdrop-filter:blur(12px);">
+            <button style="flex:1; min-height:48px; border-radius:12px; cursor:pointer; font-family:'Rajdhani',sans-serif; font-size:14px; font-weight:600; background:linear-gradient(180deg,rgba(38,39,44,.98) 0%,rgba(24,24,27,.98) 100%); color:#f6f1eb; border:1px solid rgba(255,255,255,.08);">Quick Invoice</button>
+            <button style="flex:1; min-height:48px; border-radius:12px; cursor:pointer; font-family:'Rajdhani',sans-serif; font-size:14px; font-weight:600; background:linear-gradient(180deg,rgba(62,63,69,.98) 0%,rgba(34,35,39,.98) 100%); color:#ffe2c3; border:1px solid rgba(210,138,66,.52); box-shadow:0 10px 22px rgba(0,0,0,.3);">+ New Job</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 1b: INVOICES -->
+      <div id="1b" data-screen-label="Redesign Legacy · Invoices" style="flex:0 0 auto;">
+        <div style="display:inline-flex; align-items:center; gap:8px; margin-bottom:10px;">
+          <span style="background:#d28a42; color:#111; font-family:'Rajdhani',sans-serif; font-weight:700; font-size:12px; padding:2px 8px; border-radius:6px;">1b</span>
+          <span style="color:#a39a92; font-family:'Rajdhani',sans-serif; font-weight:600; font-size:13px;">Invoices — cards instead of side-scroll table</span>
+        </div>
+        <div style="width:390px; height:844px; border-radius:24px; overflow:hidden; border:1px solid #2d3239; background:linear-gradient(180deg,#111418 0%,#0b0d10 42%,#08090b 100%); color:#f6f1eb; position:relative; display:flex; flex-direction:column;">
+
+          <div style="background:linear-gradient(180deg,rgba(18,21,25,.98) 0%,rgba(12,14,18,.97) 100%); border-bottom:1px solid rgba(215,217,222,.06); padding:10px 12px 0;">
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:10px;">
+              <img src="assets/jalasai-logo-premium.jpg" alt="JalaSai logo" style="width:108px; height:38px; object-fit:cover; border-radius:8px; border:1px solid rgba(255,255,255,.06);">
+              <div style="display:inline-flex; align-items:center; gap:6px; font-size:11px; padding:5px 10px; border-radius:999px; background:rgba(255,71,87,.1); color:#ff5f5f; border:1px solid rgba(255,71,87,.3); font-family:'Rajdhani',sans-serif; font-weight:600;">
+                <span style="width:6px; height:6px; border-radius:50%; background:#ff5f5f;"></span>Offline
+              </div>
+            </div>
+            <div style="display:flex; gap:6px; overflow-x:auto; padding-bottom:10px;">
+              <div style="padding:7px 13px; border-radius:999px; font-family:'Rajdhani',sans-serif; font-size:12px; font-weight:600; white-space:nowrap; color:#a39a92;">Jobs</div>
+              <div style="padding:7px 13px; border-radius:999px; font-family:'Rajdhani',sans-serif; font-size:12px; font-weight:600; white-space:nowrap; color:#f6f1eb; background:linear-gradient(180deg,rgba(50,51,56,.96) 0%,rgba(30,31,35,.98) 100%); border:1px solid rgba(210,138,66,.28);">Invoices</div>
+              <div style="padding:7px 13px; border-radius:999px; font-family:'Rajdhani',sans-serif; font-size:12px; font-weight:600; white-space:nowrap; color:#a39a92;">Stock</div>
+              <div style="padding:7px 13px; border-radius:999px; font-family:'Rajdhani',sans-serif; font-size:12px; font-weight:600; white-space:nowrap; color:#a39a92;">Customers</div>
+              <div style="padding:7px 13px; border-radius:999px; font-family:'Rajdhani',sans-serif; font-size:12px; font-weight:600; white-space:nowrap; color:#a39a92;">More</div>
+            </div>
+          </div>
+
+          <div style="flex:1; overflow-y:auto; padding:12px;">
+            <!-- summary + dues chip filter -->
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:12px;">
+              <div>
+                <div style="font-family:'Rajdhani',sans-serif; font-size:18px; font-weight:700;">Invoices</div>
+                <div style="font-size:12px; color:#a39a92;">142 total</div>
+              </div>
+              <button style="min-height:36px; padding:6px 12px; border-radius:999px; cursor:pointer; font-family:'Rajdhani',sans-serif; font-size:12px; font-weight:600; background:rgba(255,71,87,.12); color:#ff5f5f; border:1px solid rgba(255,71,87,.3);">Dues only · ₹4,350</button>
+            </div>
+
+            <div style="display:flex; gap:8px; margin-bottom:12px;">
+              <input style="flex:1; min-width:0; background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.08); border-radius:12px; padding:10px 12px; color:#f6f1eb; font-size:14px; min-height:44px; outline:none; box-sizing:border-box;" placeholder="Search customer / invoice / reg no…">
+              <button style="flex:0 0 auto; min-height:44px; padding:0 14px; border-radius:12px; cursor:pointer; font-family:'Rajdhani',sans-serif; font-size:13px; font-weight:600; background:linear-gradient(180deg,rgba(38,39,44,.98) 0%,rgba(24,24,27,.98) 100%); color:#f6f1eb; border:1px solid rgba(255,255,255,.08);">↕ Sort</button>
+            </div>
+
+            <div style="display:grid; gap:10px;">
+              <!-- due invoice card -->
+              <div style="border-radius:16px; padding:14px; background:linear-gradient(180deg,rgba(28,31,36,.97) 0%,rgba(16,18,22,.99) 100%); border:1px solid rgba(255,71,87,.22);">
+                <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:4px;">
+                  <span style="font-family:'Rajdhani',sans-serif; font-size:16px; font-weight:700;">Ramesh Patel</span>
+                  <span style="font-family:'Rajdhani',sans-serif; font-size:13px; font-weight:700; color:#d7d9de;">#4451</span>
+                </div>
+                <div style="font-size:12px; color:#a39a92; margin-bottom:10px;">Hero Splendor · MH 12 4448 · 13 Jul, 10:42 am</div>
+                <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
+                  <span style="font-family:'Rajdhani',sans-serif; font-size:18px; font-weight:700;">₹1,450</span>
+                  <span style="font-size:11px; color:#00c896;">Paid ₹600</span>
+                  <span style="font-size:11px; font-family:'Rajdhani',sans-serif; font-weight:600; padding:4px 10px; border-radius:20px; background:rgba(255,71,87,.12); color:#ff5f5f; border:1px solid rgba(255,71,87,.3);">Owe ₹850</span>
+                </div>
+                <div style="display:flex; gap:8px;">
+                  <button style="flex:1; min-height:40px; border-radius:10px; cursor:pointer; font-family:'Rajdhani',sans-serif; font-size:12px; font-weight:600; background:linear-gradient(180deg,rgba(62,63,69,.98) 0%,rgba(34,35,39,.98) 100%); color:#f6f1eb; border:1px solid rgba(210,138,66,.34);">Collect ₹850</button>
+                  <button style="flex:0 0 auto; min-height:40px; padding:0 13px; border-radius:10px; cursor:pointer; background:linear-gradient(180deg,rgba(38,39,44,.98) 0%,rgba(24,24,27,.98) 100%); color:#f6f1eb; border:1px solid rgba(255,255,255,.08); font-size:14px;">🖨</button>
+                  <button style="flex:0 0 auto; min-height:40px; padding:0 13px; border-radius:10px; cursor:pointer; background:linear-gradient(180deg,rgba(38,39,44,.98) 0%,rgba(24,24,27,.98) 100%); color:#f6f1eb; border:1px solid rgba(255,255,255,.08); font-size:14px;">📱</button>
+                </div>
+              </div>
+
+              <div style="border-radius:16px; padding:14px; background:linear-gradient(180deg,rgba(28,31,36,.97) 0%,rgba(16,18,22,.99) 100%); border:1px solid rgba(255,255,255,.06);">
+                <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:4px;">
+                  <span style="font-family:'Rajdhani',sans-serif; font-size:16px; font-weight:700;">Suresh Kumar</span>
+                  <span style="font-family:'Rajdhani',sans-serif; font-size:13px; font-weight:700; color:#d7d9de;">#4450</span>
+                </div>
+                <div style="font-size:12px; color:#a39a92; margin-bottom:10px;">Honda Activa 6G · MH 12 8821 · 13 Jul, 09:58 am</div>
+                <div style="display:flex; align-items:center; gap:10px;">
+                  <span style="font-family:'Rajdhani',sans-serif; font-size:18px; font-weight:700;">₹780</span>
+                  <span style="font-size:11px; font-family:'Rajdhani',sans-serif; font-weight:600; padding:4px 10px; border-radius:20px; background:rgba(138,143,158,.12); color:#a39a92; border:1px solid rgba(138,143,158,.28);">Clear</span>
+                  <span style="flex:1;"></span>
+                  <button style="min-height:36px; padding:0 13px; border-radius:10px; cursor:pointer; background:linear-gradient(180deg,rgba(38,39,44,.98) 0%,rgba(24,24,27,.98) 100%); color:#f6f1eb; border:1px solid rgba(255,255,255,.08); font-size:14px;">🖨</button>
+                  <button style="min-height:36px; padding:0 13px; border-radius:10px; cursor:pointer; background:linear-gradient(180deg,rgba(38,39,44,.98) 0%,rgba(24,24,27,.98) 100%); color:#f6f1eb; border:1px solid rgba(255,255,255,.08); font-size:14px;">📱</button>
+                </div>
+              </div>
+
+              <div style="border-radius:16px; padding:14px; background:linear-gradient(180deg,rgba(28,31,36,.97) 0%,rgba(16,18,22,.99) 100%); border:1px solid rgba(255,255,255,.06);">
+                <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:4px;">
+                  <span style="font-family:'Rajdhani',sans-serif; font-size:16px; font-weight:700;">Anil Jadhav</span>
+                  <span style="font-family:'Rajdhani',sans-serif; font-size:13px; font-weight:700; color:#d7d9de;">#4449</span>
+                </div>
+                <div style="font-size:12px; color:#a39a92; margin-bottom:10px;">TVS Jupiter · MH 14 3310 · 12 Jul, 06:31 pm</div>
+                <div style="display:flex; align-items:center; gap:10px;">
+                  <span style="font-family:'Rajdhani',sans-serif; font-size:18px; font-weight:700;">₹2,300</span>
+                  <span style="font-size:11px; font-family:'Rajdhani',sans-serif; font-weight:600; padding:4px 10px; border-radius:20px; background:rgba(138,143,158,.12); color:#a39a92; border:1px solid rgba(138,143,158,.28);">Clear</span>
+                  <span style="flex:1;"></span>
+                  <button style="min-height:36px; padding:0 13px; border-radius:10px; cursor:pointer; background:linear-gradient(180deg,rgba(38,39,44,.98) 0%,rgba(24,24,27,.98) 100%); color:#f6f1eb; border:1px solid rgba(255,255,255,.08); font-size:14px;">🖨</button>
+                  <button style="min-height:36px; padding:0 13px; border-radius:10px; cursor:pointer; background:linear-gradient(180deg,rgba(38,39,44,.98) 0%,rgba(24,24,27,.98) 100%); color:#f6f1eb; border:1px solid rgba(255,255,255,.08); font-size:14px;">📱</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div style="position:absolute; left:12px; right:12px; bottom:12px; display:flex; gap:8px; padding:8px; border-radius:18px; background:rgba(12,14,18,.92); border:1px solid rgba(255,255,255,.08); box-shadow:0 18px 42px rgba(0,0,0,.5); backdrop-filter:blur(12px);">
+            <button style="flex:1; min-height:48px; border-radius:12px; cursor:pointer; font-family:'Rajdhani',sans-serif; font-size:14px; font-weight:600; background:linear-gradient(180deg,rgba(62,63,69,.98) 0%,rgba(34,35,39,.98) 100%); color:#ffe2c3; border:1px solid rgba(210,138,66,.52);">+ Quick Invoice</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 1c: QUICK INVOICE -->
+      <div id="1c" data-screen-label="Redesign Legacy · Quick Invoice" style="flex:0 0 auto;">
+        <div style="display:inline-flex; align-items:center; gap:8px; margin-bottom:10px;">
+          <span style="background:#d28a42; color:#111; font-family:'Rajdhani',sans-serif; font-weight:700; font-size:12px; padding:2px 8px; border-radius:6px;">1c</span>
+          <span style="color:#a39a92; font-family:'Rajdhani',sans-serif; font-weight:600; font-size:13px;">Quick Invoice — essentials up front, rest collapsed</span>
+        </div>
+        <div style="width:390px; border-radius:24px; overflow:hidden; border:1px solid #2d3239; background:rgba(0,0,0,.88); color:#f6f1eb; padding:9px; box-sizing:border-box;">
+          <div style="border-radius:18px; padding:18px; background:linear-gradient(180deg,rgba(28,31,36,.97) 0%,rgba(16,18,22,.99) 100%); border:1px solid rgba(255,255,255,.06); box-sizing:border-box;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+              <div style="font-family:'Rajdhani',sans-serif; font-size:18px; font-weight:700;">Quick Invoice</div>
+              <button style="min-height:34px; width:34px; border-radius:10px; cursor:pointer; background:rgba(255,255,255,.04); color:#a39a92; border:1px solid rgba(255,255,255,.08); font-size:14px;">✕</button>
+            </div>
+
+            <!-- 1. customer -->
+            <label style="font-size:10px; color:#d6c2ae; text-transform:uppercase; letter-spacing:.8px; margin-bottom:6px; display:block; font-family:'Rajdhani',sans-serif; font-weight:600;">Customer</label>
+            <input style="width:100%; background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.08); border-radius:12px; padding:10px 12px; color:#f6f1eb; font-size:14px; min-height:44px; outline:none; box-sizing:border-box;" placeholder="Search or type name / phone…">
+            <div style="display:flex; gap:6px; flex-wrap:wrap; margin:8px 0 16px;">
+              <button style="min-height:36px; padding:7px 12px; font-size:11px; border-radius:999px; cursor:pointer; font-family:'Rajdhani',sans-serif; font-weight:600; background:rgba(255,255,255,.04); color:#f6f1eb; border:1px solid rgba(255,255,255,.1);">Ramesh P.</button>
+              <button style="min-height:36px; padding:7px 12px; font-size:11px; border-radius:999px; cursor:pointer; font-family:'Rajdhani',sans-serif; font-weight:600; background:rgba(255,255,255,.04); color:#f6f1eb; border:1px solid rgba(255,255,255,.1);">Suresh K.</button>
+              <button style="min-height:36px; padding:7px 12px; font-size:11px; border-radius:999px; cursor:pointer; font-family:'Rajdhani',sans-serif; font-weight:600; background:rgba(255,255,255,.04); color:#f6f1eb; border:1px solid rgba(255,255,255,.1);">Anil J.</button>
+              <button style="min-height:36px; padding:7px 12px; font-size:11px; border-radius:999px; cursor:pointer; font-family:'Rajdhani',sans-serif; font-weight:600; background:rgba(255,255,255,.04); color:#d28a42; border:1px dashed rgba(210,138,66,.4);">+ New</button>
+            </div>
+
+            <!-- 2. vehicle + work -->
+            <label style="font-size:10px; color:#d6c2ae; text-transform:uppercase; letter-spacing:.8px; margin-bottom:6px; display:block; font-family:'Rajdhani',sans-serif; font-weight:600;">Vehicle &amp; Work</label>
+            <div style="display:flex; gap:8px; margin-bottom:8px;">
+              <input style="flex:1.4; min-width:0; background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.08); border-radius:12px; padding:10px 12px; color:#f6f1eb; font-size:14px; min-height:44px; outline:none; box-sizing:border-box;" placeholder="Bike e.g. Activa">
+              <input style="flex:1; min-width:0; background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.08); border-radius:12px; padding:10px 12px; color:#f6f1eb; font-size:14px; min-height:44px; outline:none; text-transform:uppercase; box-sizing:border-box;" placeholder="Reg no">
+            </div>
+            <textarea style="width:100%; background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.08); border-radius:12px; padding:10px 12px; color:#f6f1eb; font-size:14px; min-height:64px; outline:none; resize:vertical; font-family:'DM Sans',sans-serif; box-sizing:border-box; margin-bottom:16px;" placeholder="Work — puncture, brake work, oil change…"></textarea>
+
+            <!-- 3. money -->
+            <label style="font-size:10px; color:#d6c2ae; text-transform:uppercase; letter-spacing:.8px; margin-bottom:6px; display:block; font-family:'Rajdhani',sans-serif; font-weight:600;">Amount</label>
+            <div style="display:flex; gap:8px; margin-bottom:10px;">
+              <input style="flex:1; min-width:0; background:rgba(255,255,255,.04); border:1px solid rgba(210,138,66,.3); border-radius:12px; padding:10px 12px; color:#f6f1eb; font-size:20px; font-family:'Rajdhani',sans-serif; font-weight:700; min-height:52px; outline:none; box-sizing:border-box;" placeholder="Total ₹" type="number">
+              <input style="flex:1; min-width:0; background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.08); border-radius:12px; padding:10px 12px; color:#f6f1eb; font-size:20px; font-family:'Rajdhani',sans-serif; font-weight:700; min-height:52px; outline:none; box-sizing:border-box;" placeholder="Paid ₹" type="number">
+            </div>
+            <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:8px;">
+              <button style="min-height:38px; padding:7px 16px; font-size:12px; border-radius:999px; cursor:pointer; font-family:'Rajdhani',sans-serif; font-weight:600; background:linear-gradient(180deg,rgba(62,63,69,.98) 0%,rgba(34,35,39,.98) 100%); color:#ffe2c3; border:1px solid rgba(210,138,66,.52);">Cash</button>
+              <button style="min-height:38px; padding:7px 16px; font-size:12px; border-radius:999px; cursor:pointer; font-family:'Rajdhani',sans-serif; font-weight:600; background:rgba(255,255,255,.04); color:#f6f1eb; border:1px solid rgba(255,255,255,.1);">UPI</button>
+              <button style="min-height:38px; padding:7px 16px; font-size:12px; border-radius:999px; cursor:pointer; font-family:'Rajdhani',sans-serif; font-weight:600; background:rgba(255,255,255,.04); color:#f6f1eb; border:1px solid rgba(255,255,255,.1);">Card</button>
+              <span style="flex:1;"></span>
+              <button style="min-height:38px; padding:7px 12px; font-size:12px; border-radius:999px; cursor:pointer; font-family:'Rajdhani',sans-serif; font-weight:600; background:rgba(255,255,255,.04); color:#f6f1eb; border:1px solid rgba(255,255,255,.1);">Mechanic: Sanjay ▾</button>
+            </div>
+
+            <!-- collapsed extras: discount, invoice no/date, notes, photo -->
+            <div style="display:flex; align-items:center; justify-content:space-between; padding:12px 14px; border-radius:12px; border:1px dashed rgba(255,255,255,.12); color:#a39a92; margin:8px 0 16px;">
+              <span style="font-family:'Rajdhani',sans-serif; font-size:13px; font-weight:600;">More — discount, invoice no. &amp; date, notes, photo</span>
+              <span style="font-size:12px;">▼</span>
+            </div>
+
+            <button style="width:100%; min-height:50px; border-radius:12px; cursor:pointer; font-family:'Rajdhani',sans-serif; font-size:15px; font-weight:700; background:linear-gradient(180deg,rgba(62,63,69,.98) 0%,rgba(34,35,39,.98) 100%); color:#ffe2c3; border:1px solid rgba(210,138,66,.52); box-shadow:0 10px 22px rgba(0,0,0,.3); margin-bottom:8px;">Save Invoice</button>
+            <div style="display:flex; gap:8px;">
+              <button style="flex:1; min-height:42px; border-radius:12px; cursor:pointer; font-family:'Rajdhani',sans-serif; font-size:12px; font-weight:600; background:linear-gradient(180deg,rgba(38,39,44,.98) 0%,rgba(24,24,27,.98) 100%); color:#f6f1eb; border:1px solid rgba(255,255,255,.08);">Save as Job Card</button>
+              <button style="flex:1; min-height:42px; border-radius:12px; cursor:pointer; font-family:'Rajdhani',sans-serif; font-size:12px; font-weight:600; background:linear-gradient(180deg,rgba(38,39,44,.98) 0%,rgba(24,24,27,.98) 100%); color:#f6f1eb; border:1px solid rgba(255,255,255,.08);">Save &amp; Next</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═════════════ NEW UI REDESIGN (light glass, calmer) ═════════════ -->
+  <div>
+    <div style="color:#e6e8ec; font-family:'Manrope',sans-serif; font-weight:800; font-size:15px; letter-spacing:1.5px; margin-bottom:4px;">NEW UI — REDESIGN</div>
+    <div style="color:#9aa0aa; font-family:'Manrope',sans-serif; font-size:13px; margin-bottom:16px; max-width:720px;">Same glass language, less stacked chrome: one status line, KPIs as a strip, four quick actions, list rows kept. Billing becomes thumb-friendly cards with a dues filter.</div>
+    <div style="display:flex; gap:40px; align-items:flex-start; flex-wrap:wrap; font-family:'Manrope',sans-serif;">
+
+      <!-- 1d: HOME -->
+      <div id="1d" data-screen-label="Redesign New UI · Home" style="flex:0 0 auto;">
+        <div style="display:inline-flex; align-items:center; gap:8px; margin-bottom:10px;">
+          <span style="background:#155eef; color:#fff; font-family:'Manrope',sans-serif; font-weight:800; font-size:12px; padding:2px 8px; border-radius:6px;">1d</span>
+          <span style="color:#c9cdd5; font-family:'Manrope',sans-serif; font-weight:700; font-size:13px;">Home</span>
+        </div>
+        <div style="width:390px; height:844px; border-radius:24px; overflow:hidden; border:1px solid rgba(17,24,39,.14); background:linear-gradient(135deg, rgba(255,255,255,.62), rgba(255,255,255,0) 34%), linear-gradient(180deg, #eef0f4 0%, #dde1e8 100%); color:#151922; position:relative; display:flex; flex-direction:column;">
+
+          <!-- single top bar: menu + brand + status -->
+          <div style="display:flex; align-items:center; gap:10px; padding:12px;">
+            <div style="display:grid; place-items:center; gap:4px; width:44px; height:44px; border:1px solid rgba(255,255,255,.72); border-radius:16px; background:rgba(255,255,255,.62); box-shadow:0 12px 30px rgba(34,38,47,.12), inset 0 1px 0 rgba(255,255,255,.78); flex:0 0 auto;">
+              <span style="display:block; width:16px; height:2px; border-radius:99px; background:#111;"></span>
+              <span style="display:block; width:16px; height:2px; border-radius:99px; background:#111;"></span>
+              <span style="display:block; width:16px; height:2px; border-radius:99px; background:#111;"></span>
+            </div>
+            <div style="flex:1; min-width:0;">
+              <div style="font-size:17px; font-weight:800; line-height:1;">JalaSai</div>
+              <div style="font-size:11px; color:#68707c; font-weight:700; margin-top:2px;">Offline · saved on device</div>
+            </div>
+            <span style="width:10px; height:10px; border-radius:50%; background:#8f97a3; box-shadow:0 0 0 5px rgba(143,151,163,.14); flex:0 0 auto;"></span>
+          </div>
+
+          <div style="flex:1; overflow-y:auto; padding:0 10px 96px;">
+            <!-- KPI strip: one glass card, 4 columns -->
+            <div style="display:grid; grid-template-columns:repeat(4,1fr); border-radius:16px; background:rgba(250,251,253,.7); border:1px solid rgba(255,255,255,.72); box-shadow:0 14px 36px rgba(31,41,55,.1), inset 0 1px 0 rgba(255,255,255,.78); margin-bottom:10px; overflow:hidden;">
+              <div style="padding:14px 6px; text-align:center;">
+                <div style="font-size:18px; font-weight:800; line-height:1;">₹6,480</div>
+                <div style="font-size:9px; color:#68707c; font-weight:850; text-transform:uppercase; margin-top:5px;">Today</div>
+              </div>
+              <div style="padding:14px 6px; text-align:center; border-left:1px solid rgba(17,24,39,.06);">
+                <div style="font-size:18px; font-weight:800; line-height:1;">7</div>
+                <div style="font-size:9px; color:#68707c; font-weight:850; text-transform:uppercase; margin-top:5px;">Jobs</div>
+              </div>
+              <div style="padding:14px 6px; text-align:center; border-left:1px solid rgba(17,24,39,.06);">
+                <div style="font-size:18px; font-weight:800; line-height:1; color:#ef4056;">₹4,350</div>
+                <div style="font-size:9px; color:#68707c; font-weight:850; text-transform:uppercase; margin-top:5px;">Dues</div>
+              </div>
+              <div style="padding:14px 6px; text-align:center; border-left:1px solid rgba(17,24,39,.06);">
+                <div style="font-size:18px; font-weight:800; line-height:1; color:#e06f1f;">4</div>
+                <div style="font-size:9px; color:#68707c; font-weight:850; text-transform:uppercase; margin-top:5px;">Reorder</div>
+              </div>
+            </div>
+
+            <!-- 4 quick actions -->
+            <div style="display:grid; grid-template-columns:repeat(4, minmax(0,1fr)); gap:8px; margin-bottom:12px;">
+              <button style="display:grid; place-items:center; gap:6px; min-height:72px; padding:10px 4px; border:1px solid #111318; border-radius:18px; background:#111318; color:#fff; font-family:'Manrope',sans-serif; font-weight:800; font-size:11px; cursor:pointer; box-shadow:0 10px 22px rgba(17,19,24,.14);"><span style="font-size:18px; line-height:1;">＋</span>New Job</button>
+              <button style="display:grid; place-items:center; gap:6px; min-height:72px; padding:10px 4px; border:1px solid rgba(18,20,24,.08); border-radius:18px; background:rgba(255,255,255,.58); color:#17181d; font-family:'Manrope',sans-serif; font-weight:800; font-size:11px; cursor:pointer;"><span style="font-size:18px; line-height:1;">🧾</span>Invoice</button>
+              <button style="display:grid; place-items:center; gap:6px; min-height:72px; padding:10px 4px; border:1px solid rgba(18,20,24,.08); border-radius:18px; background:rgba(255,255,255,.58); color:#17181d; font-family:'Manrope',sans-serif; font-weight:800; font-size:11px; cursor:pointer;"><span style="font-size:18px; line-height:1;">▣</span>Scan</button>
+              <button style="display:grid; place-items:center; gap:6px; min-height:72px; padding:10px 4px; border:1px solid rgba(18,20,24,.08); border-radius:18px; background:rgba(255,255,255,.58); color:#17181d; font-family:'Manrope',sans-serif; font-weight:800; font-size:11px; cursor:pointer;"><span style="font-size:18px; line-height:1;">📦</span>Receive</button>
+            </div>
+
+            <!-- today's work: replaces separate panels -->
+            <div style="padding:14px; border-radius:16px; background:rgba(250,251,253,.7); border:1px solid rgba(255,255,255,.72); box-shadow:0 14px 36px rgba(31,41,55,.1), inset 0 1px 0 rgba(255,255,255,.78); margin-bottom:10px;">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                <h2 style="margin:0; font-size:16px; font-weight:800;">In the workshop</h2>
+                <button style="min-height:32px; padding:6px 10px; border-radius:12px; cursor:pointer; font-family:'Manrope',sans-serif; font-size:11px; font-weight:800; background:rgba(255,255,255,.68); color:#242936; border:1px solid rgba(17,24,39,.1);">Jobs →</button>
+              </div>
+              <div style="display:grid; gap:8px;">
+                <div style="display:flex; justify-content:space-between; gap:12px; align-items:center; min-height:58px; padding:11px 13px; border:1px solid rgba(18,20,24,.07); border-radius:16px; background:rgba(255,255,255,.58); box-sizing:border-box;">
+                  <div style="min-width:0;">
+                    <b style="display:block; margin-bottom:2px; font-size:14px;">Ramesh Patel</b>
+                    <span style="color:#68707c; font-size:12px;">Splendor · MH 12 4448 · Clutch plate</span>
+                  </div>
+                  <em style="min-height:26px; padding:5px 10px; border-radius:999px; background:rgba(255,138,47,.13); color:#e06f1f; font-style:normal; font-size:11px; font-weight:850; display:inline-flex; align-items:center; box-sizing:border-box; white-space:nowrap;">in progress</em>
+                </div>
+                <div style="display:flex; justify-content:space-between; gap:12px; align-items:center; min-height:58px; padding:11px 13px; border:1px solid rgba(18,20,24,.07); border-radius:16px; background:rgba(255,255,255,.58); box-sizing:border-box;">
+                  <div style="min-width:0;">
+                    <b style="display:block; margin-bottom:2px; font-size:14px;">Suresh Kumar</b>
+                    <span style="color:#68707c; font-size:12px;">Activa 6G · MH 12 8821 · Oil + brakes</span>
+                  </div>
+                  <em style="min-height:26px; padding:5px 10px; border-radius:999px; background:rgba(19,167,109,.12); color:#138a5b; font-style:normal; font-size:11px; font-weight:850; display:inline-flex; align-items:center; box-sizing:border-box; white-space:nowrap;">ready</em>
+                </div>
+              </div>
+            </div>
+
+            <!-- reorder panel kept -->
+            <div style="padding:14px; border-radius:16px; background:rgba(250,251,253,.7); border:1px solid rgba(255,255,255,.72); box-shadow:0 14px 36px rgba(31,41,55,.1), inset 0 1px 0 rgba(255,255,255,.78);">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                <h2 style="margin:0; font-size:16px; font-weight:800;">Reorder needed</h2>
+                <button style="min-height:32px; padding:6px 10px; border-radius:12px; cursor:pointer; font-family:'Manrope',sans-serif; font-size:11px; font-weight:800; background:rgba(255,255,255,.68); color:#242936; border:1px solid rgba(17,24,39,.1);">Stock →</button>
+              </div>
+              <div style="display:grid; gap:8px;">
+                <div style="display:flex; justify-content:space-between; gap:12px; align-items:center; min-height:58px; padding:11px 13px; border:1px solid rgba(18,20,24,.07); border-radius:16px; background:rgba(255,255,255,.58); box-sizing:border-box;">
+                  <div style="min-width:0;">
+                    <b style="display:block; margin-bottom:2px; font-size:14px;">Brake Shoe — Activa</b>
+                    <span style="color:#68707c; font-size:12px;">BRK-ACT · Qty 0 · Min 2</span>
+                  </div>
+                  <em style="min-height:26px; padding:5px 10px; border-radius:999px; background:rgba(239,64,86,.12); color:#ef4056; font-style:normal; font-size:11px; font-weight:850; display:inline-flex; align-items:center; box-sizing:border-box;">out</em>
+                </div>
+                <div style="display:flex; justify-content:space-between; gap:12px; align-items:center; min-height:58px; padding:11px 13px; border:1px solid rgba(18,20,24,.07); border-radius:16px; background:rgba(255,255,255,.58); box-sizing:border-box;">
+                  <div style="min-width:0;">
+                    <b style="display:block; margin-bottom:2px; font-size:14px;">Engine Oil 10W-30</b>
+                    <span style="color:#68707c; font-size:12px;">OIL-1030 · Qty 1 · Min 4</span>
+                  </div>
+                  <em style="min-height:26px; padding:5px 10px; border-radius:999px; background:rgba(255,138,47,.13); color:#e06f1f; font-style:normal; font-size:11px; font-weight:850; display:inline-flex; align-items:center; box-sizing:border-box;">low</em>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- bottom nav unchanged -->
+          <div style="position:absolute; left:10px; right:10px; bottom:10px; display:grid; grid-template-columns:repeat(5,1fr); gap:4px; padding:8px; border:1px solid rgba(255,255,255,.72); border-radius:24px; background:rgba(248,249,251,.82); box-shadow:0 18px 42px rgba(35,39,48,.18), inset 0 1px 0 rgba(255,255,255,.78); backdrop-filter:blur(22px);">
+            <div style="display:grid; place-items:center; gap:3px; min-height:50px; padding:5px 2px; border-radius:17px; background:#111; color:#fff; font-size:10px; font-weight:850;"><span style="font-size:16px; line-height:1;">⌂</span>Home</div>
+            <div style="display:grid; place-items:center; gap:3px; min-height:50px; padding:5px 2px; border-radius:17px; color:#535a66; font-size:10px; font-weight:850;"><span style="font-size:16px; line-height:1;">▤</span>Jobs</div>
+            <div style="display:grid; place-items:center; gap:3px; min-height:50px; padding:5px 2px; border-radius:17px; color:#535a66; font-size:10px; font-weight:850;"><span style="font-size:16px; line-height:1;">🧾</span>Billing</div>
+            <div style="display:grid; place-items:center; gap:3px; min-height:50px; padding:5px 2px; border-radius:17px; color:#535a66; font-size:10px; font-weight:850;"><span style="font-size:16px; line-height:1;">▦</span>Stock</div>
+            <div style="display:grid; place-items:center; gap:3px; min-height:50px; padding:5px 2px; border-radius:17px; color:#535a66; font-size:10px; font-weight:850;"><span style="font-size:16px; line-height:1;">＋</span>More</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 1e: BILLING -->
+      <div id="1e" data-screen-label="Redesign New UI · Billing" style="flex:0 0 auto;">
+        <div style="display:inline-flex; align-items:center; gap:8px; margin-bottom:10px;">
+          <span style="background:#155eef; color:#fff; font-family:'Manrope',sans-serif; font-weight:800; font-size:12px; padding:2px 8px; border-radius:6px;">1e</span>
+          <span style="color:#c9cdd5; font-family:'Manrope',sans-serif; font-weight:700; font-size:13px;">Billing — cards + dues filter</span>
+        </div>
+        <div style="width:390px; height:844px; border-radius:24px; overflow:hidden; border:1px solid rgba(17,24,39,.14); background:linear-gradient(135deg, rgba(255,255,255,.62), rgba(255,255,255,0) 34%), linear-gradient(180deg, #eef0f4 0%, #dde1e8 100%); color:#151922; position:relative; display:flex; flex-direction:column;">
+
+          <div style="display:flex; align-items:center; gap:10px; padding:12px;">
+            <div style="display:grid; place-items:center; gap:4px; width:44px; height:44px; border:1px solid rgba(255,255,255,.72); border-radius:16px; background:rgba(255,255,255,.62); box-shadow:0 12px 30px rgba(34,38,47,.12), inset 0 1px 0 rgba(255,255,255,.78); flex:0 0 auto;">
+              <span style="display:block; width:16px; height:2px; border-radius:99px; background:#111;"></span>
+              <span style="display:block; width:16px; height:2px; border-radius:99px; background:#111;"></span>
+              <span style="display:block; width:16px; height:2px; border-radius:99px; background:#111;"></span>
+            </div>
+            <div style="flex:1; min-width:0;">
+              <div style="font-size:17px; font-weight:800; line-height:1;">Billing</div>
+              <div style="font-size:11px; color:#68707c; font-weight:700; margin-top:2px;">142 invoices · ₹4,350 due</div>
+            </div>
+          </div>
+
+          <div style="flex:1; overflow-y:auto; padding:0 10px 96px;">
+            <div style="display:flex; gap:8px; margin-bottom:10px;">
+              <input style="flex:1; min-width:0; min-height:44px; border-radius:14px; background:rgba(255,255,255,.74); color:#151922; font-size:13px; font-family:'Manrope',sans-serif; border:1px solid rgba(17,24,39,.1); padding:8px 12px; outline:none; box-sizing:border-box;" placeholder="Search customer / invoice / reg no…">
+              <button style="flex:0 0 auto; min-height:44px; padding:0 13px; border-radius:14px; cursor:pointer; font-family:'Manrope',sans-serif; font-size:12px; font-weight:800; background:rgba(255,255,255,.68); color:#242936; border:1px solid rgba(17,24,39,.1);">↕</button>
+            </div>
+            <div style="display:flex; gap:6px; margin-bottom:12px;">
+              <button style="min-height:36px; padding:6px 14px; border-radius:999px; cursor:pointer; font-family:'Manrope',sans-serif; font-size:12px; font-weight:800; background:#111318; color:#fff; border:1px solid #111318;">All</button>
+              <button style="min-height:36px; padding:6px 14px; border-radius:999px; cursor:pointer; font-family:'Manrope',sans-serif; font-size:12px; font-weight:800; background:rgba(239,64,86,.1); color:#ef4056; border:1px solid rgba(239,64,86,.18);">Dues (6)</button>
+              <button style="min-height:36px; padding:6px 14px; border-radius:999px; cursor:pointer; font-family:'Manrope',sans-serif; font-size:12px; font-weight:800; background:rgba(255,255,255,.62); color:#242936; border:1px solid rgba(17,24,39,.1);">Today</button>
+            </div>
+
+            <div style="display:grid; gap:8px;">
+              <div style="border-radius:16px; padding:13px 14px; background:rgba(250,251,253,.7); border:1px solid rgba(239,64,86,.24); box-shadow:0 14px 36px rgba(31,41,55,.1), inset 0 1px 0 rgba(255,255,255,.78);">
+                <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:2px;">
+                  <span style="font-size:15px; font-weight:800;">Ramesh Patel</span>
+                  <span style="font-size:13px; font-weight:800; color:#111318;">#4451</span>
+                </div>
+                <div style="font-size:12px; color:#68707c; margin-bottom:10px;">Hero Splendor · MH 12 4448 · 13 Jul, 10:42 am</div>
+                <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
+                  <span style="font-size:17px; font-weight:800;">₹1,450</span>
+                  <span style="font-size:11px; color:#138a5b; font-weight:800;">Paid ₹600</span>
+                  <em style="min-height:26px; padding:5px 10px; border-radius:999px; background:rgba(239,64,86,.12); color:#ef4056; font-style:normal; font-size:11px; font-weight:850; display:inline-flex; align-items:center; box-sizing:border-box;">Owe ₹850</em>
+                </div>
+                <div style="display:flex; gap:8px;">
+                  <button style="flex:1; min-height:40px; border-radius:12px; cursor:pointer; font-family:'Manrope',sans-serif; font-size:12px; font-weight:800; background:#111318; color:#fff; border:1px solid #111318;">Collect ₹850</button>
+                  <button style="flex:0 0 auto; min-height:40px; padding:0 13px; border-radius:12px; cursor:pointer; background:rgba(255,255,255,.68); color:#242936; border:1px solid rgba(17,24,39,.1); font-size:14px;">🖨</button>
+                  <button style="flex:0 0 auto; min-height:40px; padding:0 13px; border-radius:12px; cursor:pointer; background:rgba(255,255,255,.68); color:#242936; border:1px solid rgba(17,24,39,.1); font-size:14px;">📱</button>
+                </div>
+              </div>
+
+              <div style="border-radius:16px; padding:13px 14px; background:rgba(250,251,253,.7); border:1px solid rgba(255,255,255,.72); box-shadow:0 14px 36px rgba(31,41,55,.1), inset 0 1px 0 rgba(255,255,255,.78);">
+                <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:2px;">
+                  <span style="font-size:15px; font-weight:800;">Suresh Kumar</span>
+                  <span style="font-size:13px; font-weight:800; color:#111318;">#4450</span>
+                </div>
+                <div style="font-size:12px; color:#68707c; margin-bottom:8px;">Honda Activa 6G · MH 12 8821 · 13 Jul, 09:58 am</div>
+                <div style="display:flex; align-items:center; gap:10px;">
+                  <span style="font-size:17px; font-weight:800;">₹780</span>
+                  <em style="min-height:26px; padding:5px 10px; border-radius:999px; background:rgba(19,167,109,.12); color:#138a5b; font-style:normal; font-size:11px; font-weight:850; display:inline-flex; align-items:center; box-sizing:border-box;">Clear</em>
+                  <span style="flex:1;"></span>
+                  <button style="min-height:36px; padding:0 12px; border-radius:12px; cursor:pointer; background:rgba(255,255,255,.68); color:#242936; border:1px solid rgba(17,24,39,.1); font-size:14px;">🖨</button>
+                  <button style="min-height:36px; padding:0 12px; border-radius:12px; cursor:pointer; background:rgba(255,255,255,.68); color:#242936; border:1px solid rgba(17,24,39,.1); font-size:14px;">📱</button>
+                </div>
+              </div>
+
+              <div style="border-radius:16px; padding:13px 14px; background:rgba(250,251,253,.7); border:1px solid rgba(255,255,255,.72); box-shadow:0 14px 36px rgba(31,41,55,.1), inset 0 1px 0 rgba(255,255,255,.78);">
+                <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:2px;">
+                  <span style="font-size:15px; font-weight:800;">Anil Jadhav</span>
+                  <span style="font-size:13px; font-weight:800; color:#111318;">#4449</span>
+                </div>
+                <div style="font-size:12px; color:#68707c; margin-bottom:8px;">TVS Jupiter · MH 14 3310 · 12 Jul, 06:31 pm</div>
+                <div style="display:flex; align-items:center; gap:10px;">
+                  <span style="font-size:17px; font-weight:800;">₹2,300</span>
+                  <em style="min-height:26px; padding:5px 10px; border-radius:999px; background:rgba(19,167,109,.12); color:#138a5b; font-style:normal; font-size:11px; font-weight:850; display:inline-flex; align-items:center; box-sizing:border-box;">Clear</em>
+                  <span style="flex:1;"></span>
+                  <button style="min-height:36px; padding:0 12px; border-radius:12px; cursor:pointer; background:rgba(255,255,255,.68); color:#242936; border:1px solid rgba(17,24,39,.1); font-size:14px;">🖨</button>
+                  <button style="min-height:36px; padding:0 12px; border-radius:12px; cursor:pointer; background:rgba(255,255,255,.68); color:#242936; border:1px solid rgba(17,24,39,.1); font-size:14px;">📱</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div style="position:absolute; left:10px; right:10px; bottom:10px; display:grid; grid-template-columns:repeat(5,1fr); gap:4px; padding:8px; border:1px solid rgba(255,255,255,.72); border-radius:24px; background:rgba(248,249,251,.82); box-shadow:0 18px 42px rgba(35,39,48,.18), inset 0 1px 0 rgba(255,255,255,.78); backdrop-filter:blur(22px);">
+            <div style="display:grid; place-items:center; gap:3px; min-height:50px; padding:5px 2px; border-radius:17px; color:#535a66; font-size:10px; font-weight:850;"><span style="font-size:16px; line-height:1;">⌂</span>Home</div>
+            <div style="display:grid; place-items:center; gap:3px; min-height:50px; padding:5px 2px; border-radius:17px; color:#535a66; font-size:10px; font-weight:850;"><span style="font-size:16px; line-height:1;">▤</span>Jobs</div>
+            <div style="display:grid; place-items:center; gap:3px; min-height:50px; padding:5px 2px; border-radius:17px; background:#111; color:#fff; font-size:10px; font-weight:850;"><span style="font-size:16px; line-height:1;">🧾</span>Billing</div>
+            <div style="display:grid; place-items:center; gap:3px; min-height:50px; padding:5px 2px; border-radius:17px; color:#535a66; font-size:10px; font-weight:850;"><span style="font-size:16px; line-height:1;">▦</span>Stock</div>
+            <div style="display:grid; place-items:center; gap:3px; min-height:50px; padding:5px 2px; border-radius:17px; color:#535a66; font-size:10px; font-weight:850;"><span style="font-size:16px; line-height:1;">＋</span>More</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 1f: QUICK INVOICE -->
+      <div id="1f" data-screen-label="Redesign New UI · Quick Invoice" style="flex:0 0 auto;">
+        <div style="display:inline-flex; align-items:center; gap:8px; margin-bottom:10px;">
+          <span style="background:#155eef; color:#fff; font-family:'Manrope',sans-serif; font-weight:800; font-size:12px; padding:2px 8px; border-radius:6px;">1f</span>
+          <span style="color:#c9cdd5; font-family:'Manrope',sans-serif; font-weight:700; font-size:13px;">Quick Invoice — full-screen sheet, essentials first</span>
+        </div>
+        <div style="width:390px; border-radius:24px; overflow:hidden; border:1px solid rgba(17,24,39,.14); background:rgba(90,95,105,.9); padding:12px; box-sizing:border-box;">
+          <div style="border-radius:20px; padding:18px; background:rgba(250,251,253,.97); border:1px solid rgba(255,255,255,.72); box-shadow:0 14px 36px rgba(31,41,55,.2), inset 0 1px 0 rgba(255,255,255,.78); color:#151922; box-sizing:border-box;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+              <div style="font-size:18px; font-weight:800;">Quick Invoice</div>
+              <button style="min-height:34px; width:34px; border-radius:12px; cursor:pointer; background:rgba(255,255,255,.68); color:#242936; border:1px solid rgba(17,24,39,.1); font-size:14px;">✕</button>
+            </div>
+
+            <label style="font-size:10px; color:#68707c; text-transform:uppercase; letter-spacing:.7px; margin-bottom:6px; display:block; font-weight:850;">Customer</label>
+            <input style="width:100%; min-height:44px; border-radius:14px; background:rgba(255,255,255,.9); color:#151922; font-size:14px; font-family:'Manrope',sans-serif; border:1px solid rgba(17,24,39,.1); padding:8px 12px; outline:none; box-sizing:border-box;" placeholder="Search or type name / phone…">
+            <div style="display:flex; gap:6px; flex-wrap:wrap; margin:8px 0 16px;">
+              <button style="min-height:34px; padding:6px 12px; font-size:11px; border-radius:999px; cursor:pointer; background:rgba(255,255,255,.68); color:#242936; border:1px solid rgba(17,24,39,.1); font-family:'Manrope',sans-serif; font-weight:800;">Ramesh P.</button>
+              <button style="min-height:34px; padding:6px 12px; font-size:11px; border-radius:999px; cursor:pointer; background:rgba(255,255,255,.68); color:#242936; border:1px solid rgba(17,24,39,.1); font-family:'Manrope',sans-serif; font-weight:800;">Suresh K.</button>
+              <button style="min-height:34px; padding:6px 12px; font-size:11px; border-radius:999px; cursor:pointer; background:rgba(255,255,255,.68); color:#242936; border:1px solid rgba(17,24,39,.1); font-family:'Manrope',sans-serif; font-weight:800;">Anil J.</button>
+              <button style="min-height:34px; padding:6px 12px; font-size:11px; border-radius:999px; cursor:pointer; background:rgba(255,255,255,.5); color:#155eef; border:1px dashed rgba(21,94,239,.4); font-family:'Manrope',sans-serif; font-weight:800;">+ New</button>
+            </div>
+
+            <label style="font-size:10px; color:#68707c; text-transform:uppercase; letter-spacing:.7px; margin-bottom:6px; display:block; font-weight:850;">Vehicle &amp; Work</label>
+            <div style="display:flex; gap:8px; margin-bottom:8px;">
+              <input style="flex:1.4; min-width:0; min-height:44px; border-radius:14px; background:rgba(255,255,255,.9); color:#151922; font-size:14px; font-family:'Manrope',sans-serif; border:1px solid rgba(17,24,39,.1); padding:8px 12px; outline:none; box-sizing:border-box;" placeholder="Bike e.g. Activa">
+              <input style="flex:1; min-width:0; min-height:44px; border-radius:14px; background:rgba(255,255,255,.9); color:#151922; font-size:14px; font-family:'Manrope',sans-serif; border:1px solid rgba(17,24,39,.1); padding:8px 12px; outline:none; text-transform:uppercase; box-sizing:border-box;" placeholder="Reg no">
+            </div>
+            <textarea style="width:100%; min-height:64px; border-radius:14px; background:rgba(255,255,255,.9); color:#151922; font-size:14px; font-family:'Manrope',sans-serif; border:1px solid rgba(17,24,39,.1); padding:8px 12px; outline:none; resize:vertical; box-sizing:border-box; margin-bottom:16px;" placeholder="Work — puncture, brake work, oil change…"></textarea>
+
+            <label style="font-size:10px; color:#68707c; text-transform:uppercase; letter-spacing:.7px; margin-bottom:6px; display:block; font-weight:850;">Amount</label>
+            <div style="display:flex; gap:8px; margin-bottom:10px;">
+              <input style="flex:1; min-width:0; min-height:52px; border-radius:14px; background:rgba(255,255,255,.9); color:#151922; font-size:19px; font-weight:800; font-family:'Manrope',sans-serif; border:1px solid rgba(21,94,239,.35); padding:8px 12px; outline:none; box-sizing:border-box;" placeholder="Total ₹" type="number">
+              <input style="flex:1; min-width:0; min-height:52px; border-radius:14px; background:rgba(255,255,255,.9); color:#151922; font-size:19px; font-weight:800; font-family:'Manrope',sans-serif; border:1px solid rgba(17,24,39,.1); padding:8px 12px; outline:none; box-sizing:border-box;" placeholder="Paid ₹" type="number">
+            </div>
+            <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:8px;">
+              <button style="min-height:38px; padding:6px 16px; font-size:12px; border-radius:999px; cursor:pointer; background:#111318; color:#fff; border:1px solid #111318; font-family:'Manrope',sans-serif; font-weight:800;">Cash</button>
+              <button style="min-height:38px; padding:6px 16px; font-size:12px; border-radius:999px; cursor:pointer; background:rgba(255,255,255,.68); color:#242936; border:1px solid rgba(17,24,39,.1); font-family:'Manrope',sans-serif; font-weight:800;">UPI</button>
+              <button style="min-height:38px; padding:6px 16px; font-size:12px; border-radius:999px; cursor:pointer; background:rgba(255,255,255,.68); color:#242936; border:1px solid rgba(17,24,39,.1); font-family:'Manrope',sans-serif; font-weight:800;">Card</button>
+              <span style="flex:1;"></span>
+              <button style="min-height:38px; padding:6px 12px; font-size:12px; border-radius:999px; cursor:pointer; background:rgba(255,255,255,.68); color:#242936; border:1px solid rgba(17,24,39,.1); font-family:'Manrope',sans-serif; font-weight:800;">Mechanic: Sanjay ▾</button>
+            </div>
+
+            <div style="display:flex; align-items:center; justify-content:space-between; padding:12px 14px; border-radius:14px; border:1px dashed rgba(17,24,39,.18); color:#68707c; margin:8px 0 16px;">
+              <span style="font-size:12px; font-weight:800;">More — discount, invoice no. &amp; date, notes, photo</span>
+              <span style="font-size:12px;">▼</span>
+            </div>
+
+            <button style="width:100%; min-height:50px; border-radius:14px; cursor:pointer; font-family:'Manrope',sans-serif; font-size:14px; font-weight:800; background:#111318; color:#fff; border:1px solid #111318; box-shadow:0 10px 22px rgba(17,19,24,.18); margin-bottom:8px;">Save Invoice</button>
+            <div style="display:flex; gap:8px;">
+              <button style="flex:1; min-height:42px; border-radius:14px; cursor:pointer; font-family:'Manrope',sans-serif; font-size:12px; font-weight:800; background:rgba(255,255,255,.68); color:#242936; border:1px solid rgba(17,24,39,.1);">Save as Job Card</button>
+              <button style="flex:1; min-height:42px; border-radius:14px; cursor:pointer; font-family:'Manrope',sans-serif; font-size:12px; font-weight:800; background:rgba(255,255,255,.68); color:#242936; border:1px solid rgba(17,24,39,.1);">Save &amp; Next</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</section>
+</x-dc>
+</body>
+</html>

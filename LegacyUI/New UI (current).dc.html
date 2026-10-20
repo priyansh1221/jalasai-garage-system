@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  body { margin: 0; background: #b9bdc6; }
+  a { color: #151922; } a:hover { color: #155eef; }
+</style>
+</helmet>
+
+<section style="display:flex; gap:48px; align-items:flex-start; padding:40px; font-family:'Manrope',sans-serif;">
+
+  <!-- ══════════ SCREEN: HOME ══════════ -->
+  <div data-screen-label="New UI · Home" style="flex:0 0 auto;">
+    <div style="color:#3d434d; font-family:'Manrope',sans-serif; font-weight:800; font-size:14px; letter-spacing:1px; margin-bottom:10px;">NEW UI — HOME</div>
+    <div style="width:390px; border-radius:24px; overflow:hidden; border:1px solid rgba(17,24,39,.14); background:linear-gradient(135deg, rgba(255,255,255,.62), rgba(255,255,255,0) 34%), linear-gradient(180deg, #eef0f4 0%, #dde1e8 100%); color:#151922; position:relative; padding-bottom:88px;">
+
+      <!-- hamburger toggle -->
+      <div style="position:absolute; top:12px; left:12px; z-index:5; display:grid; place-items:center; gap:4px; width:48px; height:48px; border:1px solid rgba(255,255,255,.72); border-radius:18px; background:rgba(255,255,255,.62); box-shadow:0 16px 38px rgba(34,38,47,.14), inset 0 1px 0 rgba(255,255,255,.78);">
+        <span style="display:block; width:18px; height:2px; border-radius:99px; background:#111;"></span>
+        <span style="display:block; width:18px; height:2px; border-radius:99px; background:#111;"></span>
+        <span style="display:block; width:18px; height:2px; border-radius:99px; background:#111;"></span>
+      </div>
+
+      <div style="padding-top:66px;">
+        <!-- gs bar -->
+        <div style="margin:8px 8px 8px 58px; padding:7px 9px; border:1px solid rgba(255,255,255,.72); border-radius:16px; background:rgba(250,251,253,.76); box-shadow:0 12px 30px rgba(31,41,55,.1), inset 0 1px 0 rgba(255,255,255,.78); display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap;">
+          <div style="min-height:34px; padding:8px 13px; border:1px solid rgba(239,64,86,.14); border-radius:12px; background:rgba(239,64,86,.08); color:#ef4056; font-weight:800; font-size:11px; display:inline-flex; align-items:center; box-sizing:border-box;">☁ Offline · saved on device</div>
+          <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+            <button style="min-height:38px; padding:8px 13px; border-radius:12px; cursor:pointer; font-family:'Manrope',sans-serif; font-size:12px; font-weight:800; background:rgba(255,255,255,.68); color:#242936; border:1px solid rgba(17,24,39,.1);">Quick Invoice</button>
+            <button style="min-height:38px; padding:8px 13px; border-radius:12px; cursor:pointer; font-family:'Manrope',sans-serif; font-size:12px; font-weight:800; background:#111318; color:#fff; border:1px solid #111318; box-shadow:0 10px 22px rgba(17,19,24,.14);">New Job</button>
+          </div>
+        </div>
+
+        <!-- page -->
+        <div style="padding:8px;">
+          <!-- kpi grid -->
+          <div style="display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:8px; margin-bottom:12px;">
+            <div style="position:relative; overflow:hidden; min-height:96px; padding:12px; border-radius:16px; background:rgba(250,251,253,.7); border:1px solid rgba(255,255,255,.72); box-shadow:0 14px 36px rgba(31,41,55,.1), inset 0 1px 0 rgba(255,255,255,.78); box-sizing:border-box;">
+              <div style="display:grid; place-items:center; width:34px; height:34px; margin-bottom:10px; border-radius:12px; background:#1463ff; color:#fff; font-size:15px; font-weight:800;">₹</div>
+              <span style="color:#68707c; font-size:11px; font-weight:850; text-transform:uppercase;">Today Revenue</span>
+              <strong style="display:block; margin-top:6px; color:#151922; font-size:22px; font-weight:800;">₹6,480</strong>
+              <small style="display:block; margin-top:7px; color:#52606d; font-weight:800; font-size:11px;">5 invoices today</small>
+              <div style="position:absolute; left:18px; right:18px; bottom:0; height:2px; background:linear-gradient(90deg, rgba(20,99,255,.44), rgba(255,255,255,0));"></div>
+            </div>
+            <div style="position:relative; overflow:hidden; min-height:96px; padding:12px; border-radius:16px; background:rgba(250,251,253,.7); border:1px solid rgba(255,255,255,.72); box-shadow:0 14px 36px rgba(31,41,55,.1), inset 0 1px 0 rgba(255,255,255,.78); box-sizing:border-box;">
+              <div style="display:grid; place-items:center; width:34px; height:34px; margin-bottom:10px; border-radius:12px; background:#138a5b; color:#fff; font-size:15px; font-weight:800;">⚙</div>
+              <span style="color:#68707c; font-size:11px; font-weight:850; text-transform:uppercase;">Active Jobs</span>
+              <strong style="display:block; margin-top:6px; color:#151922; font-size:22px; font-weight:800;">7</strong>
+              <small style="display:block; margin-top:7px; color:#52606d; font-weight:800; font-size:11px;">2 ready</small>
+              <div style="position:absolute; left:18px; right:18px; bottom:0; height:2px; background:linear-gradient(90deg, rgba(20,99,255,.44), rgba(255,255,255,0));"></div>
+            </div>
+            <div style="position:relative; overflow:hidden; min-height:96px; padding:12px; border-radius:16px; background:rgba(250,251,253,.7); border:1px solid rgba(255,255,255,.72); box-shadow:0 14px 36px rgba(31,41,55,.1), inset 0 1px 0 rgba(255,255,255,.78); box-sizing:border-box;">
+              <div style="display:grid; place-items:center; width:34px; height:34px; margin-bottom:10px; border-radius:12px; background:#7256d9; color:#fff; font-size:15px; font-weight:800;">☺</div>
+              <span style="color:#68707c; font-size:11px; font-weight:850; text-transform:uppercase;">Customers</span>
+              <strong style="display:block; margin-top:6px; color:#151922; font-size:22px; font-weight:800;">318</strong>
+              <small style="display:block; margin-top:7px; color:#52606d; font-weight:800; font-size:11px;">₹4,350 pending dues</small>
+              <div style="position:absolute; left:18px; right:18px; bottom:0; height:2px; background:linear-gradient(90deg, rgba(20,99,255,.44), rgba(255,255,255,0));"></div>
+            </div>
+            <div style="position:relative; overflow:hidden; min-height:96px; padding:12px; border-radius:16px; background:rgba(250,251,253,.7); border:1px solid rgba(255,255,255,.72); box-shadow:0 14px 36px rgba(31,41,55,.1), inset 0 1px 0 rgba(255,255,255,.78); box-sizing:border-box;">
+              <div style="display:grid; place-items:center; width:34px; height:34px; margin-bottom:10px; border-radius:12px; background:#e06f1f; color:#fff; font-size:15px; font-weight:800;">!</div>
+              <span style="color:#68707c; font-size:11px; font-weight:850; text-transform:uppercase;">Parts to Reorder</span>
+              <strong style="display:block; margin-top:6px; color:#151922; font-size:22px; font-weight:800;">4</strong>
+              <small style="display:block; margin-top:7px; color:#52606d; font-weight:800; font-size:11px;">low or out of stock</small>
+              <div style="position:absolute; left:18px; right:18px; bottom:0; height:2px; background:linear-gradient(90deg, rgba(20,99,255,.44), rgba(255,255,255,0));"></div>
+            </div>
+          </div>
+
+          <!-- panels -->
+          <div style="display:grid; grid-template-columns:1fr; gap:12px;">
+            <div style="padding:14px; border-radius:16px; background:rgba(250,251,253,.7); border:1px solid rgba(255,255,255,.72); box-shadow:0 14px 36px rgba(31,41,55,.1), inset 0 1px 0 rgba(255,255,255,.78);">
+              <div style="display:flex; justify-content:space-between; gap:12px; align-items:flex-start; margin-bottom:10px;">
+                <div>
+                  <h2 style="margin:0 0 4px; font-size:16px; font-weight:800;">Quick Actions</h2>
+                  <span style="color:#68707c; font-size:12px; font-weight:700;">One tap daily workflow</span>
+                </div>
+              </div>
+              <div style="display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:10px;">
+                <button style="display:flex; align-items:center; gap:9px; min-height:56px; padding:10px 12px; border:1px solid rgba(18,20,24,.08); border-radius:18px; background:rgba(255,255,255,.58); color:#17181d; font-family:'Manrope',sans-serif; font-weight:800; font-size:13px; cursor:pointer;">＋ New Job</button>
+                <button style="display:flex; align-items:center; gap:9px; min-height:56px; padding:10px 12px; border:1px solid rgba(18,20,24,.08); border-radius:18px; background:rgba(255,255,255,.58); color:#17181d; font-family:'Manrope',sans-serif; font-weight:800; font-size:13px; cursor:pointer;">🧾 Invoice</button>
+                <button style="display:flex; align-items:center; gap:9px; min-height:56px; padding:10px 12px; border:1px solid rgba(18,20,24,.08); border-radius:18px; background:rgba(255,255,255,.58); color:#17181d; font-family:'Manrope',sans-serif; font-weight:800; font-size:13px; cursor:pointer;">▣ Scan</button>
+                <button style="display:flex; align-items:center; gap:9px; min-height:56px; padding:10px 12px; border:1px solid rgba(18,20,24,.08); border-radius:18px; background:rgba(255,255,255,.58); color:#17181d; font-family:'Manrope',sans-serif; font-weight:800; font-size:13px; cursor:pointer;">☺ Customer</button>
+                <button style="display:flex; align-items:center; gap:9px; min-height:56px; padding:10px 12px; border:1px solid rgba(18,20,24,.08); border-radius:18px; background:rgba(255,255,255,.58); color:#17181d; font-family:'Manrope',sans-serif; font-weight:800; font-size:13px; cursor:pointer;">📦 Receive</button>
+                <button style="display:flex; align-items:center; gap:9px; min-height:56px; padding:10px 12px; border:1px solid rgba(18,20,24,.08); border-radius:18px; background:rgba(255,255,255,.58); color:#17181d; font-family:'Manrope',sans-serif; font-weight:800; font-size:13px; cursor:pointer;">📊 Reports</button>
+              </div>
+            </div>
+
+            <div style="padding:14px; border-radius:16px; background:rgba(250,251,253,.7); border:1px solid rgba(255,255,255,.72); box-shadow:0 14px 36px rgba(31,41,55,.1), inset 0 1px 0 rgba(255,255,255,.78);">
+              <div style="display:flex; justify-content:space-between; gap:12px; align-items:flex-start; margin-bottom:10px;">
+                <div>
+                  <h2 style="margin:0 0 4px; font-size:16px; font-weight:800;">Reorder Needed</h2>
+                  <span style="color:#68707c; font-size:12px; font-weight:700;">From stock min levels</span>
+                </div>
+                <button style="min-height:32px; padding:6px 10px; border-radius:12px; cursor:pointer; font-family:'Manrope',sans-serif; font-size:11px; font-weight:800; background:rgba(255,255,255,.68); color:#242936; border:1px solid rgba(17,24,39,.1);">Stock</button>
+              </div>
+              <div style="display:grid; gap:10px;">
+                <div style="display:flex; justify-content:space-between; gap:14px; align-items:center; min-height:66px; padding:13px 14px; border:1px solid rgba(18,20,24,.07); border-radius:18px; background:rgba(255,255,255,.58); box-sizing:border-box;">
+                  <div>
+                    <b style="display:block; margin-bottom:3px; font-size:14px;">Engine Oil 10W-30</b>
+                    <span style="color:#68707c; font-size:12px;">OIL-1030 · Qty 1 · Min 4</span>
+                  </div>
+                  <em style="min-height:26px; padding:5px 10px; border-radius:999px; background:rgba(255,138,47,.13); color:#e06f1f; font-style:normal; font-size:11px; font-weight:850; text-transform:capitalize; display:inline-flex; align-items:center; box-sizing:border-box;">low</em>
+                </div>
+                <div style="display:flex; justify-content:space-between; gap:14px; align-items:center; min-height:66px; padding:13px 14px; border:1px solid rgba(18,20,24,.07); border-radius:18px; background:rgba(255,255,255,.58); box-sizing:border-box;">
+                  <div>
+                    <b style="display:block; margin-bottom:3px; font-size:14px;">Brake Shoe — Activa</b>
+                    <span style="color:#68707c; font-size:12px;">BRK-ACT · Qty 0 · Min 2</span>
+                  </div>
+                  <em style="min-height:26px; padding:5px 10px; border-radius:999px; background:rgba(239,64,86,.12); color:#ef4056; font-style:normal; font-size:11px; font-weight:850; text-transform:capitalize; display:inline-flex; align-items:center; box-sizing:border-box;">out</em>
+                </div>
+                <div style="display:flex; justify-content:space-between; gap:14px; align-items:center; min-height:66px; padding:13px 14px; border:1px solid rgba(18,20,24,.07); border-radius:18px; background:rgba(255,255,255,.58); box-sizing:border-box;">
+                  <div>
+                    <b style="display:block; margin-bottom:3px; font-size:14px;">Clutch Plate — Splendor</b>
+                    <span style="color:#68707c; font-size:12px;">CLT-SPL · Qty 2 · Min 3</span>
+                  </div>
+                  <em style="min-height:26px; padding:5px 10px; border-radius:999px; background:rgba(255,138,47,.13); color:#e06f1f; font-style:normal; font-size:11px; font-weight:850; text-transform:capitalize; display:inline-flex; align-items:center; box-sizing:border-box;">low</em>
+                </div>
+              </div>
+            </div>
+
+            <div style="padding:14px; border-radius:16px; background:rgba(250,251,253,.7); border:1px solid rgba(255,255,255,.72); box-shadow:0 14px 36px rgba(31,41,55,.1), inset 0 1px 0 rgba(255,255,255,.78);">
+              <div style="margin-bottom:10px;">
+                <h2 style="margin:0 0 4px; font-size:16px; font-weight:800;">System Health</h2>
+                <span style="color:#68707c; font-size:12px; font-weight:700;">Local-first and cloud sync</span>
+              </div>
+              <div style="display:flex; align-items:center; gap:14px; padding:16px; border:1px solid rgba(19,167,109,.16); border-radius:20px; background:rgba(19,167,109,.09);">
+                <span style="width:18px; height:18px; border-radius:50%; background:#8f97a3; box-shadow:0 0 0 8px rgba(143,151,163,.12); flex:0 0 auto;"></span>
+                <div>
+                  <strong style="font-size:13px; font-weight:800;">Working offline — saved on this device</strong>
+                  <p style="margin:4px 0 0; color:#68707c; font-size:12px; line-height:1.45;">Everything keeps working without internet. Connect cloud from the top badge to back up.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- bottom nav -->
+      <div style="position:absolute; left:10px; right:10px; bottom:10px; display:grid; grid-template-columns:repeat(5,1fr); gap:4px; padding:8px; border:1px solid rgba(255,255,255,.72); border-radius:24px; background:rgba(248,249,251,.82); box-shadow:0 18px 42px rgba(35,39,48,.18), inset 0 1px 0 rgba(255,255,255,.78);">
+        <div style="display:grid; place-items:center; gap:3px; min-height:50px; padding:5px 2px; border-radius:17px; background:#111; color:#fff; font-size:10px; font-weight:850;"><span style="font-size:16px; line-height:1;">⌂</span>Home</div>
+        <div style="display:grid; place-items:center; gap:3px; min-height:50px; padding:5px 2px; border-radius:17px; color:#535a66; font-size:10px; font-weight:850;"><span style="font-size:16px; line-height:1;">▤</span>Jobs</div>
+        <div style="display:grid; place-items:center; gap:3px; min-height:50px; padding:5px 2px; border-radius:17px; color:#535a66; font-size:10px; font-weight:850;"><span style="font-size:16px; line-height:1;">🧾</span>Billing</div>
+        <div style="display:grid; place-items:center; gap:3px; min-height:50px; padding:5px 2px; border-radius:17px; color:#535a66; font-size:10px; font-weight:850;"><span style="font-size:16px; line-height:1;">▦</span>Stock</div>
+        <div style="display:grid; place-items:center; gap:3px; min-height:50px; padding:5px 2px; border-radius:17px; color:#535a66; font-size:10px; font-weight:850;"><span style="font-size:16px; line-height:1;">＋</span>More</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════ SCREEN: BILLING / INVOICES ══════════ -->
+  <div data-screen-label="New UI · Billing" style="flex:0 0 auto;">
+    <div style="color:#3d434d; font-family:'Manrope',sans-serif; font-weight:800; font-size:14px; letter-spacing:1px; margin-bottom:10px;">NEW UI — BILLING (INVOICES)</div>
+    <div style="width:390px; border-radius:24px; overflow:hidden; border:1px solid rgba(17,24,39,.14); background:linear-gradient(135deg, rgba(255,255,255,.62), rgba(255,255,255,0) 34%), linear-gradient(180deg, #eef0f4 0%, #dde1e8 100%); color:#151922; position:relative; padding-bottom:88px;">
+
+      <div style="position:absolute; top:12px; left:12px; z-index:5; display:grid; place-items:center; gap:4px; width:48px; height:48px; border:1px solid rgba(255,255,255,.72); border-radius:18px; background:rgba(255,255,255,.62); box-shadow:0 16px 38px rgba(34,38,47,.14), inset 0 1px 0 rgba(255,255,255,.78);">
+        <span style="display:block; width:18px; height:2px; border-radius:99px; background:#111;"></span>
+        <span style="display:block; width:18px; height:2px; border-radius:99px; background:#111;"></span>
+        <span style="display:block; width:18px; height:2px; border-radius:99px; background:#111;"></span>
+      </div>
+
+      <div style="padding-top:66px;">
+        <div style="margin:8px 8px 8px 58px; padding:7px 9px; border:1px solid rgba(255,255,255,.72); border-radius:16px; background:rgba(250,251,253,.76); box-shadow:0 12px 30px rgba(31,41,55,.1), inset 0 1px 0 rgba(255,255,255,.78); display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap;">
+          <div style="min-height:34px; padding:8px 13px; border:1px solid rgba(239,64,86,.14); border-radius:12px; background:rgba(239,64,86,.08); color:#ef4056; font-weight:800; font-size:11px; display:inline-flex; align-items:center; box-sizing:border-box;">☁ Offline · saved on device</div>
+        </div>
+
+        <div style="padding:8px;">
+          <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; min-height:58px; margin-bottom:12px; padding:12px 14px; border-radius:16px; background:rgba(250,251,253,.7); border:1px solid rgba(255,255,255,.72); box-shadow:0 14px 36px rgba(31,41,55,.1), inset 0 1px 0 rgba(255,255,255,.78); box-sizing:border-box;">
+            <div style="font-size:18px; font-weight:800;">Invoices</div>
+            <div style="font-size:12px; color:#68707c; font-weight:700;">142 invoices · ₹4,350 due</div>
+          </div>
+
+          <div style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:12px;">
+            <select style="flex:1 1 100%; min-height:40px; border-radius:12px; background:rgba(255,255,255,.74); color:#151922; font-size:13px; font-family:'Manrope',sans-serif; border:1px solid rgba(17,24,39,.1); padding:8px 12px; outline:none; box-sizing:border-box;">
+              <option>Sort: Invoice No.</option>
+            </select>
+            <input style="flex:1 1 100%; min-height:40px; border-radius:12px; background:rgba(255,255,255,.74); color:#151922; font-size:13px; font-family:'Manrope',sans-serif; border:1px solid rgba(17,24,39,.1); padding:8px 12px; outline:none; box-sizing:border-box;" placeholder="Search customer / invoice / phone / vehicle no…">
+          </div>
+
+          <div style="border-radius:16px; overflow-x:auto; background:rgba(250,251,253,.7); border:1px solid rgba(255,255,255,.72); box-shadow:0 14px 36px rgba(31,41,55,.1), inset 0 1px 0 rgba(255,255,255,.78);">
+            <table style="width:100%; border-collapse:collapse; min-width:560px;">
+              <thead>
+                <tr>
+                  <th style="background:rgba(255,255,255,.5); padding:10px; text-align:left; font-size:11px; text-transform:uppercase; color:#596270; font-weight:850;">Invoice #</th>
+                  <th style="background:rgba(255,255,255,.5); padding:10px; text-align:left; font-size:11px; text-transform:uppercase; color:#596270; font-weight:850;">Date / Time</th>
+                  <th style="background:rgba(255,255,255,.5); padding:10px; text-align:left; font-size:11px; text-transform:uppercase; color:#596270; font-weight:850;">Customer</th>
+                  <th style="background:rgba(255,255,255,.5); padding:10px; text-align:left; font-size:11px; text-transform:uppercase; color:#596270; font-weight:850;">Vehicle</th>
+                  <th style="background:rgba(255,255,255,.5); padding:10px; text-align:left; font-size:11px; text-transform:uppercase; color:#596270; font-weight:850;">Amount</th>
+                  <th style="background:rgba(255,255,255,.5); padding:10px; text-align:left; font-size:11px; text-transform:uppercase; color:#596270; font-weight:850;">Paid</th>
+                  <th style="background:rgba(255,255,255,.5); padding:10px; text-align:left; font-size:11px; text-transform:uppercase; color:#596270; font-weight:850;">Due</th>
+                  <th style="background:rgba(255,255,255,.5); padding:10px;"></th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td style="padding:9px 10px; font-size:13px; border-top:1px solid rgba(17,24,39,.08); font-weight:800; color:#111318;">4451</td>
+                  <td style="padding:9px 10px; font-size:12px; border-top:1px solid rgba(17,24,39,.08); color:#202633;">13 Jul<br><span style="color:#68707c;">10:42 am</span></td>
+                  <td style="padding:9px 10px; font-size:13px; border-top:1px solid rgba(17,24,39,.08); color:#202633;"><span style="font-weight:700;">Ramesh Patel</span><br><span style="font-size:11px; color:#68707c;">98765 43210</span></td>
+                  <td style="padding:9px 10px; font-size:12px; border-top:1px solid rgba(17,24,39,.08); color:#202633;">Hero Splendor<br><span style="color:#68707c;">MH 12 4448</span></td>
+                  <td style="padding:9px 10px; font-size:13px; border-top:1px solid rgba(17,24,39,.08); font-weight:800; color:#202633;">₹1,450</td>
+                  <td style="padding:9px 10px; font-size:13px; border-top:1px solid rgba(17,24,39,.08); color:#138a5b;">₹600</td>
+                  <td style="padding:9px 10px; font-size:13px; border-top:1px solid rgba(17,24,39,.08); color:#ef4056; font-weight:800;">Owe ₹850</td>
+                  <td style="padding:9px 10px; border-top:1px solid rgba(17,24,39,.08); white-space:nowrap;">
+                    <button style="min-height:32px; padding:6px 10px; font-size:11px; border-radius:12px; cursor:pointer; background:rgba(255,255,255,.68); color:#242936; border:1px solid rgba(17,24,39,.1); font-family:'Manrope',sans-serif; font-weight:800;">🖨</button>
+                    <button style="min-height:32px; padding:6px 10px; font-size:11px; border-radius:12px; cursor:pointer; background:rgba(255,255,255,.68); color:#242936; border:1px solid rgba(17,24,39,.1); font-family:'Manrope',sans-serif; font-weight:800;">📱</button>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding:9px 10px; font-size:13px; border-top:1px solid rgba(17,24,39,.08); font-weight:800; color:#111318;">4450</td>
+                  <td style="padding:9px 10px; font-size:12px; border-top:1px solid rgba(17,24,39,.08); color:#202633;">13 Jul<br><span style="color:#68707c;">09:58 am</span></td>
+                  <td style="padding:9px 10px; font-size:13px; border-top:1px solid rgba(17,24,39,.08); color:#202633;"><span style="font-weight:700;">Suresh Kumar</span><br><span style="font-size:11px; color:#68707c;">91234 56780</span></td>
+                  <td style="padding:9px 10px; font-size:12px; border-top:1px solid rgba(17,24,39,.08); color:#202633;">Honda Activa 6G<br><span style="color:#68707c;">MH 12 8821</span></td>
+                  <td style="padding:9px 10px; font-size:13px; border-top:1px solid rgba(17,24,39,.08); font-weight:800; color:#202633;">₹780</td>
+                  <td style="padding:9px 10px; font-size:13px; border-top:1px solid rgba(17,24,39,.08); color:#138a5b;">₹780</td>
+                  <td style="padding:9px 10px; font-size:13px; border-top:1px solid rgba(17,24,39,.08); color:#68707c;">Clear</td>
+                  <td style="padding:9px 10px; border-top:1px solid rgba(17,24,39,.08); white-space:nowrap;">
+                    <button style="min-height:32px; padding:6px 10px; font-size:11px; border-radius:12px; cursor:pointer; background:rgba(255,255,255,.68); color:#242936; border:1px solid rgba(17,24,39,.1); font-family:'Manrope',sans-serif; font-weight:800;">🖨</button>
+                    <button style="min-height:32px; padding:6px 10px; font-size:11px; border-radius:12px; cursor:pointer; background:rgba(255,255,255,.68); color:#242936; border:1px solid rgba(17,24,39,.1); font-family:'Manrope',sans-serif; font-weight:800;">📱</button>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding:9px 10px; font-size:13px; border-top:1px solid rgba(17,24,39,.08); font-weight:800; color:#111318;">4449</td>
+                  <td style="padding:9px 10px; font-size:12px; border-top:1px solid rgba(17,24,39,.08); color:#202633;">12 Jul<br><span style="color:#68707c;">06:31 pm</span></td>
+                  <td style="padding:9px 10px; font-size:13px; border-top:1px solid rgba(17,24,39,.08); color:#202633;"><span style="font-weight:700;">Anil Jadhav</span><br><span style="font-size:11px; color:#68707c;">99887 76655</span></td>
+                  <td style="padding:9px 10px; font-size:12px; border-top:1px solid rgba(17,24,39,.08); color:#202633;">TVS Jupiter<br><span style="color:#68707c;">MH 14 3310</span></td>
+                  <td style="padding:9px 10px; font-size:13px; border-top:1px solid rgba(17,24,39,.08); font-weight:800; color:#202633;">₹2,300</td>
+                  <td style="padding:9px 10px; font-size:13px; border-top:1px solid rgba(17,24,39,.08); color:#138a5b;">₹2,300</td>
+                  <td style="padding:9px 10px; font-size:13px; border-top:1px solid rgba(17,24,39,.08); color:#68707c;">Clear</td>
+                  <td style="padding:9px 10px; border-top:1px solid rgba(17,24,39,.08); white-space:nowrap;">
+                    <button style="min-height:32px; padding:6px 10px; font-size:11px; border-radius:12px; cursor:pointer; background:rgba(255,255,255,.68); color:#242936; border:1px solid rgba(17,24,39,.1); font-family:'Manrope',sans-serif; font-weight:800;">🖨</button>
+                    <button style="min-height:32px; padding:6px 10px; font-size:11px; border-radius:12px; cursor:pointer; background:rgba(255,255,255,.68); color:#242936; border:1px solid rgba(17,24,39,.1); font-family:'Manrope',sans-serif; font-weight:800;">📱</button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div style="position:absolute; left:10px; right:10px; bottom:10px; display:grid; grid-template-columns:repeat(5,1fr); gap:4px; padding:8px; border:1px solid rgba(255,255,255,.72); border-radius:24px; background:rgba(248,249,251,.82); box-shadow:0 18px 42px rgba(35,39,48,.18), inset 0 1px 0 rgba(255,255,255,.78);">
+        <div style="display:grid; place-items:center; gap:3px; min-height:50px; padding:5px 2px; border-radius:17px; color:#535a66; font-size:10px; font-weight:850;"><span style="font-size:16px; line-height:1;">⌂</span>Home</div>
+        <div style="display:grid; place-items:center; gap:3px; min-height:50px; padding:5px 2px; border-radius:17px; color:#535a66; font-size:10px; font-weight:850;"><span style="font-size:16px; line-height:1;">▤</span>Jobs</div>
+        <div style="display:grid; place-items:center; gap:3px; min-height:50px; padding:5px 2px; border-radius:17px; background:#111; color:#fff; font-size:10px; font-weight:850;"><span style="font-size:16px; line-height:1;">🧾</span>Billing</div>
+        <div style="display:grid; place-items:center; gap:3px; min-height:50px; padding:5px 2px; border-radius:17px; color:#535a66; font-size:10px; font-weight:850;"><span style="font-size:16px; line-height:1;">▦</span>Stock</div>
+        <div style="display:grid; place-items:center; gap:3px; min-height:50px; padding:5px 2px; border-radius:17px; color:#535a66; font-size:10px; font-weight:850;"><span style="font-size:16px; line-height:1;">＋</span>More</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════ SCREEN: QUICK INVOICE MODAL ══════════ -->
+  <div data-screen-label="New UI · Quick Invoice" style="flex:0 0 auto;">
+    <div style="color:#3d434d; font-family:'Manrope',sans-serif; font-weight:800; font-size:14px; letter-spacing:1px; margin-bottom:10px;">NEW UI — QUICK INVOICE (MODAL)</div>
+    <div style="width:390px; border-radius:24px; overflow:hidden; border:1px solid rgba(17,24,39,.14); background:rgba(90,95,105,.9); padding:16px; box-sizing:border-box;">
+      <div style="border-radius:16px; padding:16px; background:rgba(250,251,253,.96); border:1px solid rgba(255,255,255,.72); box-shadow:0 14px 36px rgba(31,41,55,.2), inset 0 1px 0 rgba(255,255,255,.78); color:#151922; box-sizing:border-box;">
+        <div style="font-size:18px; font-weight:800; margin-bottom:6px;">Quick Invoice</div>
+        <div style="font-size:12px; color:#68707c; margin-bottom:12px;">Fast billing for walk-in work. Full Job Card stays available for detailed workshop jobs.</div>
+
+        <div style="background:rgba(248,249,251,.9); border:1px solid rgba(17,24,39,.06); border-radius:14px; padding:14px; margin-bottom:14px;">
+          <div style="font-size:11px; color:#68707c; margin-bottom:10px; text-transform:uppercase; letter-spacing:.8px; font-weight:850;">Customer</div>
+          <div style="margin-bottom:12px;">
+            <label style="font-size:10px; color:#68707c; text-transform:uppercase; letter-spacing:.7px; margin-bottom:6px; display:block; font-weight:850;">Search Name / Phone</label>
+            <div style="display:flex; gap:8px; align-items:center;">
+              <input style="flex:1; min-width:0; min-height:40px; border-radius:12px; background:rgba(255,255,255,.9); color:#151922; font-size:13px; font-family:'Manrope',sans-serif; border:1px solid rgba(17,24,39,.1); padding:8px 12px; outline:none; box-sizing:border-box;" placeholder="Search by name or number...">
+              <button style="min-height:32px; padding:6px 10px; font-size:11px; border-radius:12px; cursor:pointer; background:rgba(255,255,255,.68); color:#242936; border:1px solid rgba(17,24,39,.1); font-family:'Manrope',sans-serif; font-weight:800; white-space:nowrap;">+ New</button>
+            </div>
+            <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:8px;">
+              <button style="min-height:32px; padding:6px 10px; font-size:11px; border-radius:12px; cursor:pointer; background:rgba(255,255,255,.68); color:#242936; border:1px solid rgba(17,24,39,.1); font-family:'Manrope',sans-serif; font-weight:800;">Ramesh P.</button>
+              <button style="min-height:32px; padding:6px 10px; font-size:11px; border-radius:12px; cursor:pointer; background:rgba(255,255,255,.68); color:#242936; border:1px solid rgba(17,24,39,.1); font-family:'Manrope',sans-serif; font-weight:800;">Suresh K.</button>
+              <button style="min-height:32px; padding:6px 10px; font-size:11px; border-radius:12px; cursor:pointer; background:rgba(255,255,255,.68); color:#242936; border:1px solid rgba(17,24,39,.1); font-family:'Manrope',sans-serif; font-weight:800;">Anil J.</button>
+            </div>
+          </div>
+          <div style="display:grid; grid-template-columns:1fr; gap:10px;">
+            <div>
+              <label style="font-size:10px; color:#68707c; text-transform:uppercase; letter-spacing:.7px; margin-bottom:6px; display:block; font-weight:850;">Customer Name *</label>
+              <input style="width:100%; min-height:40px; border-radius:12px; background:rgba(255,255,255,.9); color:#151922; font-size:13px; font-family:'Manrope',sans-serif; border:1px solid rgba(17,24,39,.1); padding:8px 12px; outline:none; box-sizing:border-box;" placeholder="Ramesh Patel">
+            </div>
+            <div>
+              <label style="font-size:10px; color:#68707c; text-transform:uppercase; letter-spacing:.7px; margin-bottom:6px; display:block; font-weight:850;">Phone</label>
+              <input style="width:100%; min-height:40px; border-radius:12px; background:rgba(255,255,255,.9); color:#151922; font-size:13px; font-family:'Manrope',sans-serif; border:1px solid rgba(17,24,39,.1); padding:8px 12px; outline:none; box-sizing:border-box;" placeholder="98765XXXXX">
+            </div>
+          </div>
+        </div>
+
+        <div style="background:rgba(248,249,251,.9); border:1px solid rgba(17,24,39,.06); border-radius:14px; padding:14px; margin-bottom:14px;">
+          <div style="font-size:11px; color:#68707c; margin-bottom:10px; text-transform:uppercase; letter-spacing:.8px; font-weight:850;">Vehicle &amp; Work</div>
+          <div style="margin-bottom:12px;">
+            <label style="font-size:10px; color:#68707c; text-transform:uppercase; letter-spacing:.7px; margin-bottom:6px; display:block; font-weight:850;">Bike Name</label>
+            <input style="width:100%; min-height:40px; border-radius:12px; background:rgba(255,255,255,.9); color:#151922; font-size:13px; font-family:'Manrope',sans-serif; border:1px solid rgba(17,24,39,.1); padding:8px 12px; outline:none; box-sizing:border-box;" placeholder="Start typing e.g. Shine, Activa, Jupiter">
+          </div>
+          <div style="margin-bottom:12px;">
+            <label style="font-size:10px; color:#68707c; text-transform:uppercase; letter-spacing:.7px; margin-bottom:6px; display:block; font-weight:850;">Reg. Number</label>
+            <input style="width:100%; min-height:40px; border-radius:12px; background:rgba(255,255,255,.9); color:#151922; font-size:13px; font-family:'Manrope',sans-serif; border:1px solid rgba(17,24,39,.1); padding:8px 12px; outline:none; text-transform:uppercase; box-sizing:border-box;" placeholder="4448">
+          </div>
+          <div>
+            <label style="font-size:10px; color:#68707c; text-transform:uppercase; letter-spacing:.7px; margin-bottom:6px; display:block; font-weight:850;">Work / Service *</label>
+            <textarea style="width:100%; min-height:70px; border-radius:12px; background:rgba(255,255,255,.9); color:#151922; font-size:13px; font-family:'Manrope',sans-serif; border:1px solid rgba(17,24,39,.1); padding:8px 12px; outline:none; resize:vertical; box-sizing:border-box;" placeholder="Puncture, brake work, oil change..."></textarea>
+            <div style="margin-top:8px;"><button style="min-height:32px; padding:6px 10px; font-size:11px; border-radius:12px; cursor:pointer; background:rgba(255,255,255,.68); color:#242936; border:1px solid rgba(17,24,39,.1); font-family:'Manrope',sans-serif; font-weight:800;">AI Clean Work</button></div>
+          </div>
+        </div>
+
+        <div style="background:rgba(248,249,251,.9); border:1px solid rgba(17,24,39,.06); border-radius:14px; padding:14px; margin-bottom:14px;">
+          <div style="font-size:11px; color:#68707c; margin-bottom:10px; text-transform:uppercase; letter-spacing:.8px; font-weight:850;">Billing</div>
+          <div style="display:grid; grid-template-columns:1fr; gap:12px; margin-bottom:12px;">
+            <div>
+              <label style="font-size:10px; color:#68707c; text-transform:uppercase; letter-spacing:.7px; margin-bottom:6px; display:block; font-weight:850;">Mechanic</label>
+              <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                <button style="min-height:32px; padding:6px 12px; font-size:11px; border-radius:12px; cursor:pointer; background:#111318; color:#fff; border:1px solid #111318; font-family:'Manrope',sans-serif; font-weight:800;">Sanjay</button>
+                <button style="min-height:32px; padding:6px 12px; font-size:11px; border-radius:12px; cursor:pointer; background:rgba(255,255,255,.68); color:#242936; border:1px solid rgba(17,24,39,.1); font-family:'Manrope',sans-serif; font-weight:800;">Imran</button>
+                <button style="min-height:32px; padding:6px 12px; font-size:11px; border-radius:12px; cursor:pointer; background:rgba(255,255,255,.68); color:#242936; border:1px solid rgba(17,24,39,.1); font-family:'Manrope',sans-serif; font-weight:800;">Owner</button>
+              </div>
+            </div>
+            <div>
+              <label style="font-size:10px; color:#68707c; text-transform:uppercase; letter-spacing:.7px; margin-bottom:6px; display:block; font-weight:850;">Payment Method</label>
+              <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                <button style="min-height:32px; padding:6px 12px; font-size:11px; border-radius:12px; cursor:pointer; background:#111318; color:#fff; border:1px solid #111318; font-family:'Manrope',sans-serif; font-weight:800;">Cash</button>
+                <button style="min-height:32px; padding:6px 12px; font-size:11px; border-radius:12px; cursor:pointer; background:rgba(255,255,255,.68); color:#242936; border:1px solid rgba(17,24,39,.1); font-family:'Manrope',sans-serif; font-weight:800;">UPI</button>
+                <button style="min-height:32px; padding:6px 12px; font-size:11px; border-radius:12px; cursor:pointer; background:rgba(255,255,255,.68); color:#242936; border:1px solid rgba(17,24,39,.1); font-family:'Manrope',sans-serif; font-weight:800;">Card</button>
+              </div>
+            </div>
+          </div>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:12px;">
+            <div>
+              <label style="font-size:10px; color:#68707c; text-transform:uppercase; letter-spacing:.7px; margin-bottom:6px; display:block; font-weight:850;">Total Amount ₹ *</label>
+              <input style="width:100%; min-height:40px; border-radius:12px; background:rgba(255,255,255,.9); color:#151922; font-size:13px; font-family:'Manrope',sans-serif; border:1px solid rgba(17,24,39,.1); padding:8px 12px; outline:none; box-sizing:border-box;" placeholder="0" type="number">
+            </div>
+            <div>
+              <label style="font-size:10px; color:#68707c; text-transform:uppercase; letter-spacing:.7px; margin-bottom:6px; display:block; font-weight:850;">Paid ₹</label>
+              <input style="width:100%; min-height:40px; border-radius:12px; background:rgba(255,255,255,.9); color:#151922; font-size:13px; font-family:'Manrope',sans-serif; border:1px solid rgba(17,24,39,.1); padding:8px 12px; outline:none; box-sizing:border-box;" placeholder="0" type="number">
+            </div>
+            <div>
+              <label style="font-size:10px; color:#68707c; text-transform:uppercase; letter-spacing:.7px; margin-bottom:6px; display:block; font-weight:850;">Discount ₹</label>
+              <input style="width:100%; min-height:40px; border-radius:12px; background:rgba(255,255,255,.9); color:#151922; font-size:13px; font-family:'Manrope',sans-serif; border:1px solid rgba(17,24,39,.1); padding:8px 12px; outline:none; box-sizing:border-box;" placeholder="0" type="number">
+            </div>
+            <div>
+              <label style="font-size:10px; color:#68707c; text-transform:uppercase; letter-spacing:.7px; margin-bottom:6px; display:block; font-weight:850;">Invoice No.</label>
+              <input style="width:100%; min-height:40px; border-radius:12px; background:rgba(255,255,255,.9); color:#151922; font-size:13px; font-family:'Manrope',sans-serif; border:1px solid rgba(17,24,39,.1); padding:8px 12px; outline:none; box-sizing:border-box;" placeholder="4448">
+            </div>
+          </div>
+          <div style="margin-bottom:12px;">
+            <label style="font-size:10px; color:#68707c; text-transform:uppercase; letter-spacing:.7px; margin-bottom:6px; display:block; font-weight:850;">Invoice Date</label>
+            <input style="width:100%; min-height:40px; border-radius:12px; background:rgba(255,255,255,.9); color:#151922; font-size:13px; font-family:'Manrope',sans-serif; border:1px solid rgba(17,24,39,.1); padding:8px 12px; outline:none; box-sizing:border-box;" type="date">
+            <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:8px;">
+              <button style="min-height:32px; padding:6px 10px; font-size:11px; border-radius:12px; cursor:pointer; background:rgba(255,255,255,.68); color:#242936; border:1px solid rgba(17,24,39,.1); font-family:'Manrope',sans-serif; font-weight:800;">Today</button>
+              <button style="min-height:32px; padding:6px 10px; font-size:11px; border-radius:12px; cursor:pointer; background:rgba(255,255,255,.68); color:#242936; border:1px solid rgba(17,24,39,.1); font-family:'Manrope',sans-serif; font-weight:800;">Yesterday</button>
+              <button style="min-height:32px; padding:6px 10px; font-size:11px; border-radius:12px; cursor:pointer; background:rgba(255,255,255,.68); color:#242936; border:1px solid rgba(17,24,39,.1); font-family:'Manrope',sans-serif; font-weight:800;">Select Date</button>
+            </div>
+          </div>
+          <div>
+            <label style="font-size:10px; color:#68707c; text-transform:uppercase; letter-spacing:.7px; margin-bottom:6px; display:block; font-weight:850;">Notes</label>
+            <input style="width:100%; min-height:40px; border-radius:12px; background:rgba(255,255,255,.9); color:#151922; font-size:13px; font-family:'Manrope',sans-serif; border:1px solid rgba(17,24,39,.1); padding:8px 12px; outline:none; box-sizing:border-box;" placeholder="Any short note...">
+          </div>
+        </div>
+
+        <div style="margin-bottom:14px;">
+          <label style="font-size:10px; color:#68707c; text-transform:uppercase; letter-spacing:.7px; margin-bottom:6px; display:block; font-weight:850;">Invoice / Vehicle Photo</label>
+          <div style="border:1px dashed rgba(17,24,39,.2); border-radius:12px; padding:18px; text-align:center; background:rgba(255,255,255,.5);">
+            <span style="color:#68707c; font-size:12px;">📷 Tap to take / upload photo</span>
+          </div>
+        </div>
+
+        <div style="display:flex; gap:8px; margin-top:16px; flex-wrap:wrap;">
+          <button style="flex:1 1 100%; min-height:40px; padding:8px 13px; border-radius:12px; cursor:pointer; font-family:'Manrope',sans-serif; font-size:12px; font-weight:800; background:#111318; color:#fff; border:1px solid #111318; box-shadow:0 10px 22px rgba(17,19,24,.14);">Save Invoice</button>
+          <button style="flex:1 1 calc(50% - 4px); min-height:40px; padding:8px 13px; border-radius:12px; cursor:pointer; font-family:'Manrope',sans-serif; font-size:12px; font-weight:800; background:rgba(255,255,255,.68); color:#242936; border:1px solid rgba(17,24,39,.1);">Save as Job Card</button>
+          <button style="flex:1 1 calc(50% - 4px); min-height:40px; padding:8px 13px; border-radius:12px; cursor:pointer; font-family:'Manrope',sans-serif; font-size:12px; font-weight:800; background:rgba(255,255,255,.68); color:#242936; border:1px solid rgba(17,24,39,.1);">Save &amp; Next</button>
+          <button style="flex:1 1 100%; min-height:40px; padding:8px 13px; border-radius:12px; cursor:pointer; font-family:'Manrope',sans-serif; font-size:12px; font-weight:800; background:rgba(255,255,255,.68); color:#242936; border:1px solid rgba(17,24,39,.1);">Cancel</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</section>
+</x-dc>
+</body>
+</html>
