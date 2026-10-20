@@ -23,6 +23,7 @@ Tested setups (two simulated phones, the real `js/` files, local Postgres):
 | 2026-10-20 | Bug found | an old phone stayed stuck at invoice 12076 even after refreshing (it last synced weeks ago). Fixed in commit "Old phones catch up by themselves…" (c145aa8). |
 | 2026-10-20 | Fix deployed (`ux-polish` 389e5e3, build jalasai-1792477571) | live site loads with the catch-up fix; payment-date fix still not included |
 | 2026-10-20 | Docs brought up to date and pushed to GitHub | — |
+| 2026-10-21 | Stage 4 changed to book mode (numbers typed from the paper book; no auto numbers or drafts) | tested locally; **not deployed** — waiting for the owner's OK |
 | next | Old phone | reopen it once; it should show "Bringing this phone up to date with cloud..." and reach the newest invoice by itself (no Repair needed) |
 | next | Watch phones ~1 day | Sync diagnostics → "Changes only", Sync Now ≈ 1 s |
 | waiting | Payment-date fix (branch `claude/loving-leavitt-0cfc46`) | not merged yet, by choice; after merging, re-run its updated section of the Phase 1 SQL (it recomputes totals) |
@@ -38,7 +39,7 @@ Tested setups (two simulated phones, the real `js/` files, local Postgres):
 | 4 | Run `supabase/2026-10-fast-sync-phase1.sql` | SQL editor | changes-only sync, Sync Now ≈ 1 s, row history, newest-first for new phones, rolling window (lakh scale), cloud report totals, cloud search, "Load older invoices" | VERIFY AFTER queries in that file; within 6 h (or on reopening) Sync diagnostics shows "Changes only" |
 | 5 | Run `supabase/2026-10-sync-v2-stage2.sql` | SQL editor | upload queue, server versions, field-by-field merge (two phones can't overwrite each other) | Sync diagnostics shows the upload queue; `select count(*) from garage_sync_conflicts` stays small |
 | 6 | Run `supabase/2026-10-ledger-stage3.sql` | SQL editor | insert-only money ledger | `select count(*) from public.jalasai_ledger_reconcile();` → **0** |
-| 7 | Run `supabase/2026-10-invoice-numbers-stage4.sql` | SQL editor | server invoice numbers, offline drafts, cloud duplicate warning | `select * from garage_invoice_series;` → next number = highest + 1; the number box shows "Auto" |
+| 7 | Deploy the book-mode app, then run `supabase/2026-10-invoice-book-check-stage4.sql` | terminal + SQL editor | the app needs the typed book number (no auto numbers); the cloud checks typed numbers against all history | its VERIFY AFTER query: `taken_10500` shows a job id, `free_check` is null |
 | 8 | Run `supabase/2026-10-customer-features-stage6.sql` | SQL editor | staff roles, statement links | `select public.jalasai_my_role();` → `owner` |
 | 9 | Admin → **Staff roles** → "Make me the owner", then set mechanics by their sign-in email | app | mechanics lose money reports | sign in as a mechanic: Reports/Admin hidden |
 | 10 | Admin → Garage profile → **UPI ID** | app | "Pay by UPI" on statements | Customers → Share statement → open the link |
@@ -59,10 +60,9 @@ Steps 5–8 can wait days or weeks after step 4. Step 6 must come before step 8.
 - **Ledger reconcile isn't 0:** don't use statements yet; send the rows from
   `select * from jalasai_ledger_reconcile()` for a look. The ledger never
   changes invoices.
-- **Invoice numbering:** to go back to phone numbering, drop the two functions
-  (`drop function public.jalasai_claim_invoice_no(text), public.jalasai_invoice_no_taken(text, text);`).
-  Phones fall back within 6 hours or on reopening, and drafts already made keep
-  their numbers.
+- **Cloud invoice-number check:** to switch it off,
+  `drop function public.jalasai_invoice_no_taken(text, text);`. Phones stop
+  asking within 6 hours or on reopening; the phone's own duplicate check stays.
 - **Roles locked someone out:** `delete from garage_staff;` restores today's
   full access for everyone.
 

@@ -82,7 +82,7 @@ This document summarizes major improvements made to move JalaSai from a basic tr
 - 2026-10: built for lakhs of invoices: phones keep about a year, older invoices load on demand, Reports use cloud daily totals
 - 2026-10: old phones catch up by themselves after missing sync for weeks
 - 2026-10: every cloud edit or delete keeps the old version (`garage_row_history`); nightly backups to Cloudflare R2 with a restore script
-- 2026-10, waiting for their SQL: two-phone safety (upload queue + server versions), insert-only money ledger, server-issued invoice numbers, staff roles, customer statement links with Pay by UPI
+- 2026-10, waiting for their SQL: two-phone safety (upload queue + server versions), insert-only money ledger, cloud check of typed book invoice numbers, staff roles, customer statement links with Pay by UPI
 - 2026-10: Close the day (cash count) in Reports
 
 ## Continuous Improvement Pattern Used

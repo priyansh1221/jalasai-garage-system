@@ -28,7 +28,7 @@ Required pieces:
    - [2026-10-fast-sync-phase1.sql](/Users/priyansh/Projects/JalaSai/supabase/2026-10-fast-sync-phase1.sql): changes-only sync, newest-first loading, `garage_row_history`, cloud report totals (`garage_daily_totals`), rolling window and cloud search. **Run on live 2026-10-20.**
    - [2026-10-sync-v2-stage2.sql](/Users/priyansh/Projects/JalaSai/supabase/2026-10-sync-v2-stage2.sql): server versions, upload queue, field-by-field merge, `garage_sync_conflicts`.
    - [2026-10-ledger-stage3.sql](/Users/priyansh/Projects/JalaSai/supabase/2026-10-ledger-stage3.sql): insert-only money ledger.
-   - [2026-10-invoice-numbers-stage4.sql](/Users/priyansh/Projects/JalaSai/supabase/2026-10-invoice-numbers-stage4.sql): server-issued invoice numbers.
+   - [2026-10-invoice-book-check-stage4.sql](/Users/priyansh/Projects/JalaSai/supabase/2026-10-invoice-book-check-stage4.sql): checks typed invoice numbers against every invoice in the cloud (numbers come from the paper book; nothing is issued).
    - [2026-10-customer-features-stage6.sql](/Users/priyansh/Projects/JalaSai/supabase/2026-10-customer-features-stage6.sql): staff roles and statement links (needs Stage 3 first).
 4. Create owner/staff users in Supabase Auth.
 5. Configure Cloudflare Pages runtime variables for the deployment you are shipping.
@@ -112,7 +112,7 @@ Check these flows:
 - sync diagnostics update after sign-in, push, pull, and reconnect
 - after making one invoice/job edit, the app should stay usable while the background upload completes
 - Jobs opens on last used tab after refresh
-- Quick Invoice suggests next invoice number
+- Quick Invoice and Mark Done start with an empty invoice number box ("Book no. (last used …)") and refuse to save an invoice without a number
 - Quick Invoice can save as invoice and as job card
 - Job Card can save as job and as invoice
 - Job status menus and filters include `Returned`

@@ -7,7 +7,7 @@ Last updated: 2026-10-20
 >   group in IndexedDB; rolling window with on-demand history; cloud report
 >   totals; old phones catch up on opening (`initGSSync`).
 > - Built, waiting for their SQL: `js/sync-outbox.js` (Stage 2 upload queue),
->   ledger (Stage 3), server invoice numbers (Stage 4), staff roles and
+>   ledger (Stage 3), cloud check of book invoice numbers (Stage 4), staff roles and
 >   `statement.html` (Stage 6). Rollout: `docs/ROLLOUT_2026_10.md`.
 > - Function tables below include every new function.
 
@@ -132,7 +132,7 @@ Realtime sync is driven by `garage_sync_heartbeat`. After a successful push, the
 Later files, built and tested, not run on live yet (order in `docs/DEPLOYMENT.md`):
 - `2026-10-sync-v2-stage2.sql`: `version` columns, `jalasai_apply_changes`, `jalasai_sync_v2_info`, `garage_applied_changes`, `garage_sync_conflicts`;
 - `2026-10-ledger-stage3.sql`: `garage_ledger_entries` (insert-only, trigger from jobs), `garage_ledger_balances`, `jalasai_ledger_reconcile`, `jalasai_customer_statement`;
-- `2026-10-invoice-numbers-stage4.sql`: `garage_invoice_series`, `garage_invoice_claims`, `jalasai_claim_invoice_no`, `jalasai_invoice_no_taken`;
+- `2026-10-invoice-book-check-stage4.sql`: `jalasai_invoice_ref_key`, `jalasai_invoice_simple` (indexed) and `jalasai_invoice_no_taken` (read-only duplicate check; numbers come from the paper book);
 - `2026-10-customer-features-stage6.sql`: `garage_staff`, `jalasai_my_role`, `jalasai_claim_owner`, `jalasai_set_staff_role`, role-based RLS, `garage_statement_links`, `jalasai_create_statement_link`, `jalasai_revoke_statement_links`, `jalasai_statement_by_token` (anon).
 
 ### PWA Layer
@@ -299,7 +299,6 @@ Later files, built and tested, not run on live yet (order in `docs/DEPLOYMENT.md
 | `markDataMaintenanceCleanupDone()` | Stores the current cleanup version so routine maintenance is not repeated unnecessarily. |
 | `runDataMaintenanceCleanup(options)` | Runs background data maintenance: mechanic recovery, seeded/demo cleanup, temporary job purge, customer tidying, optional save/render, and timing logs. |
 | `scheduleDataMaintenanceCleanup(options)` | Schedules data maintenance after startup using delay/idle timing. |
-| `nextInvoiceNo()` | Returns and increments the legacy invoice counter. |
 | `simpleInvoiceNumber(value)` | Extracts a clean numeric invoice number string. |
 | `suggestedNextInvoiceNo()` | Suggests the next invoice number based on the highest existing invoice/counter. |
 | `stSt(s)` | Computes stock status: out, low, or ok. |
@@ -425,11 +424,10 @@ Later files, built and tested, not run on live yet (order in `docs/DEPLOYMENT.md
 | `recordBucket(access, record)` | Group of a record, using the table's key function. |
 | `assembleBucketedRows(buckets, order)` | Rebuilds a table from its groups in the saved list order (`<table>@order`). |
 | `queueFullResaveOfPartialTables(force)` | Safety net: rewrites tables that only had grouped saves, within a minute and when the app is hidden. |
-| `isDraftInvoiceNo(value)` | True for offline draft numbers `D-<device>-<n>` (Stage 4). |
-| `serverIssuesInvoiceNumbers()` | True when the server hands out invoice numbers (Stage 4 SQL present). |
-| `nextDraftInvoiceNo()` | Next draft number for this phone, from a counter in localStorage. |
-| `invoiceNoPrefill()` | What the invoice-number box starts with: empty ("Auto") when the server issues numbers, else the old suggestion. |
-| `applyInvoiceNoField(el, value)` | Fills an invoice-number box and sets its "Auto" placeholder. |
+| `lastUsedInvoiceNo()` | Highest invoice number in use (phone, or the cloud's while history is partial). |
+| `invoiceNoHint()` | Placeholder for the number box: "Book no. (last used 12747)". |
+| `applyInvoiceNoField(el, value)` | Fills an invoice-number box with the given number or leaves it empty, and sets the hint. Never guesses a number. |
+| `requireBookInvoiceNo(value, inputId)` | Refuses an invoice save without a typed book number (toast + focus). |
 
 ### `js/utils.js`
 
@@ -1074,8 +1072,8 @@ Later files, built and tested, not run on live yet (order in `docs/DEPLOYMENT.md
 | `queueServerInvoiceSearch(query)` | Debounced cloud search (`jalasai_search_jobs`) for invoices the phone doesn't hold. |
 | `renderOlderInvoicesFooter(searchQuery)` | "Load older invoices" / cloud search results under the Invoices list. |
 | `fetchCustomerJobsFromServer(customer)` | A customer's full history from the cloud when the customer is opened (`jalasai_customer_jobs`). |
-| `checkInvoiceSeriesServer(client, options)` | Detects Stage 4 (server invoice numbers); rechecks every 6 hours. |
-| `claimPendingInvoiceNumbers()` | Swaps offline draft numbers for real ones (`jalasai_claim_invoice_no`), oldest draft first. |
+| `cloudInvoiceNoCheckReady()` | True when the Stage 4 SQL is present. |
+| `checkInvoiceNoCheckServer(client, options)` | Detects the Stage 4 SQL (`jalasai_invoice_no_taken`); rechecks every 6 hours. |
 | `warnIfInvoiceNoTakenInCloud(invoiceNo, jobId)` | Warns when a typed number is already used in the cloud (`jalasai_invoice_no_taken`). |
 | `refreshStaffRole(client)` | Reads this user's role (`jalasai_my_role`) into `syncMeta.staffRole`. |
 | `staffFeaturesReady()` | True when the Stage 6 SQL is present. |
@@ -1208,7 +1206,7 @@ No functions are declared. It assigns `window.JALASAI_CLOUD_CONFIG` with Supabas
 - Grouped saves: a save that changes records must either name them (`changed: { table: [ids] }`) or do a full table save. Saves that touch other records too (applying an advance across jobs) stay full saves.
 - Sync cursors: never move `lastPulledAt` or the changes-only cursors forward unless the pull really covered that time; a cursor moved too early leaves a phone stuck (the 2026-10-20 old-phone bug).
 - Rolling trim: only drop a local record after the cloud hash matches and nothing is waiting to upload.
-- Invoice numbers: duplicate checks are split between `jobs.js` strict matching and `index.html` invoice display matching; a phone without full history also asks the cloud (`warnIfInvoiceNoTakenInCloud`). With Stage 4 the server issues numbers and drafts (`D-…`) must never be printed as final.
+- Invoice numbers: duplicate checks are split between `jobs.js` strict matching and `index.html` invoice display matching; a phone without full history also asks the cloud (`warnIfInvoiceNoTakenInCloud`). Numbers come from the paper invoice book: never generate or change one automatically.
 - Payments: payment history, legacy `payment` fields, due/advance calculations, and manual income are related but intentionally separate.
 - Stock imports: catalog review and agent JSON import can update live inventory, purchase records, supplier maps, and stock movements.
 - Inline helper duplication: `index.html` duplicates `getPhotoPreviewList()` and `photoGalleryMarkup()` identically; browser hoisting leaves the later definition active.

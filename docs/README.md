@@ -78,7 +78,7 @@ Current app behavior:
 - business data on each phone lives in IndexedDB (2026-10; localStorage is the fallback)
 - `supabase/2026-10-fast-sync-phase1.sql` is live (2026-10-20): downloads are changes-only by the server's clock (deletes included), a fresh phone loads newest first, then older history in the background, and a phone that missed sync for a week catches up by itself on opening
 - built for lakhs of invoices: phones keep about a year of invoices (plus anything still owing), older ones load on demand (`Load older invoices`, cloud search, customer history), and Reports use cloud daily totals for ranges the phone doesn't hold
-- built and waiting for their SQL: two-phone safety (upload queue + server versions), insert-only money ledger, server-issued invoice numbers with offline drafts, staff roles and customer statement links (order and checks: `docs/ROLLOUT_2026_10.md`)
+- built and waiting for their SQL: two-phone safety (upload queue + server versions), insert-only money ledger, a cloud check of typed book invoice numbers, staff roles and customer statement links (order and checks: `docs/ROLLOUT_2026_10.md`)
 - devices subscribe to `garage_sync_heartbeat` for realtime multi-device updates
 - background sync keeps local backup fresh and falls back to heartbeat checks every 5 minutes when realtime misses an event
 - normal saves upload only rows changed around the pending local edit, so invoice/job updates do not rescan every cloud table

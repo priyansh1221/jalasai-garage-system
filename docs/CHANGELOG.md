@@ -2,6 +2,28 @@
 
 Last updated: 2026-10-20
 
+## 2026-10-21
+
+### Invoice numbers come from the paper book ("book mode"; not deployed yet)
+
+- The invoice number is the one written in the garage's invoice book, so the
+  app no longer guesses or makes up numbers:
+  - the number box starts empty, with the last number used as a hint
+    ("Book no. (last used 12747)");
+  - an invoice can't be saved without a number ("Type the invoice number from
+    the invoice book"); a job card can still be saved without one;
+  - editing an invoice keeps its number if the box is left empty.
+- In the Legacy UI the number box moved out of "More" to just above the total,
+  so it can't be missed. Both UIs mark it required.
+- Stage 4 was cut down to the cloud duplicate check only: no server counter, no
+  `D-…` draft numbers, no "Auto". The SQL file is now
+  `supabase/2026-10-invoice-book-check-stage4.sql` (it was never run on live).
+- The phone's own duplicate check is unchanged and still blocks the save.
+- Tested: 22 book-mode checks on local Postgres, all regression tests (with
+  and without the Stage 2 SQL, and with all five SQL files together), and both
+  UIs in the preview (blank refused, duplicate refused, typed number saved,
+  job card without a number, edit keeps its number).
+
 ## 2026-10-20
 
 ### Live now (deployed from `ux-polish`)
@@ -67,11 +89,11 @@ then, the app behaves as before. The order and the checks are in
   - Adds the insert-only `garage_ledger_entries`, filled from invoices by a
     trigger.
   - `jalasai_ledger_reconcile()` must return 0 rows.
-- **Server invoice numbers (Stage 4, `2026-10-invoice-numbers-stage4.sql`).**
-  - The server hands out the next number.
-  - A phone that is offline saves a draft number (`D-<phone>-<n>`) and gets
-    the real one when it's back online.
-  - The phone warns when a number is already used in the cloud. No GST format.
+- **Cloud check for book invoice numbers (Stage 4,
+  `2026-10-invoice-book-check-stage4.sql`).**
+  - After a number is typed, the phone asks the cloud whether another invoice
+    already uses it, including invoices older than the phone's one-year window.
+  - It never hands out numbers (see 2026-10-21).
 - **Staff roles and statements (Stage 6, `2026-10-customer-features-stage6.sql`).**
   - **Staff roles:** owner, manager or mechanic. The server enforces them, and
     mechanics can't see money reports or the ledger.

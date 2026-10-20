@@ -127,8 +127,8 @@ Postgres.
   gets new invoices changes-only.
 
 **Since built:** a cloud check for duplicate invoice numbers on phones without
-full history (`warnIfInvoiceNoTakenInCloud`), and server-issued numbers (roadmap
-Stage 4, waiting for its SQL).
+full history (`warnIfInvoiceNoTakenInCloud`, roadmap Stage 4, waiting for its
+SQL). Numbers are typed from the paper invoice book; the app never issues them.
 Date: 2026-10-19 · Branch at time of writing: `ux-polish`
 Part of the long-term roadmap: this plan is **Stage 1** of
 `docs/LONG_TERM_DATA_ROADMAP_2026_10.md`. Stage 0 (data-loss safety net) should

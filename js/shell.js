@@ -476,6 +476,10 @@ function confirmDone(nextAction = 'close') {
   const j      = jobs.find(x => x.id === id);
   if (!j) return;
   const isEditMode = mode === 'edit';
+  // The number comes from the paper invoice book; an invoice can't be saved
+  // without one (an edit may keep the number it already has).
+  const bookInvoiceNo = String(document.getElementById('done-invoice-no')?.value || '').trim() || (isEditMode ? String(j.invoiceNo || '').trim() : '');
+  if (!requireBookInvoiceNo(bookInvoiceNo, 'done-invoice-no')) return;
   j.payments = Array.isArray(j.payments) ? j.payments : [];
   j.discount = parseFloat(document.getElementById('done-discount').value) || 0;
   const invoiceTotalInput = document.getElementById('done-total');
@@ -496,14 +500,12 @@ function confirmDone(nextAction = 'close') {
     toast(`Invoice number already exists: ${duplicateInvoice.invoiceNo || duplicateInvoice.id}`);
     return;
   }
-  if (typedInvoiceNo && typedInvoiceNo !== j.invoiceNo && !isDraftInvoiceNo(typedInvoiceNo) && typeof warnIfInvoiceNoTakenInCloud === 'function') {
+  if (typedInvoiceNo && typedInvoiceNo !== j.invoiceNo && typeof warnIfInvoiceNoTakenInCloud === 'function') {
     warnIfInvoiceNoTakenInCloud(typedInvoiceNo, j.id);
   }
   if (invoiceGrossTotal < 0) { toast('Enter valid invoice total'); return; }
   if (pay < 0) { toast('Enter valid payment'); return; }
-  const invNo  = isEditMode
-    ? (typedInvoiceNo || j.invoiceNo || nextInvoiceNo(''))
-    : nextInvoiceNo(typedInvoiceNo);
+  const invNo  = isEditMode ? (typedInvoiceNo || j.invoiceNo) : typedInvoiceNo;
   const currentDueBeforeApply = Math.max(0, (isEditMode ? jobTotal(j) : netInvoiceTotal) - jobPaid(j));
   const appliedAdvance = Math.min(
     parseFloat(document.getElementById('done-applied-advance')?.value || '0') || 0,

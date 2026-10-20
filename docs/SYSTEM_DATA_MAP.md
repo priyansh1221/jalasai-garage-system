@@ -20,7 +20,7 @@ Current app/runtime behavior (2026-10-20):
   - report totals for ranges a phone doesn't hold come from `garage_daily_totals`;
   - every overwritten or deleted cloud row is kept in `garage_row_history`
 - a phone more than 7 days behind (or without changes-only cursors) does one full catch-up pull on opening
-- built, waiting for their SQL: upload queue + server versions (Stage 2), money ledger (Stage 3), server invoice numbers (Stage 4), staff roles and statement links (Stage 6). See "2026-10 cloud tables" below
+- built, waiting for their SQL: upload queue + server versions (Stage 2), money ledger (Stage 3), cloud check of book invoice numbers (Stage 4), staff roles and statement links (Stage 6). See "2026-10 cloud tables" below
 - the `garage_state` blob and Apps Script backups were removed on 2026-06-12; backups are the Admin JSON download and the nightly GitHub Action
 - date-sensitive defaults now follow `Asia/Kolkata`
 
@@ -70,7 +70,6 @@ Safety rules:
 | `garage_sync_conflicts` | Stage 2 | fields two phones changed at the same time, with both values |
 | `garage_applied_changes` | Stage 2 | ids of uploads already applied, so a retried upload is never applied twice |
 | `garage_ledger_entries` | Stage 3 | insert-only money ledger (charges, payments, advances, corrections), filled from jobs by a trigger |
-| `garage_invoice_series` / `garage_invoice_claims` | Stage 4 | next invoice number and which job got which number |
 | `garage_staff` | Stage 6 | owner / manager / mechanic by sign-in email |
 | `garage_statement_links` | Stage 6 | 30-day customer statement tokens |
 

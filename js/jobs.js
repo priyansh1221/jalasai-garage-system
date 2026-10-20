@@ -1172,8 +1172,6 @@ function saveInvoiceAfterPaint(domain = 'invoice', refreshOptions = {}) {
   const changedJobIds = Array.isArray(refreshOptions.changedJobIds) ? refreshOptions.changedJobIds.filter(Boolean) : [];
   runAfterInvoiceSavePaint(() => {
     if (typeof saveAll === 'function') saveAll({ domain, changed: changedJobIds.length ? { jobs: changedJobIds } : undefined });
-    // Stage 4: swap a draft number for the real one right away when online.
-    if (typeof claimPendingInvoiceNumbers === 'function') claimPendingInvoiceNumbers();
     scheduleInvoiceSaveUiRefresh(refreshOptions);
   });
 }
@@ -1210,6 +1208,7 @@ function saveQuickInvoice(nextAction = 'close') {
   if (paid < 0) { toast('Enter valid paid amount'); return; }
   if (discount < 0) { toast('Enter valid discount'); return; }
   if (!requireNotFutureBusinessDate(invoiceDate, saveAsJobCard ? 'Job card date' : 'Invoice date')) return;
+  if (!saveAsJobCard && !requireBookInvoiceNo(manualInvoiceNo, 'qi-invoice-no')) return;
   const duplicateInvoice = !saveAsJobCard && manualInvoiceNo ? findDuplicateInvoiceNumber(manualInvoiceNo) : null;
   if (duplicateInvoice) {
     toast(`Invoice number already exists: ${duplicateInvoice.invoiceNo || duplicateInvoice.id}`);
@@ -1304,7 +1303,7 @@ function saveQuickInvoice(nextAction = 'close') {
     return;
   }
 
-  const invoiceNo = nextInvoiceNo(manualInvoiceNo);
+  const invoiceNo = manualInvoiceNo;
   const invoiceStamp = invoiceDateTime(invoiceDate, now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }));
   const newJob = normalizeJob({
     id: nextJobId(),

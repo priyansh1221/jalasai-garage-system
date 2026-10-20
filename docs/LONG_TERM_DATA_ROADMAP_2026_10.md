@@ -295,29 +295,27 @@ same guarantees without it:
 - First, check whether the garage is GST-registered. If not, keep the simple
   numbering but still issue numbers from the server.
 
-#### Stage 4 status (2026-10-20): built, tested locally (no GST); app deployed, SQL not run on live yet
+#### Stage 4 status (2026-10-21): changed to book mode; not deployed, SQL not run on live yet
 
-The garage isn't GST-registered, so numbers stay plain and keep counting from
-today's highest (e.g. 10564). `supabase/2026-10-invoice-numbers-stage4.sql`
-(needs Phase 1):
-- `garage_invoice_series` (one counter) + `garage_invoice_claims` (job → number,
-  unique). `jalasai_claim_invoice_no(job_id)` hands out the next free number,
-  skipping any number already in use, and returns the same number if a phone
-  retries.
-- `jalasai_invoice_no_taken(no, job_id)`: duplicate check against all invoices
-  in the cloud, with the phone's own matching rules (INV- prefix, leading
-  zeros), indexed.
-- App: with that SQL installed, the number box shows "Auto". A new invoice gets
-  a draft number unique to the phone (D-AB12-3), shown as a draft on the printed
-  invoice. It becomes the real number right after the save when online, on
-  reconnect, and before every upload. Any phone can turn any draft into a real
-  number. A number typed by hand is used as typed, and a warning shows if
-  another invoice in the cloud already uses it.
-- Tested with two phones: simultaneous invoices get different numbers; offline
-  drafts become the next numbers in order; a retried claim returns the same
-  number; a stranded draft from a lost phone gets fixed by another phone; the
-  cloud ends with no duplicates and no drafts; a typed duplicate in history that
-  isn't on the phone is caught; without the SQL the old numbering is unchanged.
+The garage isn't GST-registered, and the invoice number is the one written in
+the **paper invoice book** (owner, 2026-10-21). So the server must never issue
+numbers. The first build (server counter, `D-…` drafts while offline) was
+dropped before it ran on live.
+
+Book mode, as built:
+- The number box starts empty, with the last number used as a hint. An invoice
+  can't be saved without a typed number; a job card can. An edit keeps its
+  number. In the Legacy UI the box moved out of "More" so it's always visible.
+- `supabase/2026-10-invoice-book-check-stage4.sql` adds only
+  `jalasai_invoice_no_taken(no, job_id)`: a read-only check against every
+  invoice in the cloud, using the phone's own matching rules (INV- prefix,
+  leading zeros), indexed. The phone warns right after the save when the number
+  is used by an invoice it doesn't hold (older than its rolling window). The
+  phone's own duplicate check still blocks the save.
+- Tested: 22 checks on local Postgres (empty box with hint, blank refused,
+  cloud duplicate found, INV-/zeros match, own number not a duplicate, offline
+  quiet, typed number uploaded unchanged, no drafts, no counter or claim
+  function created), all regression tests, and both UIs in the preview.
 
 ### Stage 5: Lakh-scale history (server-only old data)
 - Phones drop records older than the window from local storage, but only records
@@ -414,7 +412,8 @@ today's highest (e.g. 10564). `supabase/2026-10-invoice-numbers-stage4.sql`
 
 Decided on 2026-10-20: Stage 0 first (done); **no GST** (plain running
 numbers); **build our own** sync engine; backups to **Cloudflare R2**; offline
-invoices get a **draft number, the real one later**.
+invoices get a draft number, the real one later (**replaced on 2026-10-21**:
+numbers are typed from the paper invoice book; the app never issues them).
 
 Still open:
 1. When to run the Stage 2, 3, 4 and 6 SQL (after a day of watching the phones

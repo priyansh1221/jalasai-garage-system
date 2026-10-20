@@ -1226,51 +1226,36 @@ function scheduleDataMaintenanceCleanup(options = {}) {
   else scheduleIdle();
 }
 
-// ─── Invoice numbers (roadmap Stage 4) ────────────────────
-// With supabase/2026-10-invoice-numbers-stage4.sql installed the server hands
-// out numbers (jalasai_claim_invoice_no), so two phones never issue the same
-// one. A new invoice first gets a draft number unique to this phone
-// (D-AB12-3); claimPendingInvoiceNumbers() in js/sync.js swaps it for the
-// real number as soon as the phone is online — any phone can do that, so a
-// draft never gets stuck. A number typed by hand is used as typed.
-const DRAFT_INVOICE_RE = /^D-[A-Z0-9]{2,8}-\d+$/;
-const DRAFT_INVOICE_SEQ_KEY = 'js_draft_invoice_seq';
-
-function isDraftInvoiceNo(value) {
-  return DRAFT_INVOICE_RE.test(String(value || '').trim().toUpperCase());
+// ─── Invoice numbers: typed from the paper invoice book ───
+// The number on every invoice is the one written in the garage's physical
+// invoice book, so the app never makes one up: the box starts empty, shows
+// the last number used as a hint, and an invoice can't be saved without a
+// number. Job cards may leave it empty. After saving, warnIfInvoiceNoTakenInCloud()
+// in js/sync.js also checks invoices this phone doesn't hold
+// (supabase/2026-10-invoice-book-check-stage4.sql).
+function lastUsedInvoiceNo() {
+  const next = parseInt(simpleInvoiceNumber(suggestedNextInvoiceNo()) || '0', 10) || 0;
+  return next > 1 ? String(next - 1) : '';
 }
 
-function serverIssuesInvoiceNumbers() {
-  return !!syncMeta && syncMeta.invoiceSeriesReady === true;
-}
-
-function nextDraftInvoiceNo() {
-  let seq = 0;
-  try { seq = parseInt(localStorage.getItem(DRAFT_INVOICE_SEQ_KEY) || '0', 10) || 0; } catch (_) {}
-  seq += 1;
-  try { localStorage.setItem(DRAFT_INVOICE_SEQ_KEY, String(seq)); } catch (_) {}
-  return `D-${deviceShortId()}-${seq}`;
-}
-
-// What the invoice-number box starts with: empty ("Auto") when the server
-// issues numbers, otherwise the old suggestion.
-function invoiceNoPrefill() {
-  return serverIssuesInvoiceNumbers() ? '' : suggestedNextInvoiceNo();
+function invoiceNoHint() {
+  const last = lastUsedInvoiceNo();
+  return last ? `Book no. (last used ${last})` : 'Invoice no. from the book';
 }
 
 function applyInvoiceNoField(el, value) {
   if (!el) return;
-  el.value = value !== undefined && value !== null && value !== '' ? value : invoiceNoPrefill();
-  if (serverIssuesInvoiceNumbers()) el.placeholder = 'Auto — next number from cloud';
+  el.value = value !== undefined && value !== null ? String(value) : '';
+  el.placeholder = invoiceNoHint();
 }
 
-function nextInvoiceNo(manual) {
-  if (manual && manual.trim()) return manual.trim();
-  if (serverIssuesInvoiceNumbers()) return nextDraftInvoiceNo();
-  const no = 'INV-' + String(invoiceCtr).padStart(4, '0');
-  invoiceCtr++;
-  localStorage.setItem(SK.invoiceCtr, invoiceCtr);
-  return no;
+// For saving an invoice: false (and a message) when no book number was typed.
+function requireBookInvoiceNo(value, inputId = '') {
+  if (String(value || '').trim()) return true;
+  toast('Type the invoice number from the invoice book', 3200);
+  const el = inputId ? document.getElementById(inputId) : null;
+  if (el) { try { el.focus(); } catch (_) {} }
+  return false;
 }
 
 function simpleInvoiceNumber(value = '') {

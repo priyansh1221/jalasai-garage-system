@@ -135,14 +135,12 @@ Buttons:
 ## Billing Rules
 
 ### Invoice numbers
-- Quick Invoice suggests the next invoice number
-- Mark Done / Edit Invoice suggests the next invoice number for new invoices
-- manual override is allowed
-- duplicate numbers warn before save; on a phone without full history the check also asks the cloud ("already used in the cloud")
-- after `supabase/2026-10-invoice-numbers-stage4.sql` is run (roadmap Stage 4):
-  - the number box shows "Auto" and the server hands out the next number when the invoice is saved, so two phones can't take the same number;
-  - an invoice saved while offline gets a draft number like `D-3F2A-4`, printed with a "Draft" label; the real number replaces it as soon as the phone is back online;
-  - typing a number by hand still works
+- the invoice number is the one written in the **paper invoice book**; type it in every time (from the "book mode" release, 2026-10-21)
+- the number box starts empty and shows the last number used as a hint, e.g. "Book no. (last used 12747)"
+- Quick Invoice and Mark Done refuse to save an invoice without a number ("Type the invoice number from the invoice book"); saving as a job card doesn't need one
+- editing an invoice keeps its number if the box is left empty
+- a number already used on this phone blocks the save; after `supabase/2026-10-invoice-book-check-stage4.sql` is run, the phone also checks the whole cloud history and warns ("Invoice number … is also used by … in the cloud") — then fix one of the two invoices
+- before book mode is deployed, the box is pre-filled with a suggested next number, so check it against the book
 - the live database still has some older duplicate numbers from before 2026-10 (10607 three times; 10594, 11068, 10499, 10609, 10500, 9721, 9785 twice). The CHECK FIRST query in `supabase/2026-10-fast-sync-phase1.sql` lists them; fix them by editing one invoice of each pair
 
 ### Payment methods
@@ -584,7 +582,7 @@ Income is included in:
 ## Current Change History
 
 Major implemented work up to now (most recent first):
-- 2026-10-20: old phones catch up by themselves after missing sync for weeks; changes-only sync, cloud report totals and the rolling window went live with the Phase 1 SQL; Stages 2, 3, 4 and 6 (two-phone safety, money ledger, server invoice numbers, staff roles and statements) built and waiting for their SQL — order in `docs/ROLLOUT_2026_10.md`
+- 2026-10-20: old phones catch up by themselves after missing sync for weeks; changes-only sync, cloud report totals and the rolling window went live with the Phase 1 SQL; Stages 2, 3, 4 and 6 (two-phone safety, money ledger, cloud invoice-number check, staff roles and statements) built and waiting for their SQL — order in `docs/ROLLOUT_2026_10.md`
 - 2026-10-19: business data moved to IndexedDB (fixes invoices vanishing on iPhones); Disconnect can't wipe unsent changes; red banner when a device save fails
 - optimized menu switching by batching customer-card rendering and replacing repeated per-customer/per-invoice scans with one-pass summary indexes
 - repaired shadow-table customer ownership issues after the split from `garage_state`, including Khatabook opening-balance isolation, duplicate customer id repair, strict duplicate-customer merge, and stale vehicle cleanup

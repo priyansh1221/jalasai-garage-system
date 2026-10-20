@@ -58,7 +58,7 @@ Current sync safety model:
 - 2026-10, built and switched on by their SQL (not run on live yet):
   - Stage 2: every save is queued in IndexedDB `jalasai-sync` with its base `version`; `jalasai_apply_changes` applies it once (`garage_applied_changes`) and merges clashing fields into `garage_sync_conflicts`;
   - Stage 3: `garage_ledger_entries` is filled from jobs by a trigger; `jalasai_ledger_reconcile` must return no rows;
-  - Stage 4: `jalasai_claim_invoice_no` hands out numbers; offline saves get `D-<device>-<n>` drafts that `claimPendingInvoiceNumbers` swaps for real numbers;
+  - Stage 4 (book mode): invoice numbers are typed from the paper invoice book and required on save (`requireBookInvoiceNo`); `jalasai_invoice_no_taken` lets `warnIfInvoiceNoTakenInCloud` check a typed number against every invoice in the cloud. The app never issues numbers;
   - Stage 6: `garage_staff` roles (`refreshStaffRole`, `isAdminUser`), statement links (`createStatementLink`, `jalasai_statement_by_token`);
   - the app checks for each server feature on start and every 6 hours, so running a SQL file needs no app deploy
 - payments arrays are unioned across both copies of a job during merge so concurrent payments are never lost
