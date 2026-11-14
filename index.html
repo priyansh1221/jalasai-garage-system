@@ -880,6 +880,9 @@
       <div class="frow"><label class="flbl">Invoice No. * <span style="color:var(--mut);font-weight:400;">(from the book)</span></label>
         <input class="finp" id="qi-invoice-no" placeholder="Book no." inputmode="numeric" autocomplete="off">
       </div>
+      <div class="frow"><label class="flbl">Bill Items <span style="color:var(--mut);font-weight:400;">(optional, like the bill book)</span></label>
+        <div id="qi-bill-items"></div>
+      </div>
       <div class="f2">
         <div class="frow"><label class="flbl">Total Amount ₹ *</label><input class="finp rd-qi-amount rd-qi-total" id="qi-total" type="number" placeholder="0"></div>
         <div class="frow"><label class="flbl">Paid ₹</label><input class="finp rd-qi-amount" id="qi-paid" type="number" placeholder="0"></div>
@@ -1011,6 +1014,9 @@
           <button class="btn btn-g btn-sm" type="button" onclick="setInvoiceDateShortcut('done-invoice-date','pick')">Select Date</button>
         </div>
       </div>
+    </div>
+    <div class="frow"><label class="flbl">Bill Items <span style="color:var(--mut);font-weight:400;">(optional, like the bill book)</span></label>
+      <div id="done-bill-items"></div>
     </div>
     <div class="f2">
       <div class="frow"><label class="flbl">Invoice Total ₹</label>

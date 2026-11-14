@@ -1,6 +1,32 @@
 # JalaSai Changelog
 
-Last updated: 2026-10-21
+Last updated: 2026-11-14
+
+## 2026-11-14
+
+### Item-wise digital bill (branch `bill-items`; not deployed yet)
+
+- Quick Invoice and Mark Done / Edit Invoice have optional **Bill Items** rows
+  (description + amount), like the lines of the paper bill, in both UIs.
+  - Rows with amounts fill and lock the total box; discount stays separate.
+    With no rows the total is typed as before.
+  - "Work / Service" can be left empty when there are rows; it is filled from
+    the row descriptions.
+- **Suggestions with the last price.** Typing a description suggests ones used
+  before with the price last charged; the price can be changed on each bill.
+  The list comes from this phone's own memory (localStorage
+  `jalasai_bill_item_catalog_v1`) and from the rows on synced invoices.
+- **Bill-book layout.** An invoice saved with rows shows and prints like the
+  paper bill book (header text in `BILL_BOOK_HEADER`, `js/print.js`). Invoices
+  without rows keep the old layout. The WhatsApp bill lists the rows.
+- **Data:** rows are saved on the job as `billItems: [{ id, desc, amount }]`.
+  The field exists only on invoices saved with rows; old records are not
+  changed, so nothing is re-uploaded. No SQL. Totals, dues and reports still
+  come from the same total (`lab` / `totalOverride`).
+- Tested on a copy with cloud sync off, 43 checks in each UI: plain invoice
+  unchanged, invoice with rows, suggestions, price change, discount, edit,
+  removing rows, refused row without description, job card then Mark Done,
+  draft restore, reload, bill view and print window.
 
 ## 2026-10-21
 

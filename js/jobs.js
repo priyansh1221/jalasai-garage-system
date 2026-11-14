@@ -842,6 +842,7 @@ function captureInvoiceDraft() {
     appliedAdvance: document.getElementById('done-applied-advance')?.value || '0',
     payMethod: document.getElementById('done-pay-method')?.value || getStoredPaymentMethod(),
     notes: document.getElementById('done-notes')?.value || '',
+    billItems: billItemRowsDraft('done'),
     photos: previewPhotoList('done-photo-preview'),
     photoRemoved: document.getElementById('done-photo-preview')?.dataset?.removed === 'true',
   };
@@ -871,6 +872,8 @@ function restoreInvoiceDraft(jobId, mode = 'create') {
     document.getElementById('done-pay-method').value = draft.payMethod || getStoredPaymentMethod();
     renderDonePaymentChips(draft.payMethod || getStoredPaymentMethod());
     document.getElementById('done-notes').value = draft.notes || '';
+    // The draft does not keep the total box, so rows restored from it refill it.
+    if (Array.isArray(draft.billItems)) setBillItemRows('done', draft.billItems, { syncTotal: true });
     const prev = document.getElementById('done-photo-preview');
     if (prev) {
       setPhotoPreviewList('done-photo-preview', draft.photoRemoved ? [] : (draft.photos || draft.photo || []), 'Invoice Photo Reference');
@@ -1009,6 +1012,7 @@ function captureQuickInvoiceDraft() {
     mechId: document.getElementById('qi-mech')?.value || '',
     prob: document.getElementById('qi-prob')?.value || '',
     total: document.getElementById('qi-total')?.value || '',
+    billItems: billItemRowsDraft('qi'),
     paid: document.getElementById('qi-paid')?.value || '',
     discount: document.getElementById('qi-discount')?.value || '',
     payMethod: document.getElementById('qi-pay-method')?.value || getStoredPaymentMethod(),
@@ -1056,6 +1060,7 @@ function restoreQuickInvoiceDraft() {
     renderQuickInvoiceMechanicChips(draft.mechId || '');
     document.getElementById('qi-prob').value = draft.prob || '';
     document.getElementById('qi-total').value = draft.total || '';
+    setBillItemRows('qi', draft.billItems || []);
     document.getElementById('qi-paid').value = draft.paid || '';
     document.getElementById('qi-discount').value = draft.discount || '';
     document.getElementById('qi-pay-method').value = draft.payMethod || getStoredPaymentMethod();
@@ -1092,6 +1097,7 @@ function resetQuickInvoiceForm(options = {}) {
     const el = document.getElementById(id);
     if (el) el.value = '';
   });
+  setBillItemRows('qi', []);
   const methodEl = document.getElementById('qi-pay-method');
   if (methodEl) methodEl.value = preserveMethod ? getStoredPaymentMethod() : 'cash';
   renderQuickInvoicePaymentChips(methodEl?.value || 'cash');
@@ -1188,7 +1194,11 @@ function saveQuickInvoice(nextAction = 'close') {
   const mechIds = parseMechanicIds(mechId);
   const mech = mechanics.find(m => m.id === mechIds[0]);
   const mechName = mechanicLabel(mechIds);
-  const prob = document.getElementById('qi-prob').value.trim();
+  const billRows = collectBillItems('qi');
+  if (billRows.error) { toast(billRows.error); return; }
+  const billItems = billRows.items;
+  // With item rows the work text can be left empty: it is taken from the rows.
+  const prob = document.getElementById('qi-prob').value.trim() || billItems.map(item => item.desc).join(', ');
   const total = parseFloat(document.getElementById('qi-total').value) || 0;
   const discount = parseFloat(document.getElementById('qi-discount').value) || 0;
   const netTotal = Math.max(0, total - discount);
@@ -1203,7 +1213,7 @@ function saveQuickInvoice(nextAction = 'close') {
   const saveAsJobCard = nextAction === 'job-card';
 
   if (!custName) { toast('Enter customer name'); return; }
-  if (!prob) { toast('Enter work / service'); return; }
+  if (!prob) { toast('Enter work / service or add bill items'); return; }
   if (total <= 0) { toast('Enter total amount'); return; }
   if (paid < 0) { toast('Enter valid paid amount'); return; }
   if (discount < 0) { toast('Enter valid discount'); return; }
@@ -1290,9 +1300,11 @@ function saveQuickInvoice(nextAction = 'close') {
       invoicePhotos: [],
       invoiceNo: manualInvoiceNo,
       discount,
+      ...(billItems.length ? { billItems } : {}),
     });
     jobs.unshift(newJob);
     markOptimisticInvoice(newJob.id);
+    rememberBillItems(billItems);
     if (paid > 0) rememberPaymentMethod(payMethod);
     clearQuickInvoiceDraft();
     logAction('create', 'job', newJob.id, { customer: custName, quick: true, paid, source: 'quick-job-card' });
@@ -1345,10 +1357,12 @@ function saveQuickInvoice(nextAction = 'close') {
     invoiceNo,
     doneAt: invoiceStamp,
     discount,
+    ...(billItems.length ? { billItems } : {}),
   });
 
   jobs.unshift(newJob);
   markOptimisticInvoice(newJob.id);
+  rememberBillItems(billItems);
   rememberPaymentMethod(payMethod);
   clearQuickInvoiceDraft();
   logAction('create', 'invoice', newJob.id, { invoiceNo, customer: custName, quick: true, paid });
@@ -2041,7 +2055,13 @@ function sendBill(id) {
   const due = jobDue(j);
   const advance = jobAdvance(j);
   const discount = jobDiscountAmount(j);
-  const msg = `Namaskar ${j.cust} ji 🙏\n\nAapki ${j.veh} (${j.vno||''}) ki service complete ho gayi!\n\nKaam: ${j.prob}\nLabour: ${fmtMoney(j.lab||0)}\nParts: ${fmtMoney(j.prt||0)}${discount > 0 ? `\nDiscount: -${fmtMoney(discount)}` : ''}\n─────────────\nKul: ${fmtMoney(tot)}${due > 0 ? `\nBaaki: ${fmtMoney(due)}` : advance > 0 ? `\nAdvance Balance: ${fmtMoney(advance)}` : '\nPaid: Full ✓'}\n\n${getGarageProfile().shortName}, ${getGarageProfile().city}\nThank you! 🙏`;
+  const billItems = jobBillItems(j);
+  // With item rows the message lists them (like the paper bill) instead of the
+  // labour / parts split.
+  const workLines = billItems.length
+    ? `Bill:\n${billItems.map((item, index) => `${index + 1}. ${item.desc}${item.amount > 0 ? ` - ${fmtMoney(item.amount)}` : ''}`).join('\n')}`
+    : `Kaam: ${j.prob}\nLabour: ${fmtMoney(j.lab||0)}\nParts: ${fmtMoney(j.prt||0)}`;
+  const msg = `Namaskar ${j.cust} ji 🙏\n\nAapki ${j.veh} (${j.vno||''}) ki service complete ho gayi!\n\n${workLines}${discount > 0 ? `\nDiscount: -${fmtMoney(discount)}` : ''}\n─────────────\nKul: ${fmtMoney(tot)}${due > 0 ? `\nBaaki: ${fmtMoney(due)}` : advance > 0 ? `\nAdvance Balance: ${fmtMoney(advance)}` : '\nPaid: Full ✓'}\n\n${getGarageProfile().shortName}, ${getGarageProfile().city}\nThank you! 🙏`;
   if (!j.phone) { toast('Customer phone not available'); return; }
   window.open('https://wa.me/91' + j.phone + '?text=' + encodeURIComponent(msg));
   closeM('m-detail');
@@ -2581,4 +2601,384 @@ function savePayment() {
   if (j.status === 'done') markOptimisticInvoice(j.id);
   saveInvoiceAfterPaint('payment', { changedJobIds: [j.id] });
   if (typeof updateDuesBadge === 'function') updateDuesBadge();
+}
+
+// ─── Bill items (item-wise digital bill) ───────────────────
+// Optional rows on an invoice, like the lines of the paper bill:
+//   job.billItems = [{ id, desc, amount }]
+// The field exists only on invoices saved with rows. Old records are never
+// given an empty one (that would change every record and re-upload them all).
+// Money still flows through the same total boxes (qi-total / done-total):
+// rows only fill those boxes, so totals, dues and reports are worked out
+// exactly as before. Each row has an id so the Stage 2 merge can merge rows
+// item by item.
+const BILL_ITEM_CATALOG_KEY = 'jalasai_bill_item_catalog_v1';
+const BILL_ITEM_CATALOG_MAX = 600;
+const BILL_ITEM_SCOPES = {
+  qi: { box: 'qi-bill-items', total: 'qi-total' },
+  done: { box: 'done-bill-items', total: 'done-total' },
+};
+let _billItemCatalogCache = null;
+
+function billItemEsc(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+function billItemKey(desc = '') {
+  return String(desc || '').trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+function billItemAmount(value) {
+  const n = parseFloat(value);
+  if (!Number.isFinite(n) || n < 0) return 0;
+  return Math.round(n * 100) / 100;
+}
+
+function cleanBillItems(list) {
+  if (!Array.isArray(list)) return [];
+  return list
+    .filter(item => item && typeof item === 'object')
+    .map(item => ({
+      id: String(item.id || '').trim(),
+      desc: String(item.desc || '').trim().replace(/\s+/g, ' '),
+      amount: billItemAmount(item.amount),
+    }))
+    .filter(item => item.desc);
+}
+
+function jobBillItems(job) {
+  return cleanBillItems(job?.billItems);
+}
+
+function billItemsTotal(items = []) {
+  const sum = (items || []).reduce((acc, item) => acc + billItemAmount(item?.amount), 0);
+  return Math.round(sum * 100) / 100;
+}
+
+// Remembered descriptions with the price last charged. Two sources, newest
+// wins: this phone's own list (localStorage) and the rows on synced invoices,
+// so a second phone gets the same suggestions through normal sync.
+function readBillItemCatalogStore() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(BILL_ITEM_CATALOG_KEY) || '[]');
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (_) {
+    return [];
+  }
+}
+
+function billItemCatalog() {
+  if (_billItemCatalogCache) return _billItemCatalogCache;
+  const map = new Map();
+  const put = (desc, amount, at, counted) => {
+    const key = billItemKey(desc);
+    if (!key) return;
+    const stamp = String(at || '');
+    const entry = map.get(key);
+    if (!entry) {
+      map.set(key, { key, desc: String(desc).trim(), amount: billItemAmount(amount), at: stamp, count: counted ? 1 : 0 });
+      return;
+    }
+    if (counted) entry.count += 1;
+    if (stamp >= entry.at) {
+      entry.desc = String(desc).trim();
+      entry.amount = billItemAmount(amount);
+      entry.at = stamp;
+    }
+  };
+  readBillItemCatalogStore().forEach(item => put(item?.desc, item?.amount, item?.at, false));
+  (Array.isArray(jobs) ? jobs : []).forEach(job => {
+    if (!job || !Array.isArray(job.billItems) || !job.billItems.length) return;
+    if (String(job.deletedAt || '').trim()) return;
+    const stamp = job.updatedAt || job.doneAt || job.createdAt || '';
+    job.billItems.forEach(item => put(item?.desc, item?.amount, stamp, true));
+  });
+  _billItemCatalogCache = Array.from(map.values());
+  return _billItemCatalogCache;
+}
+
+function rememberBillItems(items = []) {
+  const list = cleanBillItems(items);
+  if (!list.length) return;
+  try {
+    const map = new Map();
+    readBillItemCatalogStore().forEach(item => {
+      const key = billItemKey(item?.desc);
+      if (key) map.set(key, { desc: String(item.desc).trim(), amount: billItemAmount(item.amount), at: String(item.at || '') });
+    });
+    const stamp = nowISO();
+    list.forEach(item => map.set(billItemKey(item.desc), { desc: item.desc, amount: item.amount, at: stamp }));
+    const next = Array.from(map.values())
+      .sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0))
+      .slice(0, BILL_ITEM_CATALOG_MAX);
+    localStorage.setItem(BILL_ITEM_CATALOG_KEY, JSON.stringify(next));
+  } catch (_) {}
+  _billItemCatalogCache = null;
+}
+
+function billItemSuggestions(query = '', excludeKeys = [], limit = 6) {
+  const q = billItemKey(query);
+  const skip = new Set(excludeKeys || []);
+  const pool = billItemCatalog().filter(entry => !skip.has(entry.key));
+  const byUse = (a, b) => (b.count - a.count) || (a.at < b.at ? 1 : a.at > b.at ? -1 : 0);
+  if (!q) return pool.slice().sort(byUse).slice(0, limit);
+  const starts = [];
+  const wordStarts = [];
+  const contains = [];
+  pool.forEach(entry => {
+    if (entry.key === q) return;
+    if (entry.key.startsWith(q)) starts.push(entry);
+    else if (entry.key.includes(' ' + q)) wordStarts.push(entry);
+    else if (entry.key.includes(q)) contains.push(entry);
+  });
+  return starts.sort(byUse).concat(wordStarts.sort(byUse), contains.sort(byUse)).slice(0, limit);
+}
+
+function ensureBillItemStyles() {
+  if (document.getElementById('bill-item-styles')) return;
+  const style = document.createElement('style');
+  style.id = 'bill-item-styles';
+  style.textContent = `
+.bi-wrap{margin:0 0 12px;}
+.bi-head,.bi-row{display:grid;grid-template-columns:26px minmax(0,1fr) 96px 34px;gap:6px;align-items:center;}
+.bi-head{font-size:10px;text-transform:uppercase;letter-spacing:.8px;color:var(--mut);margin-bottom:6px;}
+.bi-head span:nth-child(3){text-align:right;padding-right:4px;}
+.bi-row{margin-bottom:6px;}
+.bi-no{font-size:12px;color:var(--mut);text-align:center;}
+.bi-row .finp{min-width:0;}
+.bi-row .bi-amt{text-align:right;}
+.bi-del{width:34px;height:34px;border-radius:10px;border:1px solid var(--bor);background:transparent;color:var(--mut);font-size:16px;line-height:1;cursor:pointer;}
+.bi-del:hover{color:var(--dan);border-color:var(--dan);}
+.bi-sugg{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 8px 32px;}
+.bi-sugg button{border:1px solid var(--bor);background:var(--sur2);color:inherit;border-radius:999px;padding:7px 11px;font-size:12px;cursor:pointer;max-width:100%;text-align:left;}
+.bi-sugg button b{font-weight:600;color:var(--acc2,var(--acc));margin-left:6px;white-space:nowrap;}
+.bi-foot{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-top:2px;}
+.bi-sum{font-size:12px;color:var(--mut);}
+.bi-sum b{color:var(--acc);font-size:14px;}
+.bi-locked{opacity:.85;}
+`;
+  document.head.appendChild(style);
+}
+
+function billItemBox(scope) {
+  const cfg = BILL_ITEM_SCOPES[scope];
+  return cfg ? document.getElementById(cfg.box) : null;
+}
+
+function billItemRowMarkup(scope, item = {}) {
+  const id = billItemEsc(item.id || '');
+  const desc = billItemEsc(item.desc || '');
+  const amountRaw = item.amount === '' || item.amount === null || typeof item.amount === 'undefined' ? '' : String(item.amount);
+  const amount = billItemEsc(amountRaw === '0' && !desc ? '' : amountRaw);
+  return `<div class="bi-row" data-bi-id="${id}">
+    <span class="bi-no"></span>
+    <input class="finp bi-desc" placeholder="Description" autocomplete="off" autocapitalize="sentences" value="${desc}" oninput="onBillItemDescInput('${scope}', this)" onfocus="onBillItemDescInput('${scope}', this, true)">
+    <input class="finp bi-amt" type="number" inputmode="decimal" min="0" step="any" placeholder="₹" value="${amount}" oninput="onBillItemChanged('${scope}')" onfocus="hideBillItemSuggestions('${scope}')" onkeydown="if(event.key==='Enter'){event.preventDefault();focusNextBillItemRow('${scope}', this);}">
+    <button type="button" class="bi-del" aria-label="Remove item" onclick="removeBillItemRow('${scope}', this)">×</button>
+  </div>`;
+}
+
+// Fills the rows for a form. Does not change the total box unless
+// options.syncTotal is set (used when rows come back from a saved draft that
+// did not keep the total).
+function setBillItemRows(scope, items = [], options = {}) {
+  const box = billItemBox(scope);
+  if (!box) return;
+  ensureBillItemStyles();
+  _billItemCatalogCache = null;
+  const rows = (Array.isArray(items) ? items : [])
+    .filter(item => item && (String(item.desc || '').trim() || billItemAmount(item.amount) > 0));
+  box.classList.add('bi-wrap');
+  box.innerHTML = `
+    <div class="bi-head"><span>No.</span><span>Description</span><span>Amount ₹</span><span></span></div>
+    <div class="bi-rows">${rows.map(item => billItemRowMarkup(scope, item)).join('')}${billItemRowMarkup(scope, {})}</div>
+    <div class="bi-sugg" style="display:none;"></div>
+    <div class="bi-foot">
+      <button class="btn btn-g btn-sm" type="button" onclick="addBillItemRow('${scope}', true)">+ Add item</button>
+      <span class="bi-sum"></span>
+    </div>`;
+  refreshBillItemRows(scope, { syncTotal: options.syncTotal === true, silent: true });
+}
+
+function billItemRowValues(scope) {
+  const box = billItemBox(scope);
+  if (!box) return [];
+  return Array.from(box.querySelectorAll('.bi-row')).map(row => ({
+    row,
+    id: row.dataset.biId || '',
+    desc: String(row.querySelector('.bi-desc')?.value || '').trim().replace(/\s+/g, ' '),
+    amountRaw: String(row.querySelector('.bi-amt')?.value || '').trim(),
+  }));
+}
+
+// Renumbers rows, shows the items total and, when rows carry amounts, fills
+// and locks the form's total box so the bill and its rows cannot disagree.
+function refreshBillItemRows(scope, options = {}) {
+  const cfg = BILL_ITEM_SCOPES[scope];
+  const box = billItemBox(scope);
+  if (!cfg || !box) return;
+  const values = billItemRowValues(scope);
+  values.forEach((entry, index) => {
+    const no = entry.row.querySelector('.bi-no');
+    if (no) no.textContent = String(index + 1);
+  });
+  const sum = billItemsTotal(values.map(entry => ({ amount: entry.amountRaw })));
+  const used = values.filter(entry => entry.desc || billItemAmount(entry.amountRaw) > 0).length;
+  const sumEl = box.querySelector('.bi-sum');
+  if (sumEl) sumEl.innerHTML = used ? `Items total: <b>${fmtMoney(sum)}</b>` : 'Add items, or just type the total below';
+  const totalEl = document.getElementById(cfg.total);
+  if (totalEl) {
+    const lock = sum > 0;
+    if (lock && options.syncTotal !== false) {
+      if (options.syncTotal === true || !options.silent) totalEl.value = String(sum);
+    }
+    totalEl.readOnly = lock;
+    totalEl.classList.toggle('bi-locked', lock);
+    totalEl.title = lock ? 'Filled from the items above' : '';
+  }
+  if (options.silent) return;
+  if (scope === 'qi') {
+    if (typeof scheduleQuickInvoiceDraftSave === 'function') scheduleQuickInvoiceDraftSave();
+  } else if (scope === 'done') {
+    if (typeof refreshDoneBalanceSummary === 'function') refreshDoneBalanceSummary();
+    if (typeof persistInvoiceDraft === 'function') persistInvoiceDraft();
+  }
+}
+
+function onBillItemChanged(scope) {
+  const box = billItemBox(scope);
+  if (!box) return;
+  // Keep one empty row at the bottom so the next item is always ready.
+  const values = billItemRowValues(scope);
+  const last = values[values.length - 1];
+  if (!last || last.desc || last.amountRaw) {
+    box.querySelector('.bi-rows')?.insertAdjacentHTML('beforeend', billItemRowMarkup(scope, {}));
+  }
+  refreshBillItemRows(scope);
+}
+
+function addBillItemRow(scope, focus = false) {
+  const box = billItemBox(scope);
+  if (!box) return;
+  const values = billItemRowValues(scope);
+  const last = values[values.length - 1];
+  if (!last || last.desc || last.amountRaw) {
+    box.querySelector('.bi-rows')?.insertAdjacentHTML('beforeend', billItemRowMarkup(scope, {}));
+    refreshBillItemRows(scope, { silent: true });
+  }
+  if (focus) {
+    const rows = box.querySelectorAll('.bi-row');
+    rows[rows.length - 1]?.querySelector('.bi-desc')?.focus();
+  }
+}
+
+function focusNextBillItemRow(scope, amountInput) {
+  const row = amountInput?.closest('.bi-row');
+  onBillItemChanged(scope);
+  const next = row?.nextElementSibling;
+  if (next && next.classList.contains('bi-row')) next.querySelector('.bi-desc')?.focus();
+  else addBillItemRow(scope, true);
+}
+
+function removeBillItemRow(scope, button) {
+  const box = billItemBox(scope);
+  const row = button?.closest('.bi-row');
+  if (!box || !row) return;
+  row.remove();
+  hideBillItemSuggestions(scope);
+  if (!box.querySelector('.bi-row')) {
+    box.querySelector('.bi-rows')?.insertAdjacentHTML('beforeend', billItemRowMarkup(scope, {}));
+  }
+  onBillItemChanged(scope);
+}
+
+function hideBillItemSuggestions(scope) {
+  const box = billItemBox(scope);
+  const sugg = box?.querySelector('.bi-sugg');
+  if (!sugg) return;
+  sugg.style.display = 'none';
+  sugg.innerHTML = '';
+  box._biSuggestions = [];
+  box._biActiveRow = null;
+}
+
+function onBillItemDescInput(scope, input, focusOnly = false) {
+  const box = billItemBox(scope);
+  const row = input?.closest('.bi-row');
+  const sugg = box?.querySelector('.bi-sugg');
+  if (!box || !row || !sugg) return;
+  if (!focusOnly) onBillItemChanged(scope);
+  const others = billItemRowValues(scope)
+    .filter(entry => entry.row !== row && entry.desc)
+    .map(entry => billItemKey(entry.desc));
+  const list = billItemSuggestions(input.value, others);
+  box._biSuggestions = list;
+  box._biActiveRow = row;
+  if (!list.length) {
+    sugg.style.display = 'none';
+    sugg.innerHTML = '';
+    return;
+  }
+  sugg.innerHTML = list.map((entry, index) =>
+    `<button type="button" onmousedown="event.preventDefault()" onclick="pickBillItemSuggestion('${scope}', ${index})">${billItemEsc(entry.desc)}<b>${entry.amount > 0 ? fmtMoney(entry.amount) : ''}</b></button>`
+  ).join('');
+  sugg.style.display = '';
+  row.insertAdjacentElement('afterend', sugg);
+}
+
+function pickBillItemSuggestion(scope, index) {
+  const box = billItemBox(scope);
+  const entry = box?._biSuggestions?.[index];
+  const row = box?._biActiveRow;
+  if (!entry || !row || !row.isConnected) return;
+  const descEl = row.querySelector('.bi-desc');
+  const amtEl = row.querySelector('.bi-amt');
+  if (descEl) descEl.value = entry.desc;
+  if (amtEl) amtEl.value = entry.amount > 0 ? String(entry.amount) : '';
+  hideBillItemSuggestions(scope);
+  onBillItemChanged(scope);
+  if (amtEl) {
+    amtEl.focus();
+    try { amtEl.select(); } catch (_) {}
+  }
+}
+
+// Rows as typed, for the "restore your draft" feature.
+function billItemRowsDraft(scope) {
+  return billItemRowValues(scope)
+    .filter(entry => entry.desc || entry.amountRaw)
+    .map(entry => ({ id: entry.id, desc: entry.desc, amount: entry.amountRaw }));
+}
+
+// Rows ready to save. `present` is false when this screen has no rows area
+// (an older cached page): the caller must then leave the invoice's rows alone.
+function collectBillItems(scope) {
+  const box = billItemBox(scope);
+  if (!box || !box.querySelector('.bi-rows')) return { present: false, items: [], error: '' };
+  const items = [];
+  let error = '';
+  billItemRowValues(scope).forEach(entry => {
+    const amount = billItemAmount(entry.amountRaw);
+    if (!entry.desc && !(amount > 0)) return;
+    if (!entry.desc) { error = 'Type a description for every item amount'; return; }
+    if (entry.amountRaw !== '' && !(parseFloat(entry.amountRaw) >= 0)) { error = `Enter a valid amount for "${entry.desc}"`; return; }
+    items.push({ id: entry.id || nextId('bi'), desc: entry.desc, amount });
+  });
+  return { present: true, items: error ? [] : items, error };
+}
+
+function applyBillItemsToJob(job, result) {
+  if (!job || !result || !result.present) return;
+  if (result.items.length) {
+    job.billItems = result.items;
+    if (!String(job.prob || '').trim()) job.prob = result.items.map(item => item.desc).join(', ');
+    rememberBillItems(result.items);
+  } else if (Object.prototype.hasOwnProperty.call(job, 'billItems')) {
+    delete job.billItems;
+  }
 }

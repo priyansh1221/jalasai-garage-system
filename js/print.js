@@ -442,6 +442,13 @@ function openInvoice(id, options = {}) {
       No warranty on used/third-party parts · Disputes accepted within 7 days
     </div>`;
 
+  // Invoices saved with item rows use the bill-book layout instead.
+  const billItems = typeof jobBillItems === 'function' ? jobBillItems(j) : [];
+  if (billItems.length) {
+    ensureBillBookStyles();
+    document.getElementById('invoice-content').innerHTML = billBookInvoiceHtml(j, billItems);
+  }
+
   const ref = document.getElementById('invoice-reference-photo');
   if (ref) {
     const refPhotos = normalizePhotoArray(j.invoicePhotos || j.invoicePhoto || j.photos || j.photo || '');
@@ -462,6 +469,140 @@ function openInvoice(id, options = {}) {
   }
 
   openM('m-invoice');
+}
+
+// ─── Bill-book layout (invoices saved with item rows) ───────
+// Mirrors the garage's paper bill book. Used only when the invoice has
+// billItems; every other invoice keeps the layout above. Colours are fixed
+// (paper and red ink) so it looks the same in the app and in print.
+const BILL_BOOK_HEADER = {
+  leftName: 'Akash J. Patel',
+  leftPhone: '9687272157',
+  rightName: 'Jayesh T. Patel',
+  rightPhone: '9979407448',
+  jurisdiction: 'Subject to SURAT Jurisdiction',
+  name: 'Jala Sai Auto Parts',
+  tagline: 'Two Wheeler Service & Spare Parts',
+  address: 'A-2, Shubham Flat, Near Gandhi Smarak, Opp. LD Hall, Bhimrad Gam, Surat.',
+};
+
+const BILL_BOOK_CSS = `
+.bb{background:#fdf7dc;color:#1c2a5e;border:2px solid #c4122f;border-radius:10px;padding:14px 14px 12px;font-family:'Helvetica Neue',Arial,sans-serif;font-size:13px;line-height:1.35;max-width:560px;margin:0 auto;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+.bb-top{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;color:#c4122f;font-size:11px;font-weight:700;}
+.bb-top>div{flex:1;}
+.bb-top .bb-juris{text-align:center;font-weight:600;font-size:10px;}
+.bb-top .bb-right{text-align:right;}
+.bb-name{text-align:center;color:#c4122f;font-family:Georgia,'Times New Roman',serif;font-weight:800;font-size:28px;letter-spacing:.5px;margin:4px 0 6px;}
+.bb-tag{background:#c4122f;color:#fff;text-align:center;font-weight:700;font-size:13px;padding:4px 8px;border-radius:3px;}
+.bb-addr{text-align:center;color:#c4122f;font-weight:700;font-size:11px;margin:6px 0 10px;}
+.bb-meta{display:grid;grid-template-columns:1.7fr 1fr;gap:8px;margin-bottom:10px;}
+.bb-box{border:1.5px solid #c4122f;border-radius:8px;padding:8px 10px;}
+.bb-line{display:flex;gap:6px;align-items:baseline;padding:2px 0;}
+.bb-line span{color:#c4122f;font-weight:700;font-size:12px;white-space:nowrap;}
+.bb-line b{flex:1;min-width:0;border-bottom:1px solid #c4122f;font-weight:600;color:#1c2a5e;overflow-wrap:anywhere;}
+.bb-line b.bb-billno{font-size:16px;color:#c4122f;letter-spacing:.5px;}
+.bb-table{width:100%;border-collapse:separate;border-spacing:0;border:1.5px solid #c4122f;border-radius:8px;overflow:hidden;}
+.bb-table th{color:#c4122f;font-size:12px;font-weight:800;padding:6px 8px;border-bottom:1.5px solid #c4122f;text-align:center;}
+.bb-table td{padding:6px 8px;border-bottom:1px dashed #d9929c;color:#1c2a5e;vertical-align:top;}
+.bb-table th+th,.bb-table td+td{border-left:1.5px solid #c4122f;}
+.bb-table .bb-c-no{width:38px;text-align:center;}
+.bb-table .bb-c-amt{width:104px;text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums;}
+.bb-table td.bb-c-desc{overflow-wrap:anywhere;}
+.bb-table tfoot td{border-bottom:none;border-top:1.5px solid #c4122f;font-weight:800;}
+.bb-table tfoot tr.bb-sub td{border-top:1px dashed #d9929c;font-weight:600;}
+.bb-table tfoot .bb-lbl{text-align:right;color:#c4122f;}
+.bb-table tfoot .bb-total td{font-size:16px;}
+.bb-pay{display:flex;justify-content:flex-end;gap:14px;flex-wrap:wrap;margin-top:8px;font-size:12px;font-weight:700;}
+.bb-pay .bb-ok{color:#0a7a4d;}
+.bb-pay .bb-due{color:#c4122f;}
+.bb-notes{margin-top:8px;font-size:11px;color:#444;overflow-wrap:anywhere;}
+.bb-sign{text-align:right;color:#c4122f;font-weight:700;font-size:12px;margin-top:22px;}
+@media (max-width:480px){.bb{padding:10px;}.bb-name{font-size:22px;}.bb-meta{grid-template-columns:1fr;}.bb-table .bb-c-amt{width:84px;}}
+`;
+
+function ensureBillBookStyles() {
+  if (document.getElementById('bill-book-styles')) return;
+  const style = document.createElement('style');
+  style.id = 'bill-book-styles';
+  style.textContent = BILL_BOOK_CSS;
+  document.head.appendChild(style);
+}
+
+function billBookEsc(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+function billBookAmount(value) {
+  const n = Math.round((parseFloat(value) || 0) * 100) / 100;
+  return `${n.toLocaleString('en-IN')}/-`;
+}
+
+function billBookInvoiceHtml(j, items = []) {
+  const h = BILL_BOOK_HEADER;
+  const discount = jobDiscountAmount(j);
+  const total = jobTotal(j);
+  const paid = jobPaid(j);
+  const due = jobDue(j);
+  const advance = jobAdvance(j);
+  const stamp = j.doneAt || `${j.date}T${j.time || '00:00'}`;
+  const itemsSum = Math.round(items.reduce((sum, item) => sum + (parseFloat(item.amount) || 0), 0) * 100) / 100;
+  // If the saved total and the rows ever disagree (for example the total was
+  // changed on a phone running an older version), show the gap as its own
+  // line so the bill still adds up to the real total.
+  const gap = itemsSum > 0 ? Math.round((total + discount - itemsSum) * 100) / 100 : 0;
+  const rows = items.map((item, index) => `<tr>
+      <td class="bb-c-no">${index + 1}</td>
+      <td class="bb-c-desc">${billBookEsc(item.desc)}</td>
+      <td class="bb-c-amt">${item.amount > 0 ? billBookAmount(item.amount) : ''}</td>
+    </tr>`).join('');
+  const gapRow = Math.abs(gap) > 0.009 ? `<tr>
+      <td class="bb-c-no">${items.length + 1}</td>
+      <td class="bb-c-desc">${gap > 0 ? 'Other charges' : 'Adjustment'}</td>
+      <td class="bb-c-amt">${gap < 0 ? '- ' : ''}${billBookAmount(Math.abs(gap))}</td>
+    </tr>` : '';
+  const vehicle = [j.veh, j.vno].map(part => String(part || '').trim()).filter(Boolean).join(' ');
+  return `<div class="bb">
+    <div class="bb-top">
+      <div>${billBookEsc(h.leftName)}<br>Mo.: ${billBookEsc(h.leftPhone)}</div>
+      <div class="bb-juris">${billBookEsc(h.jurisdiction)}</div>
+      <div class="bb-right">${billBookEsc(h.rightName)}<br>Mo.: ${billBookEsc(h.rightPhone)}</div>
+    </div>
+    <div class="bb-name">${billBookEsc(h.name)}</div>
+    <div class="bb-tag">${billBookEsc(h.tagline)}</div>
+    <div class="bb-addr">${billBookEsc(h.address)}</div>
+    <div class="bb-meta">
+      <div class="bb-box">
+        <div class="bb-line"><span>Name :</span><b>${billBookEsc(j.cust || '')}${j.phone ? ` · ${billBookEsc(j.phone)}` : ''}</b></div>
+        <div class="bb-line"><span>Vehicle No. :</span><b>${billBookEsc(vehicle)}</b></div>
+      </div>
+      <div class="bb-box">
+        <div class="bb-line"><span>Bill No.</span><b class="bb-billno">${billBookEsc(j.invoiceNo || j.id)}</b></div>
+        <div class="bb-line"><span>Date :</span><b>${billBookEsc(fmtDate(stamp))}</b></div>
+      </div>
+    </div>
+    <table class="bb-table">
+      <thead><tr><th class="bb-c-no">No.</th><th>Description</th><th class="bb-c-amt">Amount Rs.</th></tr></thead>
+      <tbody>${rows}${gapRow}</tbody>
+      <tfoot>
+        ${discount > 0 ? `<tr class="bb-sub"><td colspan="2" class="bb-lbl">Discount</td><td class="bb-c-amt">- ${billBookAmount(discount)}</td></tr>` : ''}
+        <tr class="bb-total"><td colspan="2" class="bb-lbl">TOTAL</td><td class="bb-c-amt">${billBookAmount(total)}</td></tr>
+      </tfoot>
+    </table>
+    <div class="bb-pay">
+      ${paid > 0 ? `<span class="bb-ok">Paid${j.payMethod ? ` (${billBookEsc(j.payMethod)})` : ''}: ${billBookAmount(paid)}</span>` : ''}
+      ${due > 0
+        ? `<span class="bb-due">Balance due: ${billBookAmount(due)}</span>`
+        : advance > 0
+          ? `<span class="bb-ok">Advance on account: ${billBookAmount(advance)}</span>`
+          : `<span class="bb-ok">Paid in full</span>`}
+    </div>
+    <div class="bb-sign">For, ${billBookEsc(h.name)}</div>
+  </div>`;
 }
 
 function printInvoice() {
@@ -494,6 +635,7 @@ function printInvoice() {
   .inv-tot-row{display:flex;justify-content:space-between;padding:5px 0;font-size:13px;border-bottom:1px solid #eee;}
   .inv-grand{font-size:18px;font-weight:800;border-top:2px solid #222!important;margin-top:4px;padding-top:8px!important;}
   @media print{body{padding:6px;}@page{margin:10mm;}.inv-logo{width:128px;height:58px;}}
+  ${BILL_BOOK_CSS}
 </style></head><body>${content}</body></html>`);
   win.document.close();
   setTimeout(() => { win.focus(); win.print(); }, 500);

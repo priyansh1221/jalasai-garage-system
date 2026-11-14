@@ -395,6 +395,7 @@ function prepareDoneModal(id, mode = 'create') {
     doneModal._jobId = id;
     doneModal.dataset.mode = mode;
   }
+  if (typeof setBillItemRows === 'function') setBillItemRows('done', j.billItems || []);
   restoreInvoiceDraft(id, mode);
   refreshDoneBalanceSummary();
 }
@@ -476,6 +477,9 @@ function confirmDone(nextAction = 'close') {
   const j      = jobs.find(x => x.id === id);
   if (!j) return;
   const isEditMode = mode === 'edit';
+  // Item rows (optional). Checked before anything on the job is changed.
+  const billRows = typeof collectBillItems === 'function' ? collectBillItems('done') : { present: false, items: [], error: '' };
+  if (billRows.error) { toast(billRows.error); return; }
   // The number comes from the paper invoice book; an invoice can't be saved
   // without one (an edit may keep the number it already has).
   const bookInvoiceNo = String(document.getElementById('done-invoice-no')?.value || '').trim() || (isEditMode ? String(j.invoiceNo || '').trim() : '');
@@ -541,6 +545,7 @@ function confirmDone(nextAction = 'close') {
       j.payMethod = method;
       j.payments = [];
     }
+    if (typeof applyBillItemsToJob === 'function') applyBillItemsToJob(j, billRows);
     j.status = 'done';
     j.invoiceNo = invNo;
     j.date = invoiceDate;
@@ -590,6 +595,7 @@ function confirmDone(nextAction = 'close') {
       source: 'mark-done',
     });
   }
+  if (typeof applyBillItemsToJob === 'function') applyBillItemsToJob(j, billRows);
   j.status      = 'done';
   j.invoiceNo   = invNo;
   j.date        = invoiceDate;
